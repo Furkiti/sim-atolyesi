@@ -3,8 +3,8 @@ export const AIR=0, FREE=1, BOUND=2, LOST=3;
 export const W=600,H=800,CELL=5,COLS=W/CELL,ROWS=H/CELL;
 const FLOW_X=[-1,1,0,0,-.707,.707,-.707,.707],FLOW_Y=[0,0,-1,1,-.707,-.707,.707,.707];
 export class Sand {
-  constructor({capacity=76000,random=Math.random}={}) {
-    this.capacity=capacity;this.random=random;this.count=0;this.emitted=0;
+  constructor({capacity=100000,random=Math.random}={}) {
+    this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
     for (const name of ['x','y','z','vx','vy','vz','seed']) this[name]=new Float32Array(capacity);
     this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
     this.density=new Uint16Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);
@@ -38,7 +38,7 @@ export class Sand {
     if(this.bound[k]<needed)this.coveredWeight+=(this.target[k]/(CELL*CELL))/needed;
     this.bound[k]++;return true;
   }
-  brush(from,to,radius=37){
+  brush(from,to,radius=46){
     const dx=to.x-from.x,dy=to.y-from.y,d=Math.hypot(dx,dy);if(d<.2)return 0;
     const steps=Math.max(1,Math.ceil(d/5)),sx=dx/steps,sy=dy/steps,ux=dx/d,uy=dy/d,rr=radius*radius;let moved=0;
     // Integrate a fast pointer path in short strokes. This transports a heap
@@ -50,7 +50,7 @@ export class Sand {
         const ax=this.x[i]-cx,ay=this.y[i]-cy,dist2=ax*ax+ay*ay;if(dist2>rr)continue;
         const strength=.48+.50*Math.sqrt(1-dist2/rr);
         this.x[i]+=sx*strength;this.y[i]+=sy*strength;
-        if(this.onGlue(this.x[i],this.y[i])&&this.random()<.075&&this.bind(i)){moved++;continue;}
+        if(this.onGlue(this.x[i],this.y[i])&&this.random()<.11&&this.bind(i)){moved++;continue;}
         const side=(ax*(-uy)+ay*ux)/radius;
         this.vx[i]=ux*(20+strength*55)-uy*side*12;
         this.vy[i]=uy*(20+strength*55)+ux*side*12;
@@ -60,7 +60,7 @@ export class Sand {
     return moved;
   }
   step(dt,{shaking=false}={}){
-    this.density.fill(0);
+    this.time+=dt;this.density.fill(0);
     for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0)this.density[k]++;}
     for(let k=0;k<this.height.length;k++)this.height[k]=this.density[k]*.22;
     // Pressure is a property of a cell, computed once rather than allocating
@@ -86,9 +86,9 @@ export class Sand {
       }else if(k>=0&&!shaking){
         const h=this.height[k];let fx=0,fy=0;
         if(this.flowSum[k]>0){
-          const choice=this.seed[i]*this.flowSum[k];let j=0;
+          const choice=((this.seed[i]+this.time*.17)%1)*this.flowSum[k];let j=0;
           while(j<7&&choice>this.flowCDF[k*8+j])j++;
-          const force=this.flowForce[k*8+j];fx=FLOW_X[j]*force;fy=FLOW_Y[j]*force;
+          const force=this.flowForce[k*8+j],skew=(this.seed[i]*97%1-.5)*.75;fx=(FLOW_X[j]-FLOW_Y[j]*skew)*force;fy=(FLOW_Y[j]+FLOW_X[j]*skew)*force;
         }
         this.vx[i]+=fx*dt;this.vy[i]+=fy*dt;
         const floor=1.7+h*(.10+this.seed[i]*.90);

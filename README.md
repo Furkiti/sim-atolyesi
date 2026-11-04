@@ -1,27 +1,35 @@
-# Sim Atölyesi — 3B sürüm
+# Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=3)**
 
-Videodaki sim sanatı hareketlerini hedefleyen, tarayıcıda çalışan bir 3B oyun prototipi. GitHub Pages üzerinde giriş gerektirmeden oynanır.
+Giriş gerektirmeyen, GitHub Pages üzerinde çalışan bir 3B sim sanatı oyunu prototipi.
 
 ## Oynanış
 
-1. Halkalı yerden tutup sürükleyerek koruyucu kâğıdı soy.
-2. Cam kaptan bir doz sim kendiliğinden dökülür; tanelerin yığın oluşturmasını bekle.
-3. Fırçaya yığının içinden başla. Mevcut taneleri iterek açılan yapışkan bölgelere dağıt.
-4. Gerekirse **Yığın dök** aracını seçip kâğıtta bir noktaya dokun; o noktaya yeni bir doz dökülür.
-5. **Silkele** ile fazlalıkları dök. Yapışan taneler kalır.
-6. Bölgenin yeterince büyük kısmı kaplanınca sonraki renge geç. Altı rengin sonunda sahneyi PNG olarak kaydet.
+Herhangi bir oyun alanına bir kez dokun: sıradaki koruyucu kâğıt rulolanarak açılır. Üst raftaki ilgili kap yerinden kalkıp resmin merkezinin biraz üstüne sim döker. Fırça kendiliğinden etkinleşir. Parmağını simin içinden başlatıp taneleri açık bölgelere doğru it.
 
-Boş bölgedeki fırça izi renk üretmez. Renk, yalnızca gerçekten oraya taşınmış sim tanelerinden oluşur. Fare ve dokunmatik ekran desteklenir. Ses isteğe bağlıdır; sayfa yenilenince ilerleme sıfırlanır.
+**Akış** düzeninde renk yeterince kaplanınca ve parmağın kalkınca oyun bir kez silkeler, sonraki kâğıdı açar ve yeni rengi döker. **Kenar** ve **Şerit** düzenlerinde varsayılan olarak sonraki renk düğmesini sen seçersin; düğme yine önce bir kez silkeler. Otomatik geçişi ayarlardan her düzende açıp kapatabilirsin.
 
-## İlk sürümden farkı
+Fırça yalnızca mevcut taneleri taşır; boş yerde renk üretmez. Ek sim yine merkez üstüne dökülür. İlk parmak hareketi yönetir; diğer parmaklar devralamaz. Sayfa kaydırması, çift dokunma ve pinch zoom oyun alanında kapalıdır. Ayar penceresinin içeriği kaydırılabilir.
 
-İlk Canvas prototipi fırçanın rezervi varken daire şeklinde bir boyama maskesi açıyordu. Bu sürüm o sistemi kaldırır. Her tanenin konumu, yüksekliği, hızı ve serbest/yapışmış durumu vardır. Fırça simi silip başka yerde yeniden çizmez; tanenin kendi konumunu değiştirir. İnce tabaka yapışkana tutunurken fazla malzeme fırçanın önünde birikir.
+## Sağ üstteki ⚙ ayarlar
 
-Three.js/WebGL sahnesi; hacimli sim yığınları, metalik ve farklı yönlere bakan sim yüzeyleri, hareketli ışık, gölgeler, kâğıt kalınlığı, kıvrılan koruyucu parça, cam kaplar ve modellenmiş fırça içerir. Tane modeli yerçekimi, sürtünme ve sekiz yönlü yığın eğimiyle çalışır. Tam bir katı cisim/DEM simülatörü değildir.
+- **Akış:** sade ekran; otomatik araç ve renk geçişleri.
+- **Kenar:** çizimin yanında küçük araç düğmeleri.
+- **Şerit:** altta küçük araç çubuğu ve kısa yönerge.
+- **Hızlı / Detaylı:** %80 / %90 alan hedefi.
+- **Sim miktarı:** sonraki döküş için %75–175. Standart doz ilk sürümden daha büyüktür.
+- **Ekonomik / Dengeli / Yüksek / Özel** görüntü profilleri.
+- Anında çözünürlük, gölge kalitesi, parıltı, metalik yansıma, yığın yüzeyi, hareketli ışık ve 30/45/60 FPS sınırı.
+- FPS, kare süresi, simülasyon ve çizim CPU süreleri, görünür tane, çizim çağrısı, üçgen, render çözünürlüğü ve destekleyen tarayıcılarda JS belleği.
 
-Batman/Joker şablonu, prototip için sağlanan referans videodaki çizimden çıkarılmıştır.
+Görüntü ve düzen ayarları oyunu sıfırlamaz. Tercihler aynı tarayıcıda saklanır; resmin ilerlemesi sayfa yenilendiğinde sıfırlanır. Performans panelindeki CPU ölçümleri GPU süresi değildir.
+
+## Uygulama
+
+Three.js/WebGL; yerçekimi, sürtünme ve yığın basıncıyla çalışan sonlu taneler; metalik yüzeyler; kap ağzının dünya konumundan çıkan sim; silindire sarılan maske geometrisi. Silkeleme sırasında kâğıt yükselir; köşeleri zemin altına girmez. Kamera kadrajı mobil adres çubuğunun yüksekliği değiştiğinde yeniden hesaplanmaz.
+
+Batman/Joker şablonu, prototip için sağlanan referans videodaki çizimden çıkarılmıştır. Model gerçek zamanlı çalışmak için sadeleştirilmiştir; tek tek fırça kıllarının katı cisim fiziği çözülmez.
 
 ## Geliştirme
 
@@ -32,12 +40,13 @@ npm run build
 npm run dev
 ```
 
-Yerel adres: http://localhost:4173
+http://localhost:4173
 
-- `src/sand.js`: DOM'dan bağımsız sonlu malzeme ve fırça modeli.
-- `src/scene.js`: 3B sahne, parçacık çizimi, ışık ve araçlar.
-- `src/main.js`: kâğıt soyma, otomatik dökme, girdi ve renk akışı.
-- `test/sand.test.js`: boş fırça, uzak yığın, üç boyutlu tepe, fiziksel taşıma, yapışma, silkeleme ve malzeme korunumu kontrolleri.
-- `game.js`: derlenmiş, tüm çalışma zamanı bağımlılıklarını içeren dosya. GitHub Pages bu dosyayı kullanır; Three.js için bir CDN bağlantısı gerekmez.
+- `src/sand.js`: sonlu malzeme, yapışma, fırça, yığın ve silkeleme.
+- `src/scene.js`: 3B sahne, kap / rulo animasyonları, kalite ayarları.
+- `src/interaction.js`: ilk parmak sahipliği, aşama akışı, rulo/silkeleme geometrisi, FPS zamanlayıcısı.
+- `src/settings.js`: doğrulanmış ve kalıcı tercihler, profiller, sim dozu.
+- `src/main.js`: girdi, oyun ve ayar ekranı.
+- `test/`: malzeme, çoklu dokunma, aşama tekrarları, zemin açıklığı, ayarlar ve FPS sınırı kontrolleri.
 
-GitHub Pages `main` dalının kök dizininden yayınlar. Kaynak değişikliğinden sonra `npm run build` çalıştırıp derlenmiş dosyayı kaynaklarla birlikte commit/push etmek gerekir.
+GitHub Pages `main` dalının kökünden yayınlar. Kaynak değişikliğinden sonra `npm run build` çalıştırıp derlenmiş `game.js` dosyasını kaynaklarla birlikte commit/push etmek gerekir. Çalışma zamanı kütüphaneleri pakete dahildir; Three.js için bir CDN bağlantısı gerekmez.
