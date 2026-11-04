@@ -3,11 +3,13 @@ export const AIR=0, FREE=1, BOUND=2, LOST=3;
 export const W=600,H=800,CELL=5,COLS=W/CELL,ROWS=H/CELL;
 const FLOW_X=[-1,1,0,0,-.707,.707,-.707,.707],FLOW_Y=[0,0,-1,1,-.707,-.707,.707,.707];
 export class Sand {
-  constructor({capacity=100000,random=Math.random}={}) {
+  constructor({capacity=30000,random=Math.random}={}) {
     this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
     for (const name of ['x','y','z','vx','vy','vz','seed']) this[name]=new Float32Array(capacity);
     this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
     this.density=new Uint16Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);
+    this.neighbors=new Int32Array(COLS*ROWS*8);
+    for(let k=0;k<COLS*ROWS;k++){const c=k%COLS,r=(k/COLS)|0;this.neighbors.set([c>0?k-1:k,c<COLS-1?k+1:k,r>0?k-COLS:k,r<ROWS-1?k+COLS:k,r>0&&c>0?k-COLS-1:k,r>0&&c<COLS-1?k-COLS+1:k,r<ROWS-1&&c>0?k+COLS-1:k,r<ROWS-1&&c<COLS-1?k+COLS+1:k],k*8);}
     this.flowSum=new Float32Array(COLS*ROWS);this.flowCDF=new Float32Array(COLS*ROWS*8);this.flowForce=new Float32Array(COLS*ROWS*8);
     this.bound=new Uint8Array(COLS*ROWS);this.target=new Uint8Array(COLS*ROWS);
     this.mask=new Uint8Array(W*H);this.targetCount=0;this.coveredWeight=0;this.lost=0;
@@ -32,51 +34,67 @@ export class Sand {
     this.emitted+=added;return added;
   }
   bind(i){
-    const k=this.cell(this.x[i],this.y[i]);if(k<0||!this.target[k]||!this.onGlue(this.x[i],this.y[i])||this.bound[k]>=6)return false;
+    if(this.state[i]===BOUND||this.state[i]===LOST)return false;
+    const cell=this.cell(this.x[i],this.y[i]);if(cell<0)return false;
+    let k=cell;
+    if(!this.target[k]||this.bound[k]||!this.onGlue(this.x[i],this.y[i])){
+      // Surface grains roll a few millimetres into neighbouring adhesive gaps.
+      // This consumes a real packet, including at a one-pixel stencil boundary.
+      let nearest=65,point=null;
+      const cx=cell%COLS,cy=Math.floor(cell/COLS);
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        const col=cx+dx,row=cy+dy;if(col<0||col>=COLS||row<0||row>=ROWS)continue;
+        const candidate=row*COLS+col;if(!this.target[candidate]||this.bound[candidate])continue;
+        for(let y=row*CELL;y<(row+1)*CELL;y++)for(let x=col*CELL;x<(col+1)*CELL;x++){
+          const distance=(x+.5-this.x[i])**2+(y+.5-this.y[i])**2;
+          if(distance<nearest&&this.mask[y*W+x]){nearest=distance;point={x:x+.5,y:y+.5,k:candidate};}
+        }
+      }
+      if(!point)return false;this.x[i]=point.x;this.y[i]=point.y;k=point.k;
+    }
     this.state[i]=BOUND;this.z[i]=1.7+this.seed[i]*.8;this.vx[i]=this.vy[i]=this.vz[i]=0;
-    const needed=Math.max(1,Math.ceil(this.target[k]/10));
-    if(this.bound[k]<needed)this.coveredWeight+=(this.target[k]/(CELL*CELL))/needed;
+    // One finite material packet coats the mask pixels inside one 5 mm cell.
+    // Its visible grain texture is dense; no thousands of static meshes remain.
+    this.coveredWeight+=this.target[k]/(CELL*CELL);
     this.bound[k]++;return true;
   }
   brush(from,to,radius=46){
-    const dx=to.x-from.x,dy=to.y-from.y,d=Math.hypot(dx,dy);if(d<.2)return 0;
-    const steps=Math.max(1,Math.ceil(d/5)),sx=dx/steps,sy=dy/steps,ux=dx/d,uy=dy/d,rr=radius*radius;let moved=0;
-    // Integrate a fast pointer path in short strokes. This transports a heap
-    // continuously instead of leaving an individual mound at every DOM event.
-    for(let n=0;n<steps;n++){
-      const cx=from.x+sx*(n+.5),cy=from.y+sy*(n+.5);
-      for(let i=0;i<this.count;i++){
-        if(this.state[i]!==FREE)continue;
-        const ax=this.x[i]-cx,ay=this.y[i]-cy,dist2=ax*ax+ay*ay;if(dist2>rr)continue;
-        const strength=.48+.50*Math.sqrt(1-dist2/rr);
-        this.x[i]+=sx*strength;this.y[i]+=sy*strength;
-        if(this.onGlue(this.x[i],this.y[i])&&this.random()<.11&&this.bind(i)){moved++;continue;}
-        const side=(ax*(-uy)+ay*ux)/radius;
-        this.vx[i]=ux*(20+strength*55)-uy*side*12;
-        this.vy[i]=uy*(20+strength*55)+ux*side*12;
-        this.z[i]=Math.min(this.z[i]+.12*strength,38);moved++;
+    const dx=to.x-from.x,dy=to.y-from.y,d2=dx*dx+dy*dy,d=Math.sqrt(d2);if(d<.2)return 0;
+    const rr=radius*radius,ux=dx/d,uy=dy/d;let moved=0;
+    // A swept capsule visits each mobile packet once, including fast strokes.
+    for(let i=0;i<this.count;i++){
+      if(this.state[i]!==FREE)continue;
+      const t=Math.max(0,Math.min(1,((this.x[i]-from.x)*dx+(this.y[i]-from.y)*dy)/d2));
+      const ax=this.x[i]-from.x-t*dx,ay=this.y[i]-from.y-t*dy,q=ax*ax+ay*ay;if(q>rr)continue;
+      const strength=.55+.45*Math.sqrt(1-q/rr),travel=Math.max(2,d*(1-t))*strength;
+      const steps=Math.max(1,Math.ceil(travel/4));
+      for(let n=0;n<steps;n++){
+        this.x[i]+=ux*travel/steps;this.y[i]+=uy*travel/steps;
+        if(this.bind(i))break;
       }
+      if(this.state[i]!==BOUND){const side=(ax*(-uy)+ay*ux)/radius;this.vx[i]=ux*65-uy*side*18;this.vy[i]=uy*65+ux*side*18;this.z[i]=Math.min(this.z[i]+.25,38);}
+      moved++;
     }
     return moved;
   }
   step(dt,{shaking=false}={}){
     this.time+=dt;this.density.fill(0);
     for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0)this.density[k]++;}
-    for(let k=0;k<this.height.length;k++)this.height[k]=this.density[k]*.22;
+    for(let k=0;k<this.height.length;k++)this.height[k]=this.density[k]*.95;
     // Pressure is a property of a cell, computed once rather than allocating
     // neighbour lists for every flake on every frame.
     for(let k=0;k<this.height.length;k++){
       const h=this.height[k];this.flowSum[k]=0;if(h<=3.4)continue;
-      const col=k%COLS,row=(k/COLS)|0,ns=[col>0?k-1:k,col<COLS-1?k+1:k,row>0?k-COLS:k,row<ROWS-1?k+COLS:k,row>0&&col>0?k-COLS-1:k,row>0&&col<COLS-1?k-COLS+1:k,row<ROWS-1&&col>0?k+COLS-1:k,row<ROWS-1&&col<COLS-1?k+COLS+1:k];
       let sum=0;
-      for(let j=0;j<8;j++){const force=Math.max(0,Math.min((h-this.height[ns[j]])/(j<4?1:1.414)-3.4,45))*55;this.flowForce[k*8+j]=force;sum+=force;this.flowCDF[k*8+j]=sum;}
+      for(let j=0;j<8;j++){const force=Math.max(0,Math.min((h-this.height[this.neighbors[k*8+j]])/(j<4?1:1.414)-3.4,45))*55;this.flowForce[k*8+j]=force;sum+=force;this.flowCDF[k*8+j]=sum;}
       this.flowSum[k]=sum;
     }
     const friction=Math.exp(-10*dt);
     for(let i=0;i<this.count;i++){
       const s=this.state[i];if(s===BOUND||s===LOST)continue;
       let k=this.cell(this.x[i],this.y[i]);
-      if(shaking){this.vy[i]+=850*dt;this.vx[i]+=Math.sin(i*2.4)*95*dt;this.z[i]=Math.max(this.z[i],3);}
+      if(shaking&&k<0){this.vz[i]-=900*dt;this.z[i]+=this.vz[i]*dt;}
+      if(shaking){this.vy[i]+=1350*dt;this.vx[i]+=Math.sin(i*2.4)*18*dt;if(k>=0)this.z[i]=Math.max(this.z[i],3);}
       if(s===AIR){
         this.vz[i]-=1050*dt;this.z[i]+=this.vz[i]*dt;
         const floor=k<0?1:this.height[k]+2;
@@ -98,7 +116,7 @@ export class Sand {
       if(this.state[i]===BOUND)continue;
       this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
       if(!shaking){this.vx[i]*=friction;this.vy[i]*=friction;}
-      if(this.x[i]<-50||this.x[i]>W+50||this.y[i]<-65||this.y[i]>H+65){this.state[i]=LOST;this.lost++;}
+      if(this.x[i]<-3000||this.x[i]>W+3000||this.y[i]<-3000||this.y[i]>H+3000){this.state[i]=LOST;this.lost++;}
     }
   }
   removeLoose(){for(let i=0;i<this.count;i++)if(this.state[i]!==BOUND&&this.state[i]!==LOST){this.state[i]=LOST;this.lost++;}this.height.fill(0);this.density.fill(0)}
@@ -110,6 +128,6 @@ export class Sand {
     }
     this.count=out;
   }
-  get coverage(){return this.targetCount?Math.min(1,this.coveredWeight/this.targetCount):0}
+  get coverage(){if(!this.targetCount)return 0;const ratio=this.coveredWeight/this.targetCount;return ratio>1-1e-9?1:ratio}
   stats(){let air=0,free=0,bound=0;for(let i=0;i<this.count;i++){if(this.state[i]===AIR)air++;else if(this.state[i]===FREE)free++;else if(this.state[i]===BOUND)bound++;}return{air,free,bound,lost:this.lost,emitted:this.emitted,coverage:this.coverage,maxHeight:Math.max(...this.height)}}
 }

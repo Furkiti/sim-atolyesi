@@ -1,7 +1,7 @@
-export const SETTINGS_KEY='sim-atelier-v3';
+export const SETTINGS_KEY='sim-atelier-v4';
 export const PROFILES={
  economy:{renderScale:.65,shadow:'off',sparkles:false,reflections:false,relief:false,movingLight:false,frameLimit:30},
- balanced:{renderScale:.9,shadow:'low',sparkles:true,reflections:true,relief:true,movingLight:true,frameLimit:60},
+ balanced:{renderScale:.85,shadow:'off',sparkles:true,reflections:true,relief:true,movingLight:true,frameLimit:60},
  quality:{renderScale:1.2,shadow:'high',sparkles:true,reflections:true,relief:true,movingLight:true,frameLimit:60}
 };
 export const DEFAULTS={layout:'flow',autoAdvance:true,showStats:true,profile:'balanced',...PROFILES.balanced,pourAmount:1,pace:'fast'};
@@ -15,6 +15,11 @@ export function normalizeSettings(input={}){
 export function loadSettings(storage){try{return normalizeSettings(JSON.parse(storage.getItem(SETTINGS_KEY)||'{}'))}catch{return normalizeSettings()}}
 export function saveSettings(storage,settings){try{storage.setItem(SETTINGS_KEY,JSON.stringify(normalizeSettings(settings)))}catch{/* Gameplay also works when storage is unavailable. */}}
 export function profileSettings(current,name){return normalizeSettings({...current,...PROFILES[name],profile:name})}
-export function completionThreshold(settings){return settings.pace==='fast'?.8:.9}
-export function doseFor(areaCells,settings,remaining){return Math.min(remaining,Math.ceil(Math.max(11000,Math.min(48000,areaCells*13))*settings.pourAmount))}
-export const PILE_CENTER={x:300,y:282};
+export function completionThreshold(settings){return 1}
+export function doseFor(areaCells,settings,remaining){return Math.min(remaining,Math.ceil(Math.max(1600,Math.min(18000,areaCells*2.3))*settings.pourAmount))}
+// Keep the bottle mouth over an interior target pixel while gently fanning.
+export function pourPoint(mask,anchor,t=0){
+ const desired={x:anchor.x+Math.sin(t*Math.PI*3)*18,y:anchor.y+Math.sin(t*Math.PI*2)*9};
+ const x=Math.max(0,Math.min(599,Math.round(desired.x))),y=Math.max(0,Math.min(799,Math.round(desired.y)));
+ return mask[y*600+x]?{x,y}:{...anchor};
+}

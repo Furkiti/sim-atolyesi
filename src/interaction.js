@@ -13,10 +13,12 @@ export function rolledPoint(x,y,progress){
  const radius=24+Math.floor(d/(Math.PI*48))*.55,angle=d/radius;
  return{x,y:400-front+radius*Math.sin(angle),z:4.1+radius*(1-Math.cos(angle))+Math.max(0,progress-.83)*120};
 }
-export function shakePose(progress){
- if(progress<=0||progress>=1)return{angle:0,lift:0};
- const envelope=Math.sin(Math.PI*progress);
- return{angle:.055*Math.sin(progress*Math.PI*6)*envelope,lift:32*envelope};
+// A single smooth bend, rather than an oscillating shake. All layers share it.
+export function bendAmount(progress){return progress<=0||progress>=1?0:Math.sin(Math.PI*progress)**.8;}
+export function bentPoint(x,y,z,amount){
+ if(y<-400)return{x,y,z};
+ const along=(y+400)/800,angle=along*1.05*amount,r=800/Math.max(.0001,1.05*amount);
+ return {x,y:amount>0?-400+Math.sin(angle)*r:y,z:z+(amount>0?(1-Math.cos(angle))*r:0)};
 }
 // One phase owns its timers. Repeated taps cannot enqueue duplicate pours or shakes.
 export class Flow {
@@ -30,10 +32,10 @@ export class Flow {
   if(!this.busy)return null;this.elapsed+=dt;
   if(this.phase==='rolling'&&this.elapsed>=.95){this.phase='pour';this.elapsed=0;return'rolled';}
   if(this.phase==='pour'&&this.elapsed>=1.65){this.phase='brush';this.elapsed=0;return'poured';}
-  if(this.phase==='shake'&&this.elapsed>=.72){this.phase='brush';this.elapsed=0;const next=this.advance;this.advance=false;return next?'advance':'shaken';}
+  if(this.phase==='shake'&&this.elapsed>=1.8){this.phase='brush';this.elapsed=0;const next=this.advance;this.advance=false;return next?'advance':'shaken';}
   return null;
  }
- get progress(){return Math.max(0,Math.min(1,this.elapsed/(this.phase==='rolling'?.95:this.phase==='shake'?.72:1.65)))}
+ get progress(){return Math.max(0,Math.min(1,this.elapsed/(this.phase==='rolling'?.95:this.phase==='shake'?1.8:1.65)))}
 }
 export class FramePacer {
  constructor(limit=60){this.limit=limit;this.deadline=null;}

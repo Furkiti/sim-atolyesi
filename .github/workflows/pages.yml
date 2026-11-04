@@ -27,6 +27,7 @@ jobs:
           mkdir -p _site
           cp index.html style.css game.js .nojekyll _site/
           cp -R assets _site/assets
+          cp -R audio _site/audio
       - uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: _site
