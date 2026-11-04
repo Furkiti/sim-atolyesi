@@ -11,9 +11,9 @@ test('small remaining gaps finish at 95 percent in fast mode and 98 in detailed 
 });
 
 test('a visually complete first colour can clean up and advance exactly once',()=>{
- const flow=new Flow();flow.roll();assert.equal(flow.tick(.96),'rolled');assert.equal(flow.tick(1.66),'poured');
+ const flow=new Flow();flow.roll();assert.equal(flow.tick(2.81),'rolled');assert.equal(flow.tick(1.66),'poured');
  assert.ok(completionStatus(.998).ready);assert.ok(flow.shake(true));assert.equal(flow.shake(true),false);
- assert.equal(flow.tick(1.81),'advance');assert.equal(flow.tick(2),null);
+ assert.equal(flow.tick(5.1),'advance');assert.equal(flow.tick(2),null);
 });
 
 test('resume links select only a valid numbered colour',()=>{

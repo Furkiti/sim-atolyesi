@@ -23,13 +23,13 @@ export class Sand {
   }
   cell(x,y){return x>=0&&x<W&&y>=0&&y<H?Math.floor(y/CELL)*COLS+Math.floor(x/CELL):-1}
   onGlue(x,y){return x>=0&&x<W&&y>=0&&y<H&&this.mask[(y|0)*W+(x|0)]>0}
-  emit(x,y,n,{spread=13,height=165}={}){
+  emit(x,y,n,{spread=13,height=165,fan=16}={}){
     if(!Number.isFinite(x)||!Number.isFinite(y))throw new TypeError("A pile needs finite paper coordinates");
     let added=0;
     for(let j=0;j<n&&this.count<this.capacity;j++){
       const i=this.count++,a=this.random()*Math.PI*2,r=Math.sqrt(this.random())*spread;
       this.pressed[i]=0;this.seed[i]=this.random();this.x[i]=x+Math.cos(a)*r;this.y[i]=y+Math.sin(a)*r;
-      this.z[i]=height+this.random()*32;this.vz[i]=-45-this.random()*35;this.vx[i]=(this.random()-.5)*16;this.vy[i]=(this.random()-.5)*16;this.state[i]=AIR;added++;
+      this.z[i]=height+this.random()*32;this.vz[i]=-45-this.random()*35;const cone=Math.sqrt(this.random())*fan;this.vx[i]=Math.cos(a)*cone;this.vy[i]=Math.sin(a)*cone;this.state[i]=AIR;added++;
     }
     this.emitted+=added;return added;
   }
@@ -82,7 +82,7 @@ export class Sand {
     }
     return moved;
   }
-  step(dt,{shaking=false}={}){
+  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58}={}){
     this.time+=dt;this.density.fill(0);this.moundHeight.fill(0);this.freshCount=0;
     for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundHeight[k]+=.95;this.freshCount++;}}}
     for(let k=0;k<this.height.length;k++)this.height[k]=this.density[k]*.95;
@@ -99,7 +99,14 @@ export class Sand {
       const s=this.state[i];if(s===BOUND||s===LOST)continue;
       let k=this.cell(this.x[i],this.y[i]);
       if(shaking&&k<0){this.vz[i]-=900*dt;this.z[i]+=this.vz[i]*dt;}
-      if(shaking){this.vy[i]+=1350*dt;this.vx[i]+=Math.sin(i*2.4)*18*dt;if(k>=0)this.z[i]=Math.max(this.z[i],3);}
+      if(shaking&&k>=0){
+        const offset=this.x[i]-W/2;
+        this.vx[i]-=1150*Math.sin(offset/300*1.22*bend)*dt;
+        const channel=Math.max(.05,1-(Math.abs(offset)/140)**2);
+        this.vy[i]+=1150*Math.sin(tilt)*channel*dt;
+        this.vx[i]*=Math.exp(-4.5*dt);this.vy[i]*=Math.exp(-.65*dt);
+        this.z[i]+=(2.5+this.seed[i]*1.1-this.z[i])*Math.min(1,dt*14);
+      }
       if(s===AIR){
         this.vz[i]-=1050*dt;this.z[i]+=this.vz[i]*dt;
         const floor=k<0?1:this.height[k]+2;
@@ -122,10 +129,12 @@ export class Sand {
       }
       if(this.state[i]===BOUND)continue;
       this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
-      if(!shaking){this.vx[i]*=friction;this.vy[i]*=friction;}
+      if(shaking&&this.y[i]>H-3&&Math.abs(this.x[i]-W/2)>102){this.y[i]=H-3;this.vy[i]=0;}
+      if(!shaking){const drag=s===AIR?Math.exp(-.7*dt):friction;this.vx[i]*=drag;this.vy[i]*=drag;}
       if(this.x[i]<-3000||this.x[i]>W+3000||this.y[i]<-3000||this.y[i]>H+3000){this.state[i]=LOST;this.lost++;}
     }
   }
+  hasLoose(){for(let i=0;i<this.count;i++)if(this.state[i]===AIR||this.state[i]===FREE)return true;return false}
   removeLoose(){for(let i=0;i<this.count;i++)if(this.state[i]!==BOUND&&this.state[i]!==LOST){this.state[i]=LOST;this.lost++;}this.height.fill(0);this.density.fill(0);this.moundHeight.fill(0);this.freshCount=0}
   compact(){
     let out=0;

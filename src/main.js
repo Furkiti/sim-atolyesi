@@ -1,14 +1,16 @@
 import {Sand,W,H} from './sand.js';
 import {AtelierScene} from './scene.js';
-import {Flow,PointerGate,FramePacer,rollFront,appendStroke} from './interaction.js';
+import {Flow,PointerGate,FramePacer,drainPose,appendStroke} from './interaction.js';
 import {loadSettings,saveSettings,profileSettings,doseFor,pourPoint} from './settings.js';
 import {completionStatus,resumeIndex} from './progress.js';
 const $=s=>document.querySelector(s),canvas=$('#art'),dialog=$('#settings');
 import {stages} from './palette.js';
 import {drawGlitter} from './coating.js';
+import {piecesByStage} from './peel-pieces.js';
+import {peelAt,peelDuration,revealPolygon} from './peel.js';
 let settings;try{settings=loadSettings(localStorage)}catch{settings=loadSettings({getItem:()=>null})}
 const flow=new Flow(),gate=new PointerGate(),pacer=new FramePacer(settings.frameLimit),assets={},masks={},strokes=[];
-let shakeRuns=0,nextRuns=0;
+let shakeRuns=0,nextRuns=0,partLayers=[],activePart=0,revealedParts=0;
 let view,sand,index=0,finished=false,pour=null,peeled=false,peel=0,readySince=0,autoKick=0;
 let pointer={x:300,y:282,visible:false},previous={x:300,y:282},down=false,lastRender=0,statClock=0,fpsClock=0,frames=0,fps=0,frameMs=16.7,simMs=0,renderMs=0,moved=0;
 let initialWidth=innerWidth;
@@ -51,7 +53,11 @@ function repaintPaper(){
  pc.globalAlpha=.035;for(let i=index;i<stages.length;i++)pc.drawImage(assets[stages[i].id],0,0);
  // The next sheet is highlighted as a whole; no tiny target needs to be found.
  if(!peeled&&peel===0){pc.globalAlpha=.10;pc.drawImage(assets[stages[index].id],0,0)}pc.globalAlpha=1;
- if(peel>0){pc.save();pc.beginPath();pc.rect(0,0,W,Math.min(H,rollFront(peel)));pc.clip();pc.drawImage(glue,0,0);pc.restore()}
+ pc.drawImage(glue,0,0);
+ if(flow.phase==='rolling'&&partLayers[activePart]){
+  const layer=partLayers[activePart],polygon=revealPolygon(layer.piece,peel);
+  if(polygon.length){pc.save();pc.beginPath();polygon.forEach((p,i)=>i?pc.lineTo(p.x,p.y):pc.moveTo(p.x,p.y));pc.closePath();pc.clip();pc.drawImage(layer.brown,layer.piece.bounds.x,layer.piece.bounds.y);pc.restore();}
+ }
  pc.drawImage(baked,0,0);pc.drawImage(coat,0,0);
  pc.globalAlpha=.96;pc.drawImage(assets.lines,0,0);pc.globalAlpha=1;view?.paperChanged();
 }
@@ -103,7 +109,8 @@ function updateUI(){
  const phase=flow.phase,percent=completionStatus(sand.coverage,settings.pace).percent;
  $('#stage-label').textContent=`${String(index+1).padStart(2,'0')} / ${stages.length}`;$('#stage-label').title=stages[index].name;$('#color-dot').style.background=stages[index].color;
  $('#coverage').textContent=percent+'%';$('#progress-fill').style.width=percent+'%';
- const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan kahverengi alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['≋','Kâğıt bükülüyor…','Yapışan parıltılar kâğıtta kalır.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
+ const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan kahverengi alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['∪','İki yandan bük, ortaya topla.','Fazla sim ortadaki oluktan kutuya akıyor.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
+ if(phase==='rolling')messages.rolling=['↗',`Parça ${activePart+1} / ${partLayers.length} · yavaşça soyuluyor`,peel<.2?'Cımbız kenardan tutuyor.':'Sarı kâğıt ayrılıyor, yapışkan açılıyor.','SOY'];
  const m=messages[phase]||messages.brush;$('#phase-icon').textContent=m[0];$('#instruction-title').textContent=m[1];$('#instruction-text').textContent=phase==='brush'&&settings.layout!=='flow'?'Sim ekle ile açık alanın üstüne yeni bir yığın dökebilirsin.':m[2];$('#phase-label').textContent=m[3];
  const canNext=phase==='brush'&&ready()&&!finished;
  $('#next').hidden=!canNext;$('#next').disabled=!canNext;$('#next').innerHTML=index===stages.length-1?'Eserini tamamla <span>✧</span>':'Sonraki renk <span>→</span>';
@@ -115,17 +122,31 @@ function updateUI(){
   button.classList.toggle('selected',selected);button.disabled=finished||flow.busy||(t==='peel'?phase!=='peel':phase==='peel');
  }
 }
+function makePartLayers(){
+ return piecesByStage[stages[index].id].map(piece=>{
+  const b=piece.bounds,mask=document.createElement('canvas');mask.width=b.w;mask.height=b.h;const m=mask.getContext('2d');m.fillStyle='#fff';for(const [y,x,length] of piece.runs)m.fillRect(x,y,length,1);
+  const paper=document.createElement('canvas');paper.width=b.w;paper.height=b.h;const p=paper.getContext('2d');p.drawImage(paperBase,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=.96;p.drawImage(assets.lines,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=1;p.globalCompositeOperation='destination-in';p.drawImage(mask,0,0);
+  const brown=document.createElement('canvas');brown.width=b.w;brown.height=b.h;const c=brown.getContext('2d');c.fillStyle='#b98e65';c.fillRect(0,0,b.w,b.h);c.globalCompositeOperation='destination-in';c.drawImage(mask,0,0);
+  return{piece,paper,brown};
+ });
+}
+function revealUntil(count){while(revealedParts<count){const layer=partLayers[revealedParts++];gc.drawImage(layer.brown,layer.piece.bounds.x,layer.piece.bounds.y);}}
+function animatePeel(){
+ const pose=peelAt(partLayers.map(p=>p.piece),flow.elapsed);revealUntil(pose.index);
+ if(activePart!==pose.index){activePart=pose.index;view.setPeelPiece(partLayers[activePart].paper,partLayers[activePart].piece);}
+ peel=pose.progress;view.peelProgress(peel);repaintPaper();
+}
 function activate(){
- sand=new Sand();sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;
- gc.clearRect(0,0,W,H);gc.fillStyle='#b98e65';gc.fillRect(0,0,W,H);gc.globalCompositeOperation='destination-in';gc.drawImage(assets[stages[index].id],0,0);gc.globalCompositeOperation='source-over';
- makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelMask(assets[stages[index].id],stages[index].pour);updateUI();
+ sand=new Sand();sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
+ gc.globalCompositeOperation='source-over';gc.clearRect(0,0,W,H);partLayers=makePartLayers();flow.setRollDuration(peelDuration(partLayers.map(p=>p.piece)));
+ makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);updateUI();
 }
 function beginRoll(){if(soundOn)audio();if(finished||!flow.roll())return;down=false;strokes.length=0;peel=0;updateUI()}
 function prepareDose(){
  const amount=doseFor(sand.targetCount,settings,sand.capacity);
  if(sand.capacity-sand.count<amount){sand.compact();view.currentInitialized=0;}
  const dose=doseFor(sand.targetCount,settings,sand.capacity-sand.count);
- if(dose<50){flow.phase='brush';$('#instruction-text').textContent='Kâğıtta bol sim var. Önce yay veya fazlasını silkele.';return;}
+ if(dose<50){flow.phase='brush';$('#instruction-text').textContent='Kâğıtta bol sim var. Önce yay veya fazlasını kutuya boşalt.';return;}
  let anchor=stages[index].pour;
  // Refill over unfinished adhesive, rather than repeatedly burying a finished patch.
  if(sand.coverage>.15){let best=-Infinity;const referenceY=anchor.y;
@@ -138,7 +159,7 @@ function prepareDose(){
  playedPour=-1;pour={...anchor,anchor,dose,emitted:0,elapsed:0};
 }
 function addSand(){if(finished||!flow.pour())return;down=false;strokes.length=0;prepareDose();readySince=0;updateUI()}
-function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();if(advance)updateCoat(true,true);pour=null;view.posePour(null);readySince=0;updateUI()}
+function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();view.beginCleanup();if(advance)updateCoat(true,true);pour=null;view.posePour(null);readySince=0;updateUI()}
 function nextStage(){
  nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
  if(index<stages.length-1){index++;activate();autoKick=settings.autoAdvance?.22:0;}
@@ -168,9 +189,9 @@ for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addE
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',releaseAll);
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
- Object.assign(canvas.dataset,{version:'4.2',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'5',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
- for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
+ for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
 }
 function frame(t){
@@ -180,17 +201,18 @@ function frame(t){
  if(t-fpsClock>=700){fps=frames*1000/(t-fpsClock);fpsClock=t;frames=0;}
  frameMs=frameMs*.9+(dt*1000)*.1;const simStart=performance.now();moved=0;
  if(autoKick>0&&!dialog.open){autoKick-=dt;if(autoKick<=0)beginRoll()}
- if(flow.phase==='rolling'){peel=flow.progress;repaintPaper();view.peelProgress(peel);}
+ if(flow.phase==='rolling')animatePeel();
  if(flow.phase==='pour'&&pour){
   pour.elapsed=flow.elapsed;Object.assign(pour,pourPoint(masks[stages[index].id],pour.anchor,Math.max(0,(flow.elapsed-.48)/.82)));view.posePour(pour);
   const fraction=Math.min(1,Math.max(0,(flow.elapsed-.48)/.82)),desired=Math.floor(pour.dose*fraction),n=desired-pour.emitted;
-  if(n>0){const source=view.pourOrigin();pour.emitted+=sand.emit(source.x,source.y,n,{spread:7,height:Math.max(12,source.z)});Object.assign(canvas.dataset,{emitterX:source.x.toFixed(2),emitterY:source.y.toFixed(2),emitterZ:source.z.toFixed(2)});}
+  if(n>0){const source=view.pourOrigin();pour.emitted+=sand.emit(source.x,source.y,n,{spread:4,fan:75,height:Math.max(12,source.z)});Object.assign(canvas.dataset,{emitterX:source.x.toFixed(2),emitterY:source.y.toFixed(2),emitterZ:source.z.toFixed(2)});}
  }
  for(const stroke of strokes)moved+=sand.brush(stroke.from,stroke.to,settings.pace==='fast'?48:39);strokes.length=0;
- sand.step(Math.min(dt,.04),{shaking:flow.phase==='shake'});
+ const drainage=flow.phase==='shake'?drainPose(flow.progress):{bend:0,pitch:0};view.updateBend(drainage.bend,drainage.pitch);
+ sand.step(Math.min(dt,.04),{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch});
  view.collectSpill(sand,true);
- const event=flow.tick(dt);
- if(event==='rolled'){peeled=true;peel=1;repaintPaper();view.peelProgress(1);prepareDose();updateUI()}
+ const event=flow.tick(dt,{drainComplete:flow.phase!=='shake'||(!sand.hasLoose()&&view.spills.length===0)});
+ if(event==='rolled'){revealUntil(partLayers.length);peeled=true;peel=1;repaintPaper();view.peelProgress(1);prepareDose();updateUI()}
  if(event==='poured'){pour=null;view.posePour(null);updateUI()}
  if(event==='shaken'||event==='advance'){
   view.collectSpill(sand);sand.removeLoose();sand.compact();view.currentInitialized=0;

@@ -4,7 +4,7 @@
   "description": "Tarayıcıda oynanan sim sanatı prototipi.",
   "main": "game.js",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --minify --format=esm --outfile=game.js",
+    "build": "node scripts/build-peels.mjs && esbuild src/main.js --bundle --minify --format=esm --outfile=game.js",
     "test": "node --test test/*.test.js",
     "dev": "node scripts/serve.mjs"
   },

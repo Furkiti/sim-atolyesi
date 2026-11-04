@@ -13,31 +13,45 @@ export function rolledPoint(x,y,progress){
  const radius=24+Math.floor(d/(Math.PI*48))*.55,angle=d/radius;
  return{x,y:400-front+radius*Math.sin(angle),z:4.1+radius*(1-Math.cos(angle))+Math.max(0,progress-.83)*120};
 }
-// A single smooth bend, rather than an oscillating shake. All layers share it.
-export function bendAmount(progress){return progress<=0||progress>=1?0:Math.sin(Math.PI*progress)**.8;}
-export function bentPoint(x,y,z,amount){
- if(y<-400||amount<=1e-6)return{x,y,z};
- const curve=1.05*amount,along=(y+400)/800,angle=along*curve,r=800/curve;
- // A clamped divisor collapses the card near the final animation frame.
- // This sine identity avoids cancellation in 1-cos(angle) for tiny bends.
- return {x,y:-400+Math.sin(angle)*r,z:z+2*Math.sin(angle/2)**2*r};
+// First form a trough between both hands, then tip its central lip over the box.
+export function drainPose(progress){
+ const p=Math.max(0,Math.min(1,progress)),returning=1-smooth((p-.82)/.18);
+ return {bend:smooth(p/.22)*returning,pitch:.58*smooth((p-.22)/.22)*returning};
+}
+export function bendAmount(progress){return drainPose(progress).bend}
+export function bentPoint(x,y,z,amount,pitch=amount*.58){
+ if(y<-400||(amount<=1e-6&&pitch<=1e-6))return{x,y,z};
+ const curve=1.22*amount,theta=x/300*curve,r=curve>1e-6?300/curve:0;
+ const crossX=curve>1e-6?Math.sin(theta)*r:x,crossZ=curve>1e-6?2*Math.sin(theta/2)**2*r:0,along=y+400;
+ return{x:crossX,y:-400+along*Math.cos(pitch)-crossZ*Math.sin(pitch),z:z+110*amount+along*Math.sin(pitch)+crossZ*Math.cos(pitch)};
+}
+export function surfaceVelocity(x,vx,vy,amount,pitch=amount*.58){
+ const theta=x/300*1.22*amount;
+ return{x:vx*Math.cos(theta),y:-vy*Math.cos(pitch)-vx*Math.sin(theta)*Math.sin(pitch),z:-vy*Math.sin(pitch)+vx*Math.sin(theta)*Math.cos(pitch)};
 }
 // One phase owns its timers. Repeated taps cannot enqueue duplicate pours or shakes.
 export class Flow {
  constructor(){this.reset()}
- reset(){this.phase='peel';this.elapsed=0;this.advance=false;this.pendingNext=false;this.serial=0;}
+ reset(){this.phase='peel';this.elapsed=0;this.advance=false;this.pendingNext=false;this.serial=0;this.rollDuration=2.8;this.drainDoneAt=null;}
+ setRollDuration(seconds){if(Number.isFinite(seconds)&&seconds>0)this.rollDuration=seconds;}
  get busy(){return ['rolling','pour','shake'].includes(this.phase)}
  roll(){if(this.phase!=='peel')return false;this.phase='rolling';this.elapsed=0;this.serial++;return true;}
  pour(){if(!['brush','peel'].includes(this.phase))return false;this.phase='pour';this.elapsed=0;this.serial++;return true;}
- shake(advance=false){if(this.phase!=='brush')return false;this.phase='shake';this.elapsed=0;this.advance=advance;this.serial++;return true;}
- tick(dt){
+ shake(advance=false){if(this.phase!=='brush')return false;this.phase='shake';this.elapsed=0;this.advance=advance;this.drainDoneAt=null;this.serial++;return true;}
+ tick(dt,{drainComplete=true}={}){
   if(!this.busy)return null;this.elapsed+=dt;
-  if(this.phase==='rolling'&&this.elapsed>=.95){this.phase='pour';this.elapsed=0;return'rolled';}
+  if(this.phase==='rolling'&&this.elapsed>=this.rollDuration){this.phase='pour';this.elapsed=0;return'rolled';}
   if(this.phase==='pour'&&this.elapsed>=1.65){this.phase='brush';this.elapsed=0;return'poured';}
-  if(this.phase==='shake'&&this.elapsed>=1.8){this.phase='brush';this.elapsed=0;const next=this.advance;this.advance=false;return next?'advance':'shaken';}
+  if(this.phase==='shake'){
+   if(this.elapsed>=3.9&&drainComplete&&this.drainDoneAt===null)this.drainDoneAt=Math.max(3.9,this.elapsed-dt);
+   if(this.drainDoneAt!==null&&this.elapsed-this.drainDoneAt>=1){this.phase='brush';this.elapsed=0;const next=this.advance;this.advance=false;return next?'advance':'shaken';}
+  }
   return null;
  }
- get progress(){return Math.max(0,Math.min(1,this.elapsed/(this.phase==='rolling'?.95:this.phase==='shake'?1.8:1.65)))}
+ get progress(){
+  if(this.phase==='shake')return this.drainDoneAt===null?Math.min(.8,this.elapsed/4.875):Math.min(1,.8+.2*(this.elapsed-this.drainDoneAt));
+  return Math.max(0,Math.min(1,this.elapsed/(this.phase==='rolling'?this.rollDuration:1.65)));
+ }
 }
 export class FramePacer {
  constructor(limit=60){this.limit=limit;this.deadline=null;}

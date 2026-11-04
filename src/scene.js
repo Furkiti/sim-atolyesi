@@ -1,8 +1,10 @@
 import * as T from 'three';
-import {rolledPoint,bendAmount,bentPoint,smooth} from './interaction.js';
+import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
+import {peelPoint} from './peel.js';
+import {TRAY,stepFalling} from './collector.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS} from './sand.js';
-const TAU=Math.PI*2;
+const TAU=Math.PI*2,NO_BOX={...TRAY,halfWidth:-1};
 function canvasTexture(draw,size=256){const c=document.createElement('canvas');c.width=c.height=size;draw(c.getContext('2d'),size);const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;return t}
 function noiseTexture(){return canvasTexture((c,s)=>{c.fillStyle='#b9bcba';c.fillRect(0,0,s,s);for(let i=0;i<55000;i++){const v=150+Math.random()*85;c.fillStyle=`rgba(${v},${v+1},${v+3},.16)`;c.fillRect(Math.random()*s,Math.random()*s,.5+Math.random()*2,1)}},512)}
 function flakeGeometry(){
@@ -31,7 +33,7 @@ export class AtelierScene {
   this.paperTexture=new T.CanvasTexture(paperCanvas);this.paperTexture.colorSpace=T.SRGBColorSpace;this.paperTexture.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());
   const surfaceGeo=new T.PlaneGeometry(W,H,30,40),pp=surfaceGeo.attributes.position;
   for(let i=0;i<pp.count;i++){const x=pp.getX(i),y=pp.getY(i),edge=Math.max(Math.abs(x)/300,Math.abs(y)/400);pp.setZ(i,2.8+Math.pow(edge,14)*1.5+Math.sin(x*.013+y*.006)*.12)}surfaceGeo.computeVertexNormals();
-  this.paper=new T.Mesh(surfaceGeo,new T.MeshBasicMaterial({map:this.paperTexture,color:'#ffffff',toneMapped:false}));this.paper.receiveShadow=true;this.paperGroup.add(this.paper);this.paperBase=pp.array.slice();this.bend=0;
+  this.paper=new T.Mesh(surfaceGeo,new T.MeshBasicMaterial({map:this.paperTexture,color:'#ffffff',toneMapped:false}));this.paper.receiveShadow=true;this.paperGroup.add(this.paper);this.paperBase=pp.array.slice();this.bend=0;this.pitch=0;
   this.coatUniforms={uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null}};
   this.paper.material.onBeforeCompile=shader=>{
    Object.assign(shader.uniforms,this.coatUniforms);
@@ -66,8 +68,8 @@ export class AtelierScene {
   this.heapMat.onBeforeCompile=clipHeap;this.heap=new T.Mesh(this.heapGeo,this.heapMat);this.heap.frustumCulled=false;this.heap.receiveShadow=true;this.heap.castShadow=true;this.heap.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking});this.heap.customDepthMaterial.onBeforeCompile=clipHeap;this.paperGroup.add(this.heap);
   this.peelGeo=new T.PlaneGeometry(W,H,24,160);
   this.peelSheet=new T.Mesh(this.peelGeo,new T.MeshStandardMaterial({color:'#fff2b2',roughness:.8,transparent:true,alphaTest:.08,side:T.DoubleSide}));
-  this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
-  this.makeBrush();this.makeTweezers();this.makeGlints();this.makeJars();this.hint=this.makeHint();this.paperGroup.add(this.hint);
+  this.peelSheet.frustumCulled=false;this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
+  this.makeBrush();this.makeTweezers();this.makeGlints();this.makeJars();this.makeCollector();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
   this.desiredBrush={x:130,y:250,angle:-.72,contact:false,visible:false};this.brushPoint={x:130,y:250};this.pourPoint={x:140,y:180};this.autoPour=false;
   this.applySettings(settings);this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();
  }
@@ -101,6 +103,26 @@ export class AtelierScene {
   this.tweezers=new T.Group();this.paperGroup.add(this.tweezers);this.tweezers.visible=false;
   const mat=new T.MeshStandardMaterial({color:'#b8c0c1',roughness:.2,metalness:.95});for(let side of [-1,1]){const arm=new T.Mesh(new T.BoxGeometry(4,130,4),mat);arm.position.set(side*5,-60,25);arm.rotation.z=side*.075;arm.rotation.x=.16;arm.castShadow=true;this.tweezers.add(arm)}
  }
+ makeCollector(){
+  this.boxGroup=new T.Group();this.boxGroup.position.set(0,TRAY.centerY,0);this.boxGroup.visible=false;this.scene.add(this.boxGroup);this.boxMotion=0;this.collectorBox={...TRAY};this.collectedCount=0;this.trayBins=new Uint16Array(28*22);
+  const shell=new T.MeshStandardMaterial({color:'#c6cdbf',roughness:.42,metalness:.25}),dark=new T.MeshStandardMaterial({color:'#343e35',roughness:.8});
+  const bottom=new T.Mesh(new T.BoxGeometry(240,192,8),shell);bottom.castShadow=true;this.boxGroup.add(bottom);
+  const floor=new T.Mesh(new T.PlaneGeometry(224,176),dark);floor.position.z=4.1;this.boxGroup.add(floor);
+  for(const side of [-1,1]){const wall=new T.Mesh(new T.BoxGeometry(8,192,63),shell);wall.position.set(side*116,0,31.5);wall.castShadow=true;this.boxGroup.add(wall);}
+  const back=new T.Mesh(new T.BoxGeometry(224,8,63),shell);back.position.set(0,92,31.5);this.boxGroup.add(back);
+  const front=new T.Mesh(new T.BoxGeometry(224,5,51),new T.MeshPhysicalMaterial({color:'#e5ebdf',transparent:true,opacity:.38,roughness:.2,metalness:.1,depthWrite:false}));front.position.set(0,-92,25.5);this.boxGroup.add(front);
+  for(const x of [-96,96])for(const y of [-70,70]){const foot=new T.Mesh(new T.BoxGeometry(18,18,4),dark);foot.position.set(x,y,-6);this.boxGroup.add(foot);}
+  this.collected=this.makeGrains(30000);this.paperGroup.remove(this.collected);this.boxGroup.add(this.collected);
+ }
+ makeHands(){
+  this.hands=[];const skin=new T.MeshStandardMaterial({color:'#d9ac8e',roughness:.85}),nail=new T.MeshStandardMaterial({color:'#f0cec0',roughness:.42});
+  for(const side of [-1,1]){
+   const hand=new T.Group();hand.visible=false;this.scene.add(hand);
+   const palm=new T.Mesh(new T.SphereGeometry(29,16,10),skin);palm.scale.set(1.1,1.2,.58);palm.position.set(side*34,-15,-4);hand.add(palm);
+   for(const [y,z,r,length] of [[8,12,10,31],[-4,-5,8,37]]){const finger=new T.Mesh(new T.CapsuleGeometry(r,length,4,10),skin);finger.rotation.z=Math.PI/2;finger.position.set(side*13,y,z);finger.castShadow=true;hand.add(finger);}
+   const tip=new T.Mesh(new T.SphereGeometry(8,12,8),nail);tip.scale.set(1.05,.65,.18);tip.position.set(side*-3,8,21);hand.add(tip);this.hands.push(hand);
+  }
+ }
  makeGlints(){
   const map=canvasTexture((c,s)=>{const g=c.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);g.addColorStop(0,'#fffef5ff');g.addColorStop(.08,'#fff3cbaa');g.addColorStop(.4,'#ffe9b922');g.addColorStop(1,'#ffffff00');c.fillStyle=g;c.fillRect(0,0,s,s);c.strokeStyle='#fff9e9cc';c.lineWidth=1;for(let i=0;i<4;i++){const a=i*Math.PI/2;c.beginPath();c.moveTo(s/2,s/2);c.lineTo(s/2+Math.cos(a)*s*.32,s/2+Math.sin(a)*s*.32);c.stroke()}},64);
   this.glints=[];for(let i=0;i<28;i++){const sp=new T.Sprite(new T.SpriteMaterial({map,transparent:true,blending:T.AdditiveBlending,depthWrite:false,toneMapped:false}));sp.visible=false;this.paperGroup.add(sp);this.glints.push(sp)}
@@ -124,10 +146,10 @@ export class AtelierScene {
  resize(){
   const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;
   this.renderer.setSize(w,h,false);this.camera.aspect=w/h;
-  const t=Math.tan(35*Math.PI/360),dist=Math.max(1080/(2*t),650/(2*t*this.camera.aspect));
-  this.camera.position.set(0,-dist*.18,dist);this.camera.lookAt(0,40,0);this.camera.updateProjectionMatrix();
+  const t=Math.tan(35*Math.PI/360),dist=Math.max(1180/(2*t),650/(2*t*this.camera.aspect));
+  this.camera.position.set(0,-dist*.18,dist);this.camera.lookAt(0,-35,20);this.camera.updateProjectionMatrix();
  }
- metrics(){const info=this.renderer.info;return{width:this.canvas.width,height:this.canvas.height,draws:info.render.calls,triangles:info.render.triangles,visible:this.current.count+this.spill.count};}
+ metrics(){const info=this.renderer.info;return{width:this.canvas.width,height:this.canvas.height,draws:info.render.calls,triangles:info.render.triangles,visible:this.current.count+this.spill.count+(this.boxGroup.visible?this.collected.count:0)};}
  posePour(pour){
   const jar=this.jars[this.activeColor%6];if(!jar)return;
   if(!pour){jar.position.copy(jar.userData.home);jar.quaternion.copy(jar.userData.homeRotation);jar.userData.fill.scale.y=1;jar.userData.fill.position.y=27;return;}
@@ -157,7 +179,7 @@ export class AtelierScene {
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
    const j=out*16,seed=sand.seed[i],angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=1.5+(seed*197%1)*1.1;
-   const point=bentPoint(sand.x[i]-300,400-sand.y[i],3+sand.z[i],this.bend);
+   const point=bentPoint(sand.x[i]-300,400-sand.y[i],3+sand.z[i],this.bend,this.pitch);
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
    a[j+4]=-sn*scale;a[j+5]=cs*scale;a[j+6]=(seed*31%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+7]=0;
    a[j+8]=0;a[j+9]=0;a[j+10]=scale;a[j+11]=0;a[j+12]=point.x;a[j+13]=point.y;a[j+14]=point.z;a[j+15]=1;
@@ -172,18 +194,18 @@ export class AtelierScene {
    const h=(sand.moundHeight[k]+sand.moundHeight[y*COLS+Math.max(x-1,0)]+sand.moundHeight[Math.max(y-1,0)*COLS+x]+sand.moundHeight[Math.max(y-1,0)*COLS+Math.max(x-1,0)])*.25;
    const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=h>0?old+(h*.8-old)*Math.min(1,dt*30):0;
    this.heapGeo.attributes.heapAmount.setX(vertex,height);
-   const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend);p.setXYZ(vertex,q.x,q.y,q.z);
+   const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend,this.pitch);p.setXYZ(vertex,q.x,q.y,q.z);
   }
   p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.renderTick++%4===0)this.heapGeo.computeVertexNormals();
  }
- updateBend(amount){
+ updateBend(amount,pitch=amount*.58){
   if(amount<=1e-6)amount=0;
-  if(amount===this.bend)return;
-  if(amount!==0&&this.bend!==0&&Math.abs(amount-this.bend)<.0001)return;
-  this.bend=amount;
+  if(pitch<=1e-6)pitch=0;
+  if(amount===this.bend&&pitch===(this.pitch||0))return;
+  this.bend=amount;this.pitch=pitch;
   for(const [mesh,base] of [[this.paper,this.paperBase],[this.edge,this.edgeBase]]){
    const p=mesh.geometry.attributes.position;
-   for(let i=0;i<p.count;i++){const q=bentPoint(base[i*3],base[i*3+1],base[i*3+2],amount);p.setXYZ(i,q.x,q.y,q.z);}
+   for(let i=0;i<p.count;i++){const q=bentPoint(base[i*3],base[i*3+1],base[i*3+2],amount,pitch);p.setXYZ(i,q.x,q.y,q.z);}
    p.needsUpdate=true;mesh.geometry.computeVertexNormals();
   }
  }
@@ -193,41 +215,65 @@ export class AtelierScene {
   this.paperGroup.updateMatrixWorld(true);const color=new T.Color(this.colors[this.activeColor]);
   for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<30000){
    if(outsideOnly&&(sand.state[i]!==FREE||sand.cell(sand.x[i],sand.y[i])>=0))continue;
-   const q=bentPoint(sand.x[i]-300,400-sand.y[i],3+sand.z[i],this.bend),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
-   this.spills.push({x:v.x,y:v.y,z:v.z,vx:sand.vx[i],vy:-Math.max(350,sand.vy[i]),vz:-50,seed:sand.seed[i],color});sand.state[i]=LOST;sand.lost++;
+   const q=bentPoint(sand.x[i]-300,400-(this.draining?Math.min(800,sand.y[i]):sand.y[i]),3+sand.z[i],this.bend,this.pitch),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
+   const speed=this.draining?surfaceVelocity(sand.x[i]-300,sand.vx[i],Math.max(180,sand.vy[i]),this.bend,this.pitch):{x:sand.vx[i],y:-sand.vy[i],z:Math.min(-15,sand.vz[i])};
+   const velocity=new T.Vector3(speed.x,speed.y,speed.z).applyQuaternion(this.paperGroup.quaternion);
+   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],color});sand.state[i]=LOST;sand.lost++;
   }
+ }
+ beginCleanup(){this.draining=true;this.collectedCount=0;this.collected.count=0;this.trayBins.fill(0);}
+ updateCollector(phase,dt){
+  this.draining=phase==='shake';this.boxMotion=Math.max(0,Math.min(1,this.boxMotion+(this.draining?1:-1)*dt*2.8));
+  this.boxGroup.visible=this.boxMotion>0;this.boxGroup.position.y=TRAY.centerY-(1-smooth(this.boxMotion))*360;
+  this.collectorBox={...TRAY,centerY:this.boxGroup.position.y};
+  for(let side=0;side<2;side++){
+   const hand=this.hands[side];hand.visible=this.draining;const x=side?300:-300,q=bentPoint(x,0,5,this.bend,this.pitch);
+   hand.position.set(q.x+(side?8:-8),q.y,q.z);hand.rotation.y=(side?-1:1)*this.bend*.7;
+  }
+ }
+ catchGrain(p){
+  if(this.collectedCount>=30000)return;
+  const col=Math.max(0,Math.min(27,Math.floor((p.x+TRAY.halfWidth)/(TRAY.halfWidth*2)*28))),row=Math.max(0,Math.min(21,Math.floor((p.y-this.collectorBox.centerY+TRAY.halfDepth)/(TRAY.halfDepth*2)*22)));
+  let chosen=row*28+col,score=this.trayBins[chosen]*.32;
+  for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=col+dx,y=row+dy;if(x<0||x>=28||y<0||y>=22)continue;const k=y*28+x,cost=this.trayBins[k]*.32+Math.hypot(dx,dy)*1.3;if(cost<score){chosen=k;score=cost;}}
+  const lowest=this.trayBins[chosen];
+  const x=(chosen%28+.2+(p.seed*31%1)*.6)/28*TRAY.halfWidth*2-TRAY.halfWidth,y=(Math.floor(chosen/28)+.2+(p.seed*47%1)*.6)/22*TRAY.halfDepth*2-TRAY.halfDepth;
+  const object=this.spillObject;object.position.set(x,y,TRAY.bottom+Math.min(42,lowest*.32));object.rotation.set(.05,.03,p.seed*79);object.scale.set(2.1,2.1,.65);object.updateMatrix();
+  const i=this.collectedCount++;this.collected.setMatrixAt(i,object.matrix);this.collected.setColorAt(i,p.color);this.collected.geometry.attributes.flakeSeed.setX(i,p.seed);this.trayBins[chosen]++;
  }
  updateSpill(dt){
   let out=0;const object=this.spillObject,projected=new T.Vector3();
   for(const p of this.spills){
-   p.vz-=700*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;
+   const caught=stepFalling(p,dt,this.boxMotion>.95?this.collectorBox:NO_BOX);
+   if(caught){this.catchGrain(p);continue;}
    projected.set(p.x,p.y,p.z).project(this.camera);
-   // No lifetime fade: a fallen packet is removed only after it leaves view.
    if(projected.y < -1.15 || Math.abs(projected.x)>1.3 || projected.z>1)continue;
    object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar(1.8+p.seed);object.updateMatrix();
    this.spill.setMatrixAt(out,object.matrix);this.spill.setColorAt(out,p.color);this.spills[out++]=p;
   }
   this.spills.length=out;this.spill.count=out;this.spill.instanceMatrix.needsUpdate=true;this.spill.instanceColor.needsUpdate=true;
+  this.collected.count=this.collectedCount;this.collected.instanceMatrix.needsUpdate=true;this.collected.instanceColor.needsUpdate=true;this.collected.geometry.attributes.flakeSeed.needsUpdate=true;
  }
- reset(){this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.updateBend(0);}
- setPeelMask(image,anchor={x:300,y:200}){
-  this.peelAnchor=anchor;
-  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.drawImage(image,0,0);x.globalCompositeOperation='source-in';x.fillStyle='#fff0a7';x.fillRect(0,0,W,H);
-  this.peelSheet.material.map?.dispose();this.peelSheet.material.map=new T.CanvasTexture(c);this.peelSheet.material.map.colorSpace=T.SRGBColorSpace;this.peelSheet.material.needsUpdate=true;this.peelProgress(0);
+ reset(){this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}
+ setPeelPiece(image,piece){
+  this.peelPiece=piece;this.peelAnchor=piece.grip;
+  const {w,h}=piece.bounds,step=this.settings.profile==='economy'?14:10;
+  this.peelSegments={x:Math.max(4,Math.ceil(w/step)),y:Math.max(4,Math.ceil(h/step))};
+  this.peelGeo.dispose();this.peelGeo=new T.PlaneGeometry(w,h,this.peelSegments.x,this.peelSegments.y);this.peelSheet.geometry=this.peelGeo;
+  this.peelSheet.material.map?.dispose();this.peelSheet.material.map=new T.CanvasTexture(image);this.peelSheet.material.map.colorSpace=T.SRGBColorSpace;this.peelSheet.material.color.set('#ffffff');this.peelSheet.material.needsUpdate=true;this.peelProgress(0);
  }
  peelProgress(progress){
-  this.peelValue=progress;
-  this.peelSheet.visible=progress>0&&progress<1;const p=this.peelGeo.attributes.position;
-  for(let row=0;row<=160;row++)for(let col=0;col<=24;col++){
-   const i=row*25+col,point=rolledPoint(col/24*W-W/2,row/160*H,progress);
-   p.setXYZ(i,point.x,point.y,point.z);
+  this.peelValue=progress;if(!this.peelPiece)return;
+  this.peelSheet.visible=progress>.12&&progress<1;const p=this.peelGeo.attributes.position,{x:nx,y:ny}=this.peelSegments,b=this.peelPiece.bounds;
+  for(let row=0;row<=ny;row++)for(let col=0;col<=nx;col++){
+   const q=peelPoint(this.peelPiece,b.x+col/nx*b.w,b.y+row/ny*b.h,progress);p.setXYZ(row*(nx+1)+col,q.x,q.y,q.z);
   }
   p.needsUpdate=true;this.peelGeo.computeVertexNormals();
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,phase,down,pointer,peeled,pour,shakeProgress=0,finished=false}){
-  this.time=time;this.updateBend(bendAmount(shakeProgress));this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
-  const showHeap=this.settings.relief&&!finished&&sand.freshCount>0;
+  this.time=time;const pose=drainPose(shakeProgress);this.updateBend(pose.bend,pose.pitch);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
+  const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.freshCount>0;
   this.heap.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;
@@ -238,7 +284,11 @@ export class AtelierScene {
   this.paperGroup.updateMatrixWorld(true);
   this.brush.visible=phase==='brush'&&pointer.visible&&!finished;this.tweezers.visible=phase==='rolling';this.hint.visible=phase==='peel';
   if(phase==='peel'){this.hint.position.set(this.peelAnchor.x-300,400-this.peelAnchor.y,12);this.hint.material.opacity=.65+.25*Math.sin(time*.004);}
-  if(phase==='rolling'){const q=rolledPoint(this.peelAnchor.x-300,this.peelAnchor.y,Math.min(.99,this.peelValue||0));this.tweezers.position.set(q.x,q.y,q.z+3);this.tweezers.rotation.z=-.7;}
+  if(phase==='rolling'&&this.peelPiece){
+   const progress=this.peelValue||0,q=peelPoint(this.peelPiece,this.peelAnchor.x,this.peelAnchor.y,progress),approach=1-smooth(progress/.17);
+   const angle=Math.atan2(-this.peelPiece.axis.y,this.peelPiece.axis.x)-Math.PI/2;
+   this.tweezers.position.lerp(new T.Vector3(q.x+Math.sin(angle)*4+approach*110,q.y-Math.cos(angle)*4+approach*90,q.z-35+approach*110),Math.min(1,dt*18));this.tweezers.rotation.z=angle;
+  }
   const rate=Math.min(1,dt*35);this.brushPoint.x+=(pointer.x-this.brushPoint.x)*rate;this.brushPoint.y+=(pointer.y-this.brushPoint.y)*rate;
   const brushCell=sand.cell(pointer.x,pointer.y),brushHeight=brushCell<0?0:sand.height[brushCell];
   this.brush.position.set(this.brushPoint.x-300,400-this.brushPoint.y,down?3+Math.min(brushHeight*.2,14):35);this.brush.rotation.z=.65;

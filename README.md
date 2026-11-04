@@ -1,12 +1,12 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=4.2)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=5)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
-Kâğıda bir kez dokun: sıradaki sarı parça rulolanır ve sıcak kahverengi yapışkan açığa çıkar. Raftaki şişe bu bölgenin üstüne gidip hafifçe yayarak sim döker. Parmağını yığından başlatıp simi eksik alanlara taşı. Boş fırça boya oluşturmaz. Fırçalanan sim incelip yanlara yayılır; parmak kalkınca yeniden dolu bir yığın gibi şişmez. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
+Kâğıda bir kez dokun: cımbız bir kenarı tutar ve sarı parçayı yavaşça kıvırarak soyar. Aynı rengin ayrı parçaları sırayla açılır; örneğin mavi, üç ayrı parçadır. Sıcak kahverengi yapışkan tek tek ortaya çıkar. Raftaki şişe bu bölgenin üstüne gidip hafifçe yayarak sim döker. Parmağını yığından başlatıp simi eksik alanlara taşı. Boş fırça boya oluşturmaz. Fırçalanan sim incelip yanlara yayılır; parmak kalkınca yeniden dolu bir yığın gibi şişmez. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
 
-Kaplanan alan, aralıksız ve doygun bir sim yüzeyi olur. On bir renkle Batman/Joker çiziminin tamamı ve kırmızı arka plan boyanabilir. Renk tamamlanınca **Akış** düzeni kâğıdı büker, fazlalıkları aşağı döker ve sonraki rengi açar. **Kenar** ve **Şerit** düzenlerinde geçişi sen yönetebilirsin. Düşen parçalar ekran dışına çıkana kadar çizilir.
+Kaplanan alan, aralıksız ve doygun bir sim yüzeyi olur. On bir renkle Batman/Joker çiziminin tamamı ve kırmızı arka plan boyanabilir. Renk tamamlanınca **Akış** düzeni kâğıdın iki yanını tutup oluk gibi büker. Fazlalıklar ortada toplanır ve aşağıdaki kutuya yerçekimiyle düşer; son tane boşalmadan kâğıt geri açılmaz. Ardından sıradaki rengi açar. **Kenar** ve **Şerit** düzenlerinde geçişi sen yönetebilirsin. Düşen parçalar ekran dışına çıkana kadar çizilir.
 
 Referans videodan alınan gerçek fırça ve döküş sesleri ilk dokunuşla açılır; ayarlardan kapatılabilir. İlk parmak hareketi yönetir; ikinci parmak devralmaz. Oyun alanında zoom ve sayfa kaydırma kapalıdır.
 
