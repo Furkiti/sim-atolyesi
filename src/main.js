@@ -1,7 +1,8 @@
 import {Sand,W,H} from './sand.js';
 import {AtelierScene} from './scene.js';
 import {Flow,PointerGate,FramePacer,rollFront} from './interaction.js';
-import {loadSettings,saveSettings,profileSettings,completionThreshold,doseFor,pourPoint} from './settings.js';
+import {loadSettings,saveSettings,profileSettings,doseFor,pourPoint} from './settings.js';
+import {completionStatus,resumeIndex} from './progress.js';
 const $=s=>document.querySelector(s),canvas=$('#art'),dialog=$('#settings');
 import {stages} from './palette.js';
 import {drawGlitter} from './coating.js';
@@ -33,12 +34,14 @@ const baked=document.createElement('canvas');baked.width=W;baked.height=H;const 
 const coat=document.createElement('canvas');coat.width=W;coat.height=H;const cc=coat.getContext('2d');
 const paintMask=document.createElement('canvas');paintMask.width=W;paintMask.height=H;const mc=paintMask.getContext('2d');
 const glitter=document.createElement('canvas');glitter.width=W;glitter.height=H;const tc=glitter.getContext('2d');
-let lastCoated=-1,coatClock=0;
+let lastCoated=-1;
 function makeGlitter(color){drawGlitter(tc,color,W,H)}
-function updateCoat(force=false){
+function updateCoat(force=false,finish=false){
  if(!sand||(!force&&lastCoated===sand.coveredWeight))return;
  lastCoated=sand.coveredWeight;cc.clearRect(0,0,W,H);cc.fillStyle='#fff';
- for(let k=0;k<sand.bound.length;k++)if(sand.bound[k])cc.fillRect((k%120)*5,Math.floor(k/120)*5,5,5);
+ // Seal only the tiny raster seams of an already completed coat when baking it.
+ if(finish&&ready())cc.fillRect(0,0,W,H);
+ else for(let k=0;k<sand.bound.length;k++)if(sand.bound[k])cc.fillRect((k%120)*5,Math.floor(k/120)*5,5,5);
  cc.globalCompositeOperation='destination-in';cc.drawImage(assets[stages[index].id],0,0);cc.globalCompositeOperation='source-in';cc.drawImage(glitter,0,0);cc.globalCompositeOperation='source-over';
  mc.clearRect(0,0,W,H);mc.drawImage(baked,0,0);mc.drawImage(coat,0,0);view?.setCoatMask(paintMask);repaintPaper();
 }
@@ -94,18 +97,19 @@ for(const [id,key] of Object.entries(checks))$('#'+id).onchange=e=>applySettings
 for(const [id,key,numeric] of [['render-scale','renderScale',true],['pour-amount','pourAmount',true],['shadow-quality','shadow',false],['frame-limit','frameLimit',true],['pace','pace',false]]){
  $('#'+id).addEventListener(id.includes('scale')||id.includes('amount')?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,profile:['renderScale','shadow','frameLimit'].includes(key)?'custom':settings.profile}));
 }
-function ready(){return sand&&sand.coverage>=completionThreshold(settings)}
+function ready(){return sand&&completionStatus(sand.coverage).ready}
 function updateUI(){
  if(!sand)return;
- const phase=flow.phase,percent=Math.round(sand.coverage*100);
+ const phase=flow.phase,percent=completionStatus(sand.coverage).percent;
  $('#stage-label').textContent=`${String(index+1).padStart(2,'0')} / ${stages.length}`;$('#stage-label').title=stages[index].name;$('#color-dot').style.background=stages[index].color;
  $('#coverage').textContent=percent+'%';$('#progress-fill').style.width=percent+'%';
  const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan kahverengi alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['≋','Kâğıt bükülüyor…','Yapışan parıltılar kâğıtta kalır.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
  const m=messages[phase]||messages.brush;$('#phase-icon').textContent=m[0];$('#instruction-title').textContent=m[1];$('#instruction-text').textContent=phase==='brush'&&settings.layout!=='flow'?'Sim ekle ile açık alanın üstüne yeni bir yığın dökebilirsin.':m[2];$('#phase-label').textContent=m[3];
  const canNext=phase==='brush'&&ready()&&!finished;
- $('#next').hidden=!canNext||settings.autoAdvance;$('#next').disabled=!canNext;$('#next').innerHTML=index===stages.length-1?'Eserini tamamla <span>✧</span>':'Sonraki renk <span>→</span>';
- $('#auto-status').hidden=!canNext||!settings.autoAdvance||gate.active!==null;
- $('#quick-actions').hidden=phase!=='brush'||finished;
+ $('#next').hidden=!canNext;$('#next').disabled=!canNext;$('#next').innerHTML=index===stages.length-1?'Eserini tamamla <span>✧</span>':'Sonraki renk <span>→</span>';
+ $('#auto-status').hidden=true;
+ if(canNext){$('#instruction-title').textContent='Renk tamamlandı.';$('#instruction-text').textContent=settings.autoAdvance?'Parmağını kaldır; sıradaki renge geçelim.':'Sonraki renk ile devam et.';}
+ $('#quick-actions').hidden=phase!=='brush'||finished||canNext;
  for(const button of document.querySelectorAll('[data-tool]')){
   const t=button.dataset.tool,selected=t===(phase==='shake'?'clean':phase==='rolling'?'peel':phase);
   button.classList.toggle('selected',selected);button.disabled=finished||flow.busy||(t==='peel'?phase!=='peel':phase==='peel');
@@ -136,7 +140,7 @@ function prepareDose(){
 function addSand(){if(finished||!flow.pour())return;down=false;strokes.length=0;prepareDose();readySince=0;updateUI()}
 function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();pour=null;view.posePour(null);readySince=0;updateUI()}
 function nextStage(){
- nextRuns++;updateCoat(true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
+ nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
  if(index<stages.length-1){index++;activate();autoKick=settings.autoAdvance?.22:0;}
  else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;updateUI();}
 }
@@ -164,7 +168,7 @@ for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addE
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',releaseAll);
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
- Object.assign(canvas.dataset,{version:'4',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'4.1',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -193,7 +197,8 @@ function frame(t){
   if(event==='advance')nextStage();else updateUI();
  }
  if(settings.autoAdvance&&flow.phase==='brush'&&ready()&&gate.active===null&&!dialog.open&&!finished){readySince+=dt;if(readySince>.55)startShake(true)}else readySince=0;
- if((coatClock+=dt)>.10){coatClock=0;updateCoat();}
+ // Commit new coverage before bound grains leave the moving mesh, avoiding a blank frame.
+ updateCoat();
  simMs=simMs*.85+(performance.now()-simStart)*.15;
  sound(flow.phase==='pour'?.14:flow.phase==='shake'?.15:flow.phase==='rolling'?.06:moved?Math.min(.16,.015+moved*.00003):0);
  const drawStart=performance.now();view.render(sand,{time:t,dt,phase:flow.phase,down,pointer,peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
@@ -203,5 +208,9 @@ applySettings(settings);
 try{
  await Promise.all(['lines',...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=4`})));
  for(const stage of stages){gc.clearRect(0,0,W,H);gc.drawImage(assets[stage.id],0,0);const data=gc.getImageData(0,0,W,H).data,mask=new Uint8Array(W*H);for(let i=0;i<mask.length;i++)mask[i]=data[i*4+3]>80?1:0;masks[stage.id]=mask;}
- repaintPaper();view=new AtelierScene(canvas,paperCanvas,stages.map(s=>s.color),settings);activate();requestAnimationFrame(frame);
+ index=resumeIndex(location.search,stages.length);
+ for(let i=0;i<index;i++){
+  makeGlitter(stages[i].color);cc.clearRect(0,0,W,H);cc.drawImage(glitter,0,0);cc.globalCompositeOperation='destination-in';cc.drawImage(assets[stages[i].id],0,0);cc.globalCompositeOperation='source-over';bakedContext.drawImage(coat,0,0);
+ }
+ cc.clearRect(0,0,W,H);repaintPaper();view=new AtelierScene(canvas,paperCanvas,stages.map(s=>s.color),settings);activate();requestAnimationFrame(frame);
 }catch(error){$('#instruction-title').textContent='Atölye açılamadı.';$('#instruction-text').textContent='Sayfayı güncel bir tarayıcıda yenileyerek tekrar dene.';console.error(error);}

@@ -146,14 +146,14 @@ export class AtelierScene {
   this.paperGroup.worldToLocal(mouth);return{x:mouth.x+300,y:400-mouth.y,z:mouth.z-3};
  }
  mapPointer(e){const r=this.canvas.getBoundingClientRect();this.mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);this.ray.setFromCamera(this.mouse,this.camera);const plane=new T.Plane(new T.Vector3(0,0,1),-3);if(!this.ray.ray.intersectPlane(plane,this.hit))return{x:300,y:400};this.paperGroup.worldToLocal(this.hit);return{x:this.hit.x+300,y:400-this.hit.y}}
- setStage(index){this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);this.tuftMat.color.set('#795235');this.heap.visible=true;this.hint.visible=true;this.jars[index%6].userData.fill.material.color.set(this.colors[index]);}
+ setStage(index){this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);this.tuftMat.color.set('#795235');this.heap.visible=true;this.hint.visible=true;this.jars[index%6].userData.fill.material.color.set(this.colors[index]);}
  initInstance(mesh,i,seed,color){
   const mat=new T.Matrix4(),q=new T.Quaternion().setFromEuler(new T.Euler((seed*17%1-.5)*1.3,(seed*31%1-.5)*1.3,seed*79)),scale=1.15+(seed*197%1)*.9;
   mat.compose(new T.Vector3(0,0,-1000),q,new T.Vector3(scale,scale,scale));mesh.instanceMatrix.array.set(mat.elements,i*16);
   const c=new T.Color(color),v=.60+(seed*47%1)*.7;c.multiplyScalar(v);if(seed*127%1>.965)c.lerp(new T.Color('#c2c8da'),.65);mesh.instanceColor.array.set([c.r,c.g,c.b],i*3);
  }
  updateGrains(sand){
-  const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,color=new T.Color(this.colors[this.activeColor]);let out=0;
+  const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,seeds=this.current.geometry.attributes.flakeSeed,color=new T.Color(this.colors[this.activeColor]);let out=0;
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
    const j=out*16,seed=sand.seed[i],angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=1.5+(seed*197%1)*1.1;
@@ -161,22 +161,26 @@ export class AtelierScene {
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*1.2*scale;a[j+3]=0;
    a[j+4]=-sn*scale;a[j+5]=cs*scale;a[j+6]=(seed*31%1-.5)*1.2*scale;a[j+7]=0;
    a[j+8]=0;a[j+9]=0;a[j+10]=scale;a[j+11]=0;a[j+12]=point.x;a[j+13]=point.y;a[j+14]=point.z;a[j+15]=1;
-   const light=.7+(seed*47%1)*.5;c[out*3]=color.r*light;c[out*3+1]=color.g*light;c[out*3+2]=color.b*light;out++;
+   const light=.7+(seed*47%1)*.5;c[out*3]=color.r*light;c[out*3+1]=color.g*light;c[out*3+2]=color.b*light;seeds.setX(out,seed);out++;
   }
-  this.current.count=out;this.current.instanceMatrix.needsUpdate=true;this.current.instanceColor.needsUpdate=true;
+  this.current.count=out;this.current.instanceMatrix.needsUpdate=true;this.current.instanceColor.needsUpdate=true;seeds.needsUpdate=true;
  }
- updateHeap(sand){
+ updateHeap(sand,dt=1/60){
   const p=this.heapGeo.attributes.position,cols=COLS/2,rows=ROWS/2;
   for(let row=0;row<=rows;row++)for(let col=0;col<=cols;col++){
    const x=Math.min(col*2,COLS-1),y=Math.min(row*2,ROWS-1),k=y*COLS+x;
    const h=(sand.height[k]+sand.height[y*COLS+Math.max(x-1,0)]+sand.height[Math.max(y-1,0)*COLS+x]+sand.height[Math.max(y-1,0)*COLS+Math.max(x-1,0)])*.25;
-   this.heapGeo.attributes.heapAmount.setX(row*(cols+1)+col,h*.8);
-   const q=bentPoint(col/cols*W-300,400-row/rows*H,3+h*.8,this.bend);p.setXYZ(row*(cols+1)+col,q.x,q.y,q.z);
+   const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=old+(h*.8-old)*Math.min(1,dt*30);
+   this.heapGeo.attributes.heapAmount.setX(vertex,height);
+   const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend);p.setXYZ(vertex,q.x,q.y,q.z);
   }
-  p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;this.heapGeo.computeVertexNormals();
+  p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.renderTick++%4===0)this.heapGeo.computeVertexNormals();
  }
  updateBend(amount){
-  if(Math.abs(amount-this.bend)<.0001)return;this.bend=amount;
+  if(amount<=1e-6)amount=0;
+  if(amount===this.bend)return;
+  if(amount!==0&&this.bend!==0&&Math.abs(amount-this.bend)<.0001)return;
+  this.bend=amount;
   for(const [mesh,base] of [[this.paper,this.paperBase],[this.edge,this.edgeBase]]){
    const p=mesh.geometry.attributes.position;
    for(let i=0;i<p.count;i++){const q=bentPoint(base[i*3],base[i*3+1],base[i*3+2],amount);p.setXYZ(i,q.x,q.y,q.z);}
@@ -223,8 +227,8 @@ export class AtelierScene {
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,phase,down,pointer,peeled,pour,shakeProgress=0,finished=false}){
   this.time=time;this.updateBend(bendAmount(shakeProgress));this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
-  const showHeap=this.settings.relief&&!finished;
-  this.heap.visible=showHeap;if(showHeap&&this.renderTick++%(this.settings.profile==='quality'?4:8)===0)this.updateHeap(sand);
+  const showHeap=this.settings.relief&&!finished&&this.current.count>0;
+  this.heap.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;
    this.key.position.y+=((340-(pointer.y-400)*.25)-this.key.position.y)*.045;

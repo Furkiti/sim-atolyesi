@@ -16,9 +16,11 @@ export function rolledPoint(x,y,progress){
 // A single smooth bend, rather than an oscillating shake. All layers share it.
 export function bendAmount(progress){return progress<=0||progress>=1?0:Math.sin(Math.PI*progress)**.8;}
 export function bentPoint(x,y,z,amount){
- if(y<-400)return{x,y,z};
- const along=(y+400)/800,angle=along*1.05*amount,r=800/Math.max(.0001,1.05*amount);
- return {x,y:amount>0?-400+Math.sin(angle)*r:y,z:z+(amount>0?(1-Math.cos(angle))*r:0)};
+ if(y<-400||amount<=1e-6)return{x,y,z};
+ const curve=1.05*amount,along=(y+400)/800,angle=along*curve,r=800/curve;
+ // A clamped divisor collapses the card near the final animation frame.
+ // This sine identity avoids cancellation in 1-cos(angle) for tiny bends.
+ return {x,y:-400+Math.sin(angle)*r,z:z+2*Math.sin(angle/2)**2*r};
 }
 // One phase owns its timers. Repeated taps cannot enqueue duplicate pours or shakes.
 export class Flow {

@@ -15,7 +15,6 @@ export function normalizeSettings(input={}){
 export function loadSettings(storage){try{return normalizeSettings(JSON.parse(storage.getItem(SETTINGS_KEY)||'{}'))}catch{return normalizeSettings()}}
 export function saveSettings(storage,settings){try{storage.setItem(SETTINGS_KEY,JSON.stringify(normalizeSettings(settings)))}catch{/* Gameplay also works when storage is unavailable. */}}
 export function profileSettings(current,name){return normalizeSettings({...current,...PROFILES[name],profile:name})}
-export function completionThreshold(settings){return 1}
 export function doseFor(areaCells,settings,remaining){return Math.min(remaining,Math.ceil(Math.max(1600,Math.min(18000,areaCells*2.3))*settings.pourAmount))}
 // Keep the bottle mouth over an interior target pixel while gently fanning.
 export function pourPoint(mask,anchor,t=0){
