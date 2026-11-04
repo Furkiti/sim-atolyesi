@@ -16,7 +16,7 @@
 <label class="layout-card"><input type="radio" name="layout" value="edge"><span class="mini-layout mini-edge"><i></i><b>▰<br>≋<br>+</b></span><strong>Kenar</strong><small>Araçlar resmin yanında.</small></label>
 <label class="layout-card"><input type="radio" name="layout" value="dock"><span class="mini-layout mini-dock"><i></i><b>↗ ⠿ ▰ ≋</b></span><strong>Şerit</strong><small>Küçük bir alt araç çubuğu.</small></label></div>
 <label class="setting-row"><span>Renkleri otomatik ilerlet<small>Renk hazır olunca kâğıdı bir kez büker ve sonraki kâğıda geçer.</small></span><input id="auto-advance" type="checkbox" role="switch"></label>
-<label class="setting-row"><span>Oyun temposu</span><select id="pace"><option value="fast">Hızlı</option><option value="relaxed">Detaylı</option></select></label>
+<label class="setting-row"><span>Oyun temposu</span><select id="pace"><option value="fast">Hızlı · %95 yeterli</option><option value="relaxed">Detaylı · %98 yeterli</option></select></label>
 <label class="slider-row" for="pour-amount"><span>Sim miktarı <output id="pour-readout">%100</output></span><input id="pour-amount" type="range" min=".75" max="1.75" step=".05"><small>Sonraki döküşe uygulanır. Sim, açtığın parçanın içine hafifçe yayılarak dökülür.</small></label>
 </section><section><h3>Görüntü · anında değişir</h3>
 <label class="setting-row"><span>Kalite profili</span><select id="quality-profile"><option value="economy">Ekonomik</option><option value="balanced">Dengeli</option><option value="quality">Yüksek</option><option value="custom">Özel</option></select></label>
@@ -31,4 +31,4 @@
 <div class="metrics"><div><span id="stat-fps">—</span><small>FPS</small></div><div><span id="stat-frame">—</span><small>Kare süresi · ms</small></div><div><span id="stat-sim">—</span><small>Simülasyon CPU · ms</small></div><div><span id="stat-render">—</span><small>Çizim CPU · ms</small></div><div><span id="stat-particles">—</span><small>Görünür tane</small></div><div><span id="stat-draws">—</span><small>Çizim çağrısı</small></div><div><span id="stat-triangles">—</span><small>Üçgen</small></div><div><span id="stat-memory">—</span><small>JS belleği · MB</small></div></div><p class="settings-note">CPU süreleri GPU süresini ölçmez. Düşük çözünürlük ve kapalı gölgeler daha akıcı çalışabilir.</p>
 </section><section class="session-actions"><button id="sound" class="secondary" aria-label="Sesi kapat">Ses: açık</button><button id="reset" class="secondary">↺ Yeniden başlat</button></section></div>
 <div class="sheet-footer">Ayarların bu cihazda saklanır. <button id="settings-done" class="primary">Oyuna dön</button></div></dialog>
-<script type="module" src="game.js?v=4.1"></script></body></html>
+<script type="module" src="game.js?v=4.2"></script></body></html>

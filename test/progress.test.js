@@ -1,12 +1,13 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {completionStatus,resumeIndex} from '../src/progress.js';import {Flow} from '../src/interaction.js';
 
-test('every displayed 100 percent is ready, including the reported 99.5–99.99 percent case',()=>{
- for(const coverage of [0,.1,.994,.994999999,.995,.996,.999,.99999,1]){
-  const status=completionStatus(coverage);assert.equal(status.percent===100,status.ready,String(coverage));
+test('small remaining gaps finish at 95 percent in fast mode and 98 in detailed mode',()=>{
+ for(const pace of ['fast','relaxed'])for(const coverage of [0,.1,.949999,.95,.979999,.98,.994,.995,.99999,1]){
+  const status=completionStatus(coverage,pace);assert.equal(status.percent===100,status.ready,`${pace}: ${coverage}`);
  }
- assert.deepEqual(completionStatus(.998),{ready:true,percent:100});
- assert.deepEqual(completionStatus(.9949),{ready:false,percent:99});
+ assert.deepEqual(completionStatus(.9499),{ready:false,percent:95});
+ assert.deepEqual(completionStatus(.95),{ready:true,percent:100});
+ assert.equal(completionStatus(.97,'relaxed').ready,false);assert.equal(completionStatus(.98,'relaxed').ready,true);
 });
 
 test('a visually complete first colour can clean up and advance exactly once',()=>{

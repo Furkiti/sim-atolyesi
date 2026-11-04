@@ -6,8 +6,8 @@ export class Sand {
   constructor({capacity=30000,random=Math.random}={}) {
     this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
     for (const name of ['x','y','z','vx','vy','vz','seed']) this[name]=new Float32Array(capacity);
-    this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
-    this.density=new Uint16Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);
+    this.pressed=new Uint8Array(capacity);this.freshCount=0;this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
+    this.density=new Float32Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);this.moundHeight=new Float32Array(COLS*ROWS);
     this.neighbors=new Int32Array(COLS*ROWS*8);
     for(let k=0;k<COLS*ROWS;k++){const c=k%COLS,r=(k/COLS)|0;this.neighbors.set([c>0?k-1:k,c<COLS-1?k+1:k,r>0?k-COLS:k,r<ROWS-1?k+COLS:k,r>0&&c>0?k-COLS-1:k,r>0&&c<COLS-1?k-COLS+1:k,r<ROWS-1&&c>0?k+COLS-1:k,r<ROWS-1&&c<COLS-1?k+COLS+1:k],k*8);}
     this.flowSum=new Float32Array(COLS*ROWS);this.flowCDF=new Float32Array(COLS*ROWS*8);this.flowForce=new Float32Array(COLS*ROWS*8);
@@ -28,7 +28,7 @@ export class Sand {
     let added=0;
     for(let j=0;j<n&&this.count<this.capacity;j++){
       const i=this.count++,a=this.random()*Math.PI*2,r=Math.sqrt(this.random())*spread;
-      this.seed[i]=this.random();this.x[i]=x+Math.cos(a)*r;this.y[i]=y+Math.sin(a)*r;
+      this.pressed[i]=0;this.seed[i]=this.random();this.x[i]=x+Math.cos(a)*r;this.y[i]=y+Math.sin(a)*r;
       this.z[i]=height+this.random()*32;this.vz[i]=-45-this.random()*35;this.vx[i]=(this.random()-.5)*16;this.vy[i]=(this.random()-.5)*16;this.state[i]=AIR;added++;
     }
     this.emitted+=added;return added;
@@ -59,27 +59,32 @@ export class Sand {
     this.bound[k]++;return true;
   }
   brush(from,to,radius=46){
-    const dx=to.x-from.x,dy=to.y-from.y,d2=dx*dx+dy*dy,d=Math.sqrt(d2);if(d<.2)return 0;
+    const dx=to.x-from.x,dy=to.y-from.y,d2=dx*dx+dy*dy,d=Math.sqrt(d2);if(d<.02)return 0;
     const rr=radius*radius,ux=dx/d,uy=dy/d;let moved=0;
     // A swept capsule visits each mobile packet once, including fast strokes.
     for(let i=0;i<this.count;i++){
       if(this.state[i]!==FREE)continue;
       const t=Math.max(0,Math.min(1,((this.x[i]-from.x)*dx+(this.y[i]-from.y)*dy)/d2));
       const ax=this.x[i]-from.x-t*dx,ay=this.y[i]-from.y-t*dy,q=ax*ax+ay*ay;if(q>rr)continue;
-      const strength=.55+.45*Math.sqrt(1-q/rr),travel=Math.max(2,d*(1-t))*strength;
+      // Bristles shear and fan real grains, rather than dragging a rigid blob.
+      // Never move material farther merely because a pointer sends more events.
+      const strength=(.96+.04*Math.sqrt(1-q/rr))*(.96+.04*this.seed[i]),travel=d*(1-t)*strength;
+      const side=(ax*(-uy)+ay*ux)/radius,fan=side*.28+(this.seed[i]*137%1-.5)*.16;
+      const cell=this.cell(this.x[i],this.y[i]);this.pressed[i]=1;
+      if(cell>=0)this.z[i]=Math.min(this.z[i],1.7+this.height[cell]*.45*(.1+this.seed[i]*.9));
       const steps=Math.max(1,Math.ceil(travel/4));
       for(let n=0;n<steps;n++){
-        this.x[i]+=ux*travel/steps;this.y[i]+=uy*travel/steps;
+        this.x[i]+=(ux-uy*fan)*travel/steps;this.y[i]+=(uy+ux*fan)*travel/steps;
         if(this.bind(i))break;
       }
-      if(this.state[i]!==BOUND){const side=(ax*(-uy)+ay*ux)/radius;this.vx[i]=ux*65-uy*side*18;this.vy[i]=uy*65+ux*side*18;this.z[i]=Math.min(this.z[i]+.25,38);}
+      if(this.state[i]!==BOUND){this.vx[i]=ux*12-uy*side*8;this.vy[i]=uy*12+ux*side*8;}
       moved++;
     }
     return moved;
   }
   step(dt,{shaking=false}={}){
-    this.time+=dt;this.density.fill(0);
-    for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0)this.density[k]++;}
+    this.time+=dt;this.density.fill(0);this.moundHeight.fill(0);this.freshCount=0;
+    for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundHeight[k]+=.95;this.freshCount++;}}}
     for(let k=0;k<this.height.length;k++)this.height[k]=this.density[k]*.95;
     // Pressure is a property of a cell, computed once rather than allocating
     // neighbour lists for every flake on every frame.
@@ -109,7 +114,9 @@ export class Sand {
           const force=this.flowForce[k*8+j],skew=(this.seed[i]*97%1-.5)*.75;fx=(FLOW_X[j]-FLOW_Y[j]*skew)*force;fy=(FLOW_Y[j]+FLOW_X[j]*skew)*force;
         }
         this.vx[i]+=fx*dt;this.vy[i]+=fy*dt;
-        const floor=1.7+h*(.10+this.seed[i]*.90);
+        const resting=1.7+h*(.10+this.seed[i]*.90);
+        // A swept layer settles downward; releasing the brush cannot puff it up.
+        const floor=this.pressed[i]?Math.min(this.z[i],resting):resting;
         this.z[i]+=(floor-this.z[i])*Math.min(1,dt*15);
         if(this.z[i]<5.5&&this.random()<dt*12)this.bind(i);
       }
@@ -119,15 +126,15 @@ export class Sand {
       if(this.x[i]<-3000||this.x[i]>W+3000||this.y[i]<-3000||this.y[i]>H+3000){this.state[i]=LOST;this.lost++;}
     }
   }
-  removeLoose(){for(let i=0;i<this.count;i++)if(this.state[i]!==BOUND&&this.state[i]!==LOST){this.state[i]=LOST;this.lost++;}this.height.fill(0);this.density.fill(0)}
+  removeLoose(){for(let i=0;i<this.count;i++)if(this.state[i]!==BOUND&&this.state[i]!==LOST){this.state[i]=LOST;this.lost++;}this.height.fill(0);this.density.fill(0);this.moundHeight.fill(0);this.freshCount=0}
   compact(){
     let out=0;
     for(let i=0;i<this.count;i++)if(this.state[i]!==LOST){
-      if(out!==i){for(const key of ['x','y','z','vx','vy','vz','seed','state','bin'])this[key][out]=this[key][i];}
+      if(out!==i){for(const key of ['x','y','z','vx','vy','vz','seed','pressed','state','bin'])this[key][out]=this[key][i];}
       out++;
     }
     this.count=out;
   }
   get coverage(){if(!this.targetCount)return 0;const ratio=this.coveredWeight/this.targetCount;return ratio>1-1e-9?1:ratio}
-  stats(){let air=0,free=0,bound=0;for(let i=0;i<this.count;i++){if(this.state[i]===AIR)air++;else if(this.state[i]===FREE)free++;else if(this.state[i]===BOUND)bound++;}return{air,free,bound,lost:this.lost,emitted:this.emitted,coverage:this.coverage,maxHeight:Math.max(...this.height)}}
+  stats(){let air=0,free=0,bound=0,pressedFree=0;for(let i=0;i<this.count;i++){if(this.state[i]===AIR)air++;else if(this.state[i]===FREE){free++;if(this.pressed[i])pressedFree++;}else if(this.state[i]===BOUND)bound++;}return{air,free,bound,pressedFree,freshFree:free-pressedFree,maxMoundHeight:Math.max(...this.moundHeight),lost:this.lost,emitted:this.emitted,coverage:this.coverage,maxHeight:Math.max(...this.height)}}
 }

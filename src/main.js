@@ -1,6 +1,6 @@
 import {Sand,W,H} from './sand.js';
 import {AtelierScene} from './scene.js';
-import {Flow,PointerGate,FramePacer,rollFront} from './interaction.js';
+import {Flow,PointerGate,FramePacer,rollFront,appendStroke} from './interaction.js';
 import {loadSettings,saveSettings,profileSettings,doseFor,pourPoint} from './settings.js';
 import {completionStatus,resumeIndex} from './progress.js';
 const $=s=>document.querySelector(s),canvas=$('#art'),dialog=$('#settings');
@@ -97,10 +97,10 @@ for(const [id,key] of Object.entries(checks))$('#'+id).onchange=e=>applySettings
 for(const [id,key,numeric] of [['render-scale','renderScale',true],['pour-amount','pourAmount',true],['shadow-quality','shadow',false],['frame-limit','frameLimit',true],['pace','pace',false]]){
  $('#'+id).addEventListener(id.includes('scale')||id.includes('amount')?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,profile:['renderScale','shadow','frameLimit'].includes(key)?'custom':settings.profile}));
 }
-function ready(){return sand&&completionStatus(sand.coverage).ready}
+function ready(){return sand&&completionStatus(sand.coverage,settings.pace).ready}
 function updateUI(){
  if(!sand)return;
- const phase=flow.phase,percent=completionStatus(sand.coverage).percent;
+ const phase=flow.phase,percent=completionStatus(sand.coverage,settings.pace).percent;
  $('#stage-label').textContent=`${String(index+1).padStart(2,'0')} / ${stages.length}`;$('#stage-label').title=stages[index].name;$('#color-dot').style.background=stages[index].color;
  $('#coverage').textContent=percent+'%';$('#progress-fill').style.width=percent+'%';
  const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan kahverengi alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['≋','Kâğıt bükülüyor…','Yapışan parıltılar kâğıtta kalır.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
@@ -138,7 +138,7 @@ function prepareDose(){
  playedPour=-1;pour={...anchor,anchor,dose,emitted:0,elapsed:0};
 }
 function addSand(){if(finished||!flow.pour())return;down=false;strokes.length=0;prepareDose();readySince=0;updateUI()}
-function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();pour=null;view.posePour(null);readySince=0;updateUI()}
+function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();if(advance)updateCoat(true,true);pour=null;view.posePour(null);readySince=0;updateUI()}
 function nextStage(){
  nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
  if(index<stages.length-1){index++;activate();autoKick=settings.autoAdvance?.22:0;}
@@ -161,14 +161,14 @@ canvas.addEventListener('pointermove',e=>{
  if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons){pointer={...view.mapPointer(e),visible:true};return;}
  if(!gate.owns(e.pointerId)||!down||flow.phase!=='brush')return;
  const p=view.mapPointer(e);pointer={...p,visible:true};
- if(Math.hypot(p.x-previous.x,p.y-previous.y)>.1){strokes.push({from:{...previous},to:{...p}});if(strokes.length>18)strokes.splice(0,strokes.length-18)}previous=p;
+ if(Math.hypot(p.x-previous.x,p.y-previous.y)>.1){appendStroke(strokes,{from:{...previous},to:{...p}})}previous=p;
 });
 function pointerEnd(e){if(!gate.end(e.pointerId))return;down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
 for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,pointerEnd);
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',releaseAll);
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
- Object.assign(canvas.dataset,{version:'4.1',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'4.2',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;

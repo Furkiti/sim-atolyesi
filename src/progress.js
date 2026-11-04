@@ -1,8 +1,8 @@
-// A few sub-pixel stencil edges must not strand a visually completed colour.
+// Finish small gaps automatically once most of a colour has been spread.
 // The label, next button and automatic transition use this same decision.
-export function completionStatus(coverage){
+export function completionStatus(coverage,pace='fast'){
  const value=Number.isFinite(coverage)?Math.max(0,Math.min(1,coverage)):0;
- const ready=value>=.995;
+ const ready=value>=(pace==='relaxed'?.98:.95);
  return {ready,percent:ready?100:Math.min(99,Math.round(value*100))};
 }
 

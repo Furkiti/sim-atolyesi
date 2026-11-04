@@ -26,9 +26,9 @@ test('each moving grain keeps its own sparkle seed when another grain binds',()=
  AtelierScene.prototype.updateGrains.call(scene,sand);assert.equal(current.count,1);assert.equal(geometry.attributes.flakeSeed.getX(0),seed);
 });
 
-test('the heap follows changing material smoothly instead of jumping every eighth frame',()=>{
+test('fresh heaps settle smoothly but removed material leaves no phantom heap',()=>{
  const heapGeo=new T.PlaneGeometry(600,800,COLS/2,ROWS/2);heapGeo.setAttribute('heapAmount',new T.Float32BufferAttribute(new Float32Array(heapGeo.attributes.position.count),1));
- const scene={heapGeo,bend:0,renderTick:0},sand=new Sand();sand.height.fill(20);
+ const scene={heapGeo,bend:0,renderTick:0},sand=new Sand();sand.moundHeight.fill(20);
  AtelierScene.prototype.updateHeap.call(scene,sand,1/60);const before=heapGeo.attributes.heapAmount.getX(0);assert.ok(before>0&&before<16);
- sand.height.fill(0);AtelierScene.prototype.updateHeap.call(scene,sand,1/60);const after=heapGeo.attributes.heapAmount.getX(0);assert.ok(after>0&&after<before);
+ sand.moundHeight.fill(5);AtelierScene.prototype.updateHeap.call(scene,sand,1/60);const after=heapGeo.attributes.heapAmount.getX(0);assert.ok(after>0&&after<before);sand.moundHeight.fill(0);AtelierScene.prototype.updateHeap.call(scene,sand,1/60);assert.equal(heapGeo.attributes.heapAmount.getX(0),0);
 });

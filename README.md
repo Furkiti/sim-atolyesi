@@ -1,21 +1,21 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=4.1)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=4.2)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
-Kâğıda bir kez dokun: sıradaki sarı parça rulolanır ve sıcak kahverengi yapışkan açığa çıkar. Raftaki şişe bu bölgenin üstüne gidip hafifçe yayarak sim döker. Parmağını yığından başlatıp simi eksik alanlara taşı. Boş fırça boya oluşturmaz. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
+Kâğıda bir kez dokun: sıradaki sarı parça rulolanır ve sıcak kahverengi yapışkan açığa çıkar. Raftaki şişe bu bölgenin üstüne gidip hafifçe yayarak sim döker. Parmağını yığından başlatıp simi eksik alanlara taşı. Boş fırça boya oluşturmaz. Fırçalanan sim incelip yanlara yayılır; parmak kalkınca yeniden dolu bir yığın gibi şişmez. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
 
 Kaplanan alan, aralıksız ve doygun bir sim yüzeyi olur. On bir renkle Batman/Joker çiziminin tamamı ve kırmızı arka plan boyanabilir. Renk tamamlanınca **Akış** düzeni kâğıdı büker, fazlalıkları aşağı döker ve sonraki rengi açar. **Kenar** ve **Şerit** düzenlerinde geçişi sen yönetebilirsin. Düşen parçalar ekran dışına çıkana kadar çizilir.
 
 Referans videodan alınan gerçek fırça ve döküş sesleri ilk dokunuşla açılır; ayarlardan kapatılabilir. İlk parmak hareketi yönetir; ikinci parmak devralmaz. Oyun alanında zoom ve sayfa kaydırma kapalıdır.
 
-%100 gösteren renk otomatik ilerler; **Sonraki renk** düğmesi de kullanılabilir. Tamamlanmış renkleri tekrar yapmadan dönmek için `?devam=4` gibi bir bağlantı dördüncü renkten başlatır ve önceki üç rengi tamamlanmış olarak çizer.
+Hızlı modda alanın %95’i, Detaylı modda %98’i dolduğunda kalan boşluklar otomatik tamamlanır; parmak kalkınca renk ilerler. **Sonraki renk** düğmesi de kullanılabilir. Tamamlanmış renkleri tekrar yapmadan dönmek için `?devam=4` gibi bir bağlantı dördüncü renkten başlatır ve önceki üç rengi tamamlanmış olarak çizer.
 
 ## Sağ üstteki ⚙ ayarlar
 
 - Akış / Kenar / Şerit arayüzleri ve otomatik renk geçişi.
-- Hızlı / Detaylı fırça temposu. Gösterge %100 olduğunda geçiş hazırdır; son %0,5 kenar pikseli toleranslı tamamlanır.
+- Hızlı / Detaylı fırça temposu. Hızlı %95 / Detaylı %98 tamamlama eşiği.
 - Sonraki döküş için %75–175 sim miktarı.
 - Ekonomik / Dengeli / Yüksek / Özel profilleri.
 - Anlık çözünürlük, gölge, parıltı, yansıma, yığın, hareketli ışık ve 30/45/60 FPS sınırı.

@@ -158,8 +158,8 @@ export class AtelierScene {
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
    const j=out*16,seed=sand.seed[i],angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=1.5+(seed*197%1)*1.1;
    const point=bentPoint(sand.x[i]-300,400-sand.y[i],3+sand.z[i],this.bend);
-   a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*1.2*scale;a[j+3]=0;
-   a[j+4]=-sn*scale;a[j+5]=cs*scale;a[j+6]=(seed*31%1-.5)*1.2*scale;a[j+7]=0;
+   a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
+   a[j+4]=-sn*scale;a[j+5]=cs*scale;a[j+6]=(seed*31%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+7]=0;
    a[j+8]=0;a[j+9]=0;a[j+10]=scale;a[j+11]=0;a[j+12]=point.x;a[j+13]=point.y;a[j+14]=point.z;a[j+15]=1;
    const light=.7+(seed*47%1)*.5;c[out*3]=color.r*light;c[out*3+1]=color.g*light;c[out*3+2]=color.b*light;seeds.setX(out,seed);out++;
   }
@@ -169,8 +169,8 @@ export class AtelierScene {
   const p=this.heapGeo.attributes.position,cols=COLS/2,rows=ROWS/2;
   for(let row=0;row<=rows;row++)for(let col=0;col<=cols;col++){
    const x=Math.min(col*2,COLS-1),y=Math.min(row*2,ROWS-1),k=y*COLS+x;
-   const h=(sand.height[k]+sand.height[y*COLS+Math.max(x-1,0)]+sand.height[Math.max(y-1,0)*COLS+x]+sand.height[Math.max(y-1,0)*COLS+Math.max(x-1,0)])*.25;
-   const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=old+(h*.8-old)*Math.min(1,dt*30);
+   const h=(sand.moundHeight[k]+sand.moundHeight[y*COLS+Math.max(x-1,0)]+sand.moundHeight[Math.max(y-1,0)*COLS+x]+sand.moundHeight[Math.max(y-1,0)*COLS+Math.max(x-1,0)])*.25;
+   const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=h>0?old+(h*.8-old)*Math.min(1,dt*30):0;
    this.heapGeo.attributes.heapAmount.setX(vertex,height);
    const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend);p.setXYZ(vertex,q.x,q.y,q.z);
   }
@@ -227,7 +227,7 @@ export class AtelierScene {
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,phase,down,pointer,peeled,pour,shakeProgress=0,finished=false}){
   this.time=time;this.updateBend(bendAmount(shakeProgress));this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
-  const showHeap=this.settings.relief&&!finished&&this.current.count>0;
+  const showHeap=this.settings.relief&&!finished&&sand.freshCount>0;
   this.heap.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;

@@ -50,3 +50,9 @@ export class FramePacer {
   this.deadline+=interval;return true;
  }
 }
+
+// Coalesce a busy pointer stream without losing the beginning of the sweep.
+export function appendStroke(queue,stroke,limit=18){
+ queue.push(stroke);
+ while(queue.length>limit){const first=queue.shift();queue[0].from=first.from;}
+}

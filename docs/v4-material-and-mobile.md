@@ -30,3 +30,16 @@ The old UI rounded 99.5–99.99% to 100 while readiness still required exactly 1
 A clamped bend divisor compressed the paper into a line when progress approached one but was not exactly one. The deformation now uses a stable sine identity and explicit flat restoration; entering a colour also resets the bend. Tests cover tiny amounts and twelve successive bend cycles.
 
 Newly bound particles and their dense coat now update in the same rendered frame. Heap vertices follow physics every frame with smoothing while normals update every fourth update. Each grain retains its own sparkle seed after instance compaction, avoiding flashes across unrelated grains.
+
+
+## v4.2 · Spread without rebuilding a solid mound
+
+Reviewed the user's 10.72-second screen recording. The swept loose material behaved like a connected extruded blob, including on protected jacket and face areas. New material count was not increasing, but both the continuous mound envelope and the per-cell height reconstruction made it look as though the heap refilled behind the brush.
+
+A packet now remembers that bristles have swept it. Its thinner packing contributes to granular pressure, but it can never recreate the continuous freshly-poured mound envelope. The latter uses a separate field containing untouched grains only. Empty mound vertices clear immediately. Swept grains fan sideways, lie flatter, lose most residual brush velocity, and settle without increasing height after release. A new pour is the only way to add fresh mound material. The pressed flag survives compaction.
+
+Removed the minimum two-unit displacement per pointer event: tiny movements no longer produce oversized transport. Busy input queues merge adjacent path segments rather than discarding the first material-contact section of a fast sweep.
+
+As explicitly requested, automatic completion now assists the last 5% in Fast mode or 2% in Detailed mode. Upon advancement the remaining target pixels fill before bending, and completed coats bake without gaps. Advancement still waits for the first finger to release. Both percentages and the next button share the same readiness decision.
+
+Regression tests cover no mound regrowth or per-packet height inflation after release, finite material conservation, sideways grain spreading, small pointer movements, compaction, preservation of fast input paths, and both completion tolerances. A browser fixture starting at 96% confirms that the actual game controller seals and advances to colour two without further painting.
