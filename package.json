@@ -1,0 +1,29 @@
+{
+  "name": "sim-atolyesi",
+  "version": "1.0.0",
+  "description": "Tarayıcıda oynanan sim sanatı prototipi.",
+  "main": "game.js",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=esm --outfile=game.js",
+    "test": "node --test test/*.test.js",
+    "dev": "node scripts/serve.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Furkiti/sim-atolyesi.git"
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/Furkiti/sim-atolyesi/issues"
+  },
+  "homepage": "https://github.com/Furkiti/sim-atolyesi#readme",
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "private": true,
+  "type": "module"
+}
