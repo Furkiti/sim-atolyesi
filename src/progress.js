@@ -1,8 +1,8 @@
-// Finish small gaps automatically once most of a colour has been spread.
-// The label, next button and automatic transition use this same decision.
-export function completionStatus(coverage,pace='fast'){
+// Help only with invisible raster remnants, never visibly unbrushed areas.
+export function completionStatus(coverage,pace='fast',targetPixels=480000){
  const value=Number.isFinite(coverage)?Math.max(0,Math.min(1,coverage)):0;
- const ready=value>=(pace==='relaxed'?.98:.95);
+ const missing=(1-value)*targetPixels,allowance=Math.min(pace==='relaxed'?2:8,targetPixels*.0002);
+ const ready=missing<=allowance+1e-7;
  return {ready,percent:ready?100:Math.min(99,Math.round(value*100))};
 }
 

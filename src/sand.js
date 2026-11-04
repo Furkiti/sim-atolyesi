@@ -1,3 +1,4 @@
+import {materialResponse} from './feel.js';
 // Each particle is material. A brush may move it, but cannot create or stamp it.
 export const AIR=0, FREE=1, BOUND=2, LOST=3;
 export const W=600,H=800,CELL=5,COLS=W/CELL,ROWS=H/CELL;
@@ -6,8 +7,8 @@ export const MAX_GRAIN_HEIGHT=MAX_HEAP_HEIGHT+2;
 const FLOW_X=[-1,1,0,0,-.707,.707,-.707,.707],FLOW_Y=[0,0,-1,1,-.707,-.707,.707,.707];
 export class Sand {
   constructor({capacity=30000,random=Math.random}={}) {
-    this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
-    for (const name of ['x','y','z','vx','vy','vz','seed']) this[name]=new Float32Array(capacity);
+    this.behavior=materialResponse();this.lastMoved=0;this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
+    for (const name of ['x','y','z','vx','vy','vz','seed','contactTime']) this[name]=new Float32Array(capacity);
     this.pressed=new Uint8Array(capacity);this.freshCount=0;this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
     this.density=new Float32Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);this.pressure=new Float32Array(COLS*ROWS);this.moundDensity=new Float32Array(COLS*ROWS);this.moundHeight=new Float32Array(COLS*ROWS);
     this.neighbors=new Int32Array(COLS*ROWS*8);
@@ -60,9 +61,10 @@ export class Sand {
     this.coveredWeight+=this.target[k]/(CELL*CELL);
     this.bound[k]++;return true;
   }
-  brush(from,to,radius=46){
+  setBehavior(settings){this.behavior=materialResponse(settings)}
+  brush(from,to,radius=34,seconds=1/60){
     const dx=to.x-from.x,dy=to.y-from.y,d2=dx*dx+dy*dy,d=Math.sqrt(d2);if(d<.02)return 0;
-    const rr=radius*radius,ux=dx/d,uy=dy/d;let moved=0;
+    const rr=radius*radius,ux=dx/d,uy=dy/d,b=this.behavior,speed=Math.min(1.5,d/Math.max(.001,seconds)/700);let moved=0;
     // A swept capsule visits each mobile packet once, including fast strokes.
     for(let i=0;i<this.count;i++){
       if(this.state[i]!==FREE)continue;
@@ -70,19 +72,21 @@ export class Sand {
       const ax=this.x[i]-from.x-t*dx,ay=this.y[i]-from.y-t*dy,q=ax*ax+ay*ay;if(q>rr)continue;
       // Bristles shear and fan real grains, rather than dragging a rigid blob.
       // Never move material farther merely because a pointer sends more events.
-      const strength=(.96+.04*Math.sqrt(1-q/rr))*(.96+.04*this.seed[i]),travel=d*(1-t)*strength;
-      const side=(ax*(-uy)+ay*ux)/radius,fan=side*.28+(this.seed[i]*137%1-.5)*.16;
-      const cell=this.cell(this.x[i],this.y[i]);this.pressed[i]=1;
-      if(cell>=0)this.z[i]=Math.min(this.z[i],1.7+this.height[cell]*.45*(.1+this.seed[i]*.9));
+      const contact=Math.sqrt(Math.max(0,1-q/rr)),cell=this.cell(this.x[i],this.y[i]);
+      const load=cell<0?0:this.density[cell],mass=1/(1+Math.min(70,load)*.004/b.response);
+      const strength=b.carry*(.72+.28*contact)*(.78+.22*this.seed[i])*mass,travel=d*(1-t)*strength;
+      const side=(ax*(-uy)+ay*ux)/radius,fan=(side+(this.seed[i]*137%1-.5)*.4)*b.fan*(.65+.35*speed);
+      this.pressed[i]=1;this.contactTime[i]=this.time;
+      if(cell>=0)this.z[i]=Math.min(this.z[i],1.7+this.height[cell]*.32*(.1+this.seed[i]*.9));
       const steps=Math.max(1,Math.ceil(travel/4));
       for(let n=0;n<steps;n++){
         this.x[i]+=(ux-uy*fan)*travel/steps;this.y[i]+=(uy+ux*fan)*travel/steps;
         if(this.bind(i))break;
       }
-      if(this.state[i]!==BOUND){this.vx[i]=ux*12-uy*side*8;this.vy[i]=uy*12+ux*side*8;}
+      if(this.state[i]!==BOUND){const impulse=Math.max(.05,speed)*b.inertia;this.vx[i]=ux*impulse-uy*side*impulse*.45;this.vy[i]=uy*impulse+ux*side*impulse*.45;}
       moved++;
     }
-    return moved;
+    this.lastMoved=moved;return moved;
   }
   step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58}={}){
     this.time+=dt;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
@@ -99,12 +103,12 @@ export class Sand {
     // Pressure is a property of a cell, computed once rather than allocating
     // neighbour lists for every flake on every frame.
     for(let k=0;k<this.height.length;k++){
-      const h=this.pressure[k];this.flowSum[k]=0;if(h<=3.4)continue;
+      const h=this.pressure[k],repose=this.behavior.repose;this.flowSum[k]=0;if(h<=repose)continue;
       let sum=0;
-      for(let j=0;j<8;j++){const force=Math.max(0,Math.min((h-this.pressure[this.neighbors[k*8+j]])/(j<4?1:1.414)-3.4,45))*55;this.flowForce[k*8+j]=force;sum+=force;this.flowCDF[k*8+j]=sum;}
+      for(let j=0;j<8;j++){const force=Math.max(0,Math.min((h-this.pressure[this.neighbors[k*8+j]])/(j<4?1:1.414)-repose,45))*55*this.behavior.pressure;this.flowForce[k*8+j]=force;sum+=force;this.flowCDF[k*8+j]=sum;}
       this.flowSum[k]=sum;
     }
-    const friction=Math.exp(-10*dt);
+    const friction=Math.exp(-this.behavior.drag*dt);
     for(let i=0;i<this.count;i++){
       const s=this.state[i];if(s===BOUND||s===LOST)continue;
       let k=this.cell(this.x[i],this.y[i]);
@@ -135,7 +139,7 @@ export class Sand {
         // A swept layer settles downward; releasing the brush cannot puff it up.
         const floor=this.pressed[i]?Math.min(this.z[i],resting):resting;
         this.z[i]+=(floor-this.z[i])*Math.min(1,dt*15);
-        if(this.pressed[i]&&this.z[i]<5.5&&this.random()<dt*12)this.bind(i);
+        if(this.pressed[i]&&this.time-this.contactTime[i]<.16&&this.z[i]<5.5)this.bind(i);
       }
       if(this.state[i]===BOUND)continue;
       this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
@@ -149,7 +153,7 @@ export class Sand {
   compact(){
     let out=0;
     for(let i=0;i<this.count;i++)if(this.state[i]!==LOST){
-      if(out!==i){for(const key of ['x','y','z','vx','vy','vz','seed','pressed','state','bin'])this[key][out]=this[key][i];}
+      if(out!==i){for(const key of ['x','y','z','vx','vy','vz','seed','contactTime','pressed','state','bin'])this[key][out]=this[key][i];}
       out++;
     }
     this.count=out;

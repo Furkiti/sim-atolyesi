@@ -5,7 +5,9 @@ import {loadSettings,saveSettings,profileSettings,doseFor} from './settings.js';
 import {planPour,pourPoint} from './pouring.js';
 import {completionStatus,resumeIndex} from './progress.js';
 const $=s=>document.querySelector(s),canvas=$('#art'),dialog=$('#settings');
-import {stages} from './palette.js';
+import {levels,selectLevel} from './levels.js';
+import {FEELS,feelSettings,brushRadius,pourFraction} from './feel.js';
+const level=selectLevel(location.search),stages=level.stages;
 import {drawGlitter} from './coating.js';
 import {piecesByStage} from './peel-pieces.js';
 import {peelAt,peelDuration,revealPolygon} from './peel.js';
@@ -14,6 +16,8 @@ const flow=new Flow(),gate=new PointerGate(),pacer=new FramePacer(settings.frame
 let shakeRuns=0,nextRuns=0,partLayers=[],activePart=0,revealedParts=0;
 let view,sand,index=0,finished=false,pour=null,peeled=false,peel=0,readySince=0,autoKick=0;
 let pointer={x:300,y:282,visible:false},previous={x:300,y:282},down=false,lastRender=0,statClock=0,fpsClock=0,frames=0,fps=0,frameMs=16.7,simMs=0,renderMs=0,moved=0;
+let pointerTime=0;
+let brushMotion={dx:0,dy:0,speed:0,load:0};
 let initialWidth=innerWidth;
 // iOS browser bars may change innerHeight mid-stroke. Keep the game viewport
 // stable for a width/orientation; only a real orientation change reframes it.
@@ -74,7 +78,8 @@ async function audio(){
 }
 function sound(amount=0){
  if(!audioCtx||!brushGain)return;
- brushGain.gain.setTargetAtTime(soundOn&&flow.phase==='brush'?Math.min(1,amount*5):0,audioCtx.currentTime,.035);
+ brushGain.gain.setTargetAtTime(soundOn&&flow.phase==='brush'?Math.min(1,amount*5*(.8+brushMotion.load*.35)):0,audioCtx.currentTime,.035);
+ if(brushSource)brushSource.playbackRate.setTargetAtTime(.85+Math.min(.35,brushMotion.speed/1800),audioCtx.currentTime,.06);
  if(soundOn&&flow.phase==='pour'&&flow.elapsed>=.48&&flow.elapsed<1.3&&playedPour!==flow.serial&&audioBuffers.pour){
   playedPour=flow.serial;pourSource?.stop();pourSource=audioCtx.createBufferSource();pourSource.buffer=audioBuffers.pour;pourSource.connect(audioCtx.destination);pourSource.start();
  }
@@ -87,14 +92,18 @@ function closeSettings(){dialog.close();pointer.visible=false;readySince=0;}
 $('#settings-open').onclick=()=>{releaseAll();pointer.visible=false;syncSettings();dialog.showModal()};
 $('#settings-close').onclick=closeSettings;$('#settings-done').onclick=closeSettings;dialog.addEventListener('cancel',()=>{releaseAll();readySince=0});
 function applySettings(next){
- settings=next;document.body.dataset.layout=settings.layout;$('#perf-hud').hidden=!settings.showStats;
+ const previousSurface=settings?.surface;settings=next;document.body.dataset.layout=settings.layout;$('#perf-hud').hidden=!settings.showStats;
  try{saveSettings(localStorage,settings)}catch{}
- view?.applySettings(settings);pacer.setLimit(settings.frameLimit);if(!settings.autoAdvance)autoKick=0;syncSettings();readySince=0;updateUI();
+ sand?.setBehavior(settings);view?.applySettings(settings);
+ if(partLayers.length&&previousSurface!==settings.surface){for(const layer of partLayers)paintGlue(layer);gc.clearRect(0,0,W,H);const count=revealedParts;revealedParts=0;revealUntil(count);repaintPaper();}pacer.setLimit(settings.frameLimit);if(!settings.autoAdvance)autoKick=0;syncSettings();readySince=0;updateUI();
 }
 function syncSettings(){
  document.querySelectorAll('input[name="layout"]').forEach(e=>e.checked=e.value===settings.layout);
  for(const [id,key] of Object.entries({'auto-advance':'autoAdvance','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'}))$('#'+id).checked=settings[key];
- for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace'}))$('#'+id).value=settings[key];
+ for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','surface-style':'surface','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
+ document.querySelectorAll('input[name=feel]').forEach(e=>e.checked=e.value===settings.feel);
+ for(const [id,key] of [['mobility','mobility'],['response','response'],['brush-width','brushWidth'],['grain-size','grainSize']])$('#'+id+'-readout').textContent='%'+Math.round(settings[key]*100);
+ $('#feel-name').textContent=FEELS[settings.feel]?.name||'Özel karışım';
  $('#resolution-readout').textContent='%'+Math.round(settings.renderScale*100);$('#pour-readout').textContent='%'+Math.round(settings.pourAmount*100);
 }
 document.querySelectorAll('input[name="layout"]').forEach(e=>e.onchange=()=>applySettings({...settings,layout:e.value,autoAdvance:e.value==='flow'}));
@@ -104,13 +113,23 @@ for(const [id,key] of Object.entries(checks))$('#'+id).onchange=e=>applySettings
 for(const [id,key,numeric] of [['render-scale','renderScale',true],['pour-amount','pourAmount',true],['shadow-quality','shadow',false],['frame-limit','frameLimit',true],['pace','pace',false]]){
  $('#'+id).addEventListener(id.includes('scale')||id.includes('amount')?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,profile:['renderScale','shadow','frameLimit'].includes(key)?'custom':settings.profile}));
 }
-function ready(){return sand&&completionStatus(sand.coverage,settings.pace).ready}
+document.querySelectorAll('input[name=feel]').forEach(e=>e.onchange=()=>applySettings(feelSettings(settings,e.value)));
+for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true]]){
+ $('#'+id).addEventListener(numeric?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface'].includes(key)?settings.feel:'custom'}));
+}
+function openLevel(id){const url=new URL(location.href);url.search='';url.searchParams.set('v','6');url.searchParams.set('bolum',id);location.assign(url)}
+for(const entry of levels){
+ const button=document.createElement('button');button.className='level-card'+(entry.id===level.id?' current':'');button.innerHTML=`<img src="assets/${entry.preview}.png" alt=""><span><strong>${entry.name}</strong><small>${entry.subtitle}</small></span><b>${entry.id===level.id?'Oynuyorsun':'Başla →'}</b>`;button.onclick=()=>{if(entry.id!==level.id)openLevel(entry.id)};$('#levels').append(button);
+}
+$('#next-level').textContent=(level.id==='gotham'?'Ay Bahçesi’ne geç':'Gotham’a dön')+' →';$('#next-level').onclick=()=>openLevel(level.id==='gotham'?'ay-bahcesi':'gotham');
+$('#level-name').textContent=level.name;
+function ready(){return sand&&completionStatus(sand.coverage,settings.pace,sand.targetCount*25).ready}
 function updateUI(){
  if(!sand)return;
- const phase=flow.phase,percent=completionStatus(sand.coverage,settings.pace).percent;
+ const phase=flow.phase,percent=completionStatus(sand.coverage,settings.pace,sand.targetCount*25).percent;
  $('#stage-label').textContent=`${String(index+1).padStart(2,'0')} / ${stages.length}`;$('#stage-label').title=stages[index].name;$('#color-dot').style.background=stages[index].color;
  $('#coverage').textContent=percent+'%';$('#progress-fill').style.width=percent+'%';
- const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan kahverengi alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['∪','İki yandan bük, ortaya topla.','Fazla sim ortadaki oluktan kutuya akıyor.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
+ const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan taralı alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['∪','İki yandan bük, ortaya topla.','Fazla sim ortadaki oluktan kutuya akıyor.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
  if(phase==='rolling')messages.rolling=['↗',`Parça ${activePart+1} / ${partLayers.length} · yavaşça soyuluyor`,peel<.2?'Cımbız kenardan tutuyor.':'Sarı kâğıt ayrılıyor, yapışkan açılıyor.','SOY'];
  const m=messages[phase]||messages.brush;$('#phase-icon').textContent=m[0];$('#instruction-title').textContent=m[1];$('#instruction-text').textContent=phase==='brush'&&settings.layout!=='flow'?'Sim ekle ile açık alanın üstüne yeni bir yığın dökebilirsin.':m[2];$('#phase-label').textContent=m[3];
  const canNext=phase==='brush'&&ready()&&!finished;
@@ -127,9 +146,16 @@ function makePartLayers(){
  return piecesByStage[stages[index].id].map(piece=>{
   const b=piece.bounds,mask=document.createElement('canvas');mask.width=b.w;mask.height=b.h;const m=mask.getContext('2d');m.fillStyle='#fff';for(const [y,x,length] of piece.runs)m.fillRect(x,y,length,1);
   const paper=document.createElement('canvas');paper.width=b.w;paper.height=b.h;const p=paper.getContext('2d');p.drawImage(paperBase,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=.96;p.drawImage(assets.lines,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=1;p.globalCompositeOperation='destination-in';p.drawImage(mask,0,0);
-  const brown=document.createElement('canvas');brown.width=b.w;brown.height=b.h;const c=brown.getContext('2d');c.fillStyle='#b98e65';c.fillRect(0,0,b.w,b.h);c.globalCompositeOperation='destination-in';c.drawImage(mask,0,0);
-  return{piece,paper,brown};
+  const brown=document.createElement('canvas');brown.width=b.w;brown.height=b.h;const layer={piece,paper,brown,mask};paintGlue(layer);return layer;
  });
+}
+function paintGlue(layer){
+ const {brown,mask}=layer,c=brown.getContext('2d'),b=layer.piece.bounds;
+ c.globalCompositeOperation='source-over';c.clearRect(0,0,b.w,b.h);
+ c.fillStyle={slate:'#738493',dark:'#405c60',kraft:'#b98e65'}[settings.surface]||'#738493';c.fillRect(0,0,b.w,b.h);
+ c.strokeStyle=settings.surface==='kraft'?'#e3c39a40':'#d0dce339';c.lineWidth=.65;
+ c.beginPath();for(let x=-b.h;x<b.w;x+=8){c.moveTo(x,0);c.lineTo(x+b.h,b.h)}c.stroke();
+ c.globalCompositeOperation='destination-in';c.drawImage(mask,0,0);c.globalCompositeOperation='source-over';
 }
 function revealUntil(count){while(revealedParts<count){const layer=partLayers[revealedParts++];gc.drawImage(layer.brown,layer.piece.bounds.x,layer.piece.bounds.y);}}
 function animatePeel(){
@@ -138,7 +164,7 @@ function animatePeel(){
  peel=pose.progress;view.peelProgress(peel);repaintPaper();
 }
 function activate(){
- sand=new Sand();sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
+ sand=new Sand();sand.setBehavior(settings);sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
  gc.globalCompositeOperation='source-over';gc.clearRect(0,0,W,H);partLayers=makePartLayers();flow.setRollDuration(peelDuration(partLayers.map(p=>p.piece)));
  makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);updateUI();
 }
@@ -157,7 +183,7 @@ function prepareDose(){
    const score=nearby-Math.abs(y-referenceY)*1.2;if(score>best){best=score;anchor={x,y};}
   }
  }
- const plan=planPour(anchor,sand.targetCount);playedPour=-1;pour={...plan.anchor,...plan,dose,emitted:0,elapsed:0};
+ const plan=planPour(anchor,sand.targetCount,settings.pourStyle);playedPour=-1;pour={...plan.anchor,...plan,dose,emitted:0,elapsed:0};
 }
 function addSand(){if(finished||!flow.pour())return;down=false;strokes.length=0;prepareDose();readySince=0;updateUI()}
 function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();view.beginCleanup();if(advance)updateCoat(true,true);pour=null;view.posePour(null);readySince=0;updateUI()}
@@ -170,10 +196,10 @@ for(const button of document.querySelectorAll('[data-tool]'))button.onclick=()=>
 $('#add-sand').onclick=addSand;$('#shake').onclick=()=>startShake(false);$('#next').onclick=()=>{if(ready())startShake(true)};
 function reset(){if(!view)return;releaseAll();finished=false;index=0;autoKick=0;bakedContext.clearRect(0,0,W,H);cc.clearRect(0,0,W,H);view.reset();$('#complete').hidden=true;activate()}
 $('#reset').onclick=()=>{reset();closeSettings()};$('#again').onclick=reset;
-$('#save').onclick=()=>{const a=document.createElement('a');a.href=view.capture();a.download='sim-atolyesi-gotham.png';a.click()};
+$('#save').onclick=()=>{const a=document.createElement('a');a.href=view.capture();a.download='sim-atolyesi-'+level.id+'.png';a.click()};
 canvas.addEventListener('pointerdown',e=>{
  e.preventDefault();if(!view||finished||flow.busy||!gate.begin(e.pointerId,e.isPrimary!==false))return;
- canvas.setPointerCapture(e.pointerId);pointer={...view.mapPointer(e),visible:true};previous={...pointer};
+ canvas.setPointerCapture(e.pointerId);pointer={...view.mapPointer(e),visible:true};previous={...pointer};pointerTime=e.timeStamp;
  if(soundOn)audio();
  if(flow.phase==='peel'){beginRoll();return;}
  down=true;
@@ -183,14 +209,14 @@ canvas.addEventListener('pointermove',e=>{
  if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons){pointer={...view.mapPointer(e),visible:true};return;}
  if(!gate.owns(e.pointerId)||!down||flow.phase!=='brush')return;
  const p=view.mapPointer(e);pointer={...p,visible:true};
- if(Math.hypot(p.x-previous.x,p.y-previous.y)>.1){appendStroke(strokes,{from:{...previous},to:{...p}})}previous=p;
+ if(Math.hypot(p.x-previous.x,p.y-previous.y)>.1){appendStroke(strokes,{from:{...previous},to:{...p},seconds:Math.max(.001,Math.min(.1,(e.timeStamp-pointerTime)/1000))})}previous=p;pointerTime=e.timeStamp;
 });
 function pointerEnd(e){if(!gate.end(e.pointerId))return;down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
 for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,pointerEnd);
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',releaseAll);
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
- Object.assign(canvas.dataset,{version:'5.1',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'6',level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -205,10 +231,11 @@ function frame(t){
  if(flow.phase==='rolling')animatePeel();
  if(flow.phase==='pour'&&pour){
   pour.elapsed=flow.elapsed;Object.assign(pour,pourPoint(pour,Math.max(0,(flow.elapsed-.48)/.82)));view.posePour(pour);
-  const fraction=Math.min(1,Math.max(0,(flow.elapsed-.48)/.82)),desired=Math.floor(pour.dose*fraction),n=desired-pour.emitted;
+  const fraction=pourFraction((flow.elapsed-.48)/.82,settings.pourStyle),desired=Math.floor(pour.dose*fraction),n=desired-pour.emitted;
   if(n>0){const source=view.pourOrigin();pour.emitted+=sand.emit(source.x,source.y,n,{spread:4,fan:pour.fan,height:Math.max(12,source.z)});Object.assign(canvas.dataset,{emitterX:source.x.toFixed(2),emitterY:source.y.toFixed(2),emitterZ:source.z.toFixed(2)});}
  }
- for(const stroke of strokes)moved+=sand.brush(stroke.from,stroke.to,settings.pace==='fast'?48:39);strokes.length=0;
+ let dx=0,dy=0;for(const stroke of strokes){dx+=stroke.to.x-stroke.from.x;dy+=stroke.to.y-stroke.from.y;moved+=sand.brush(stroke.from,stroke.to,brushRadius(settings),stroke.seconds);}strokes.length=0;
+ const speed=Math.hypot(dx,dy)/Math.max(dt,.001),decay=Math.exp(-dt*18);brushMotion={dx:dx||brushMotion.dx,dy:dy||brushMotion.dy,speed:brushMotion.speed*decay+Math.min(1200,speed)*(1-decay),load:brushMotion.load*decay+Math.min(1,moved/350)*(1-decay)};
  const drainage=flow.phase==='shake'?drainPose(flow.progress):{bend:0,pitch:0};view.updateBend(drainage.bend,drainage.pitch);
  sand.step(Math.min(dt,.04),{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch});
  view.collectSpill(sand,true);
@@ -224,12 +251,13 @@ function frame(t){
  updateCoat();
  simMs=simMs*.85+(performance.now()-simStart)*.15;
  sound(flow.phase==='pour'?.14:flow.phase==='shake'?.15:flow.phase==='rolling'?.06:moved?Math.min(.16,.015+moved*.00003):0);
- const drawStart=performance.now();view.render(sand,{time:t,dt,phase:flow.phase,down,pointer,peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
+ const drawStart=performance.now();view.render(sand,{time:t,dt,phase:flow.phase,down,pointer,brushMotion,peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
  if((statClock+=dt)>.2){statClock=0;updateUI();updateStats();}
 }
 applySettings(settings);
 try{
- await Promise.all(['lines',...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=4`})));
+ await Promise.all([level.lines,...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=6`})));
+ assets.lines=assets[level.lines];
  for(const stage of stages){gc.clearRect(0,0,W,H);gc.drawImage(assets[stage.id],0,0);const data=gc.getImageData(0,0,W,H).data,mask=new Uint8Array(W*H);for(let i=0;i<mask.length;i++)mask[i]=data[i*4+3]>80?1:0;masks[stage.id]=mask;}
  index=resumeIndex(location.search,stages.length);
  for(let i=0;i<index;i++){

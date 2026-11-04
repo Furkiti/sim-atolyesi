@@ -2,6 +2,7 @@ import * as T from 'three';
 import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
 import {peelPoint} from './peel.js';
 import {TRAY,stepFalling} from './collector.js';
+import {BRUSHES} from './feel.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS,MAX_HEAP_HEIGHT,MAX_GRAIN_HEIGHT} from './sand.js';
 const TAU=Math.PI*2,NO_BOX={...TRAY,halfWidth:-1};
@@ -52,6 +53,9 @@ export class AtelierScene {
    shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvFlakeSeed=flakeSeed;');
    shader.fragmentShader='uniform float uSparkEnabled; uniform vec3 uSparkLight; varying float vFlakeSeed;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
+    // Preserve pigment under the strong studio lamps; only highlights bleach.
+    vec3 pigment=linearToOutputTexel(vec4(diffuseColor.rgb,1.0)).rgb;
+    gl_FragColor.rgb=mix(pigment,gl_FragColor.rgb,.28);
     vec3 halfLight=normalize(uSparkLight+normalize(vViewPosition));
     float glint=pow(max(dot(normal,halfLight),0.0),140.0);
     gl_FragColor.rgb+=uSparkEnabled*step(.975,vFlakeSeed)*glint*1.8*vec3(1.0,0.95,0.82);`);
@@ -64,7 +68,7 @@ export class AtelierScene {
   this.heapGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);
   this.heapGeo.setAttribute('heapAmount',new T.Float32BufferAttribute(new Float32Array(this.heapGeo.attributes.position.count),1));
   this.heapMat=new T.MeshStandardMaterial({color:colors[0],roughness:.65,metalness:.9,bumpMap:this.heapTexture,bumpScale:.7,envMapIntensity:.8});
-  const clipHeap=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<2.2) discard;');};
+  const clipHeap=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<2.2) discard;');shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>','#include <dithering_fragment>\ngl_FragColor.rgb=mix(linearToOutputTexel(vec4(diffuseColor.rgb,1.0)).rgb,gl_FragColor.rgb,.3);');};
   this.heapMat.onBeforeCompile=clipHeap;this.heap=new T.Mesh(this.heapGeo,this.heapMat);this.heap.frustumCulled=false;this.heap.receiveShadow=true;this.heap.castShadow=true;this.heap.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking});this.heap.customDepthMaterial.onBeforeCompile=clipHeap;this.paperGroup.add(this.heap);
   this.peelGeo=new T.PlaneGeometry(W,H,24,160);
   this.peelSheet=new T.Mesh(this.peelGeo,new T.MeshStandardMaterial({color:'#fff2b2',roughness:.8,transparent:true,alphaTest:.08,side:T.DoubleSide}));
@@ -79,24 +83,39 @@ export class AtelierScene {
   const m=new T.InstancedMesh(g,this.grainMaterial,capacity);m.instanceMatrix.setUsage(T.DynamicDrawUsage);m.instanceColor=new T.InstancedBufferAttribute(new Float32Array(capacity*3),3);m.frustumCulled=false;m.count=0;this.paperGroup.add(m);return m;
  }
  makeBrush(){
-  this.brush=new T.Group();this.brush.visible=false;this.paperGroup.add(this.brush);
-  const wood=new T.MeshStandardMaterial({color:'#1d2028',roughness:.27,metalness:.15});
-  const handle=new T.Mesh(new T.CylinderGeometry(6,10,165,20),wood);handle.position.set(0,-133,19);handle.rotation.x=.075;handle.castShadow=true;this.brush.add(handle);
-  const end=new T.Mesh(new T.SphereGeometry(6,12,8),wood);end.position.set(0,-215,13);this.brush.add(end);
-  const ferrule=new T.Mesh(new T.BoxGeometry(45,35,12),new T.MeshStandardMaterial({color:'#b6b9ba',metalness:1,roughness:.21}));ferrule.position.set(0,-34,14);ferrule.castShadow=true;this.brush.add(ferrule);
-  const ringMat=new T.MeshStandardMaterial({color:'#e4e2dc',metalness:.95,roughness:.19});for(let y of [-48,-20]){const line=new T.Mesh(new T.BoxGeometry(46,2,12.5),ringMat);line.position.set(0,y,14);this.brush.add(line)}
-  const tuftGeo=new T.CylinderGeometry(22,29,37,32,1,false);tuftGeo.scale(1,1,.24);
-  this.tuftMat=new T.MeshStandardMaterial({color:'#795235',roughness:.8});this.tuft=new T.Mesh(tuftGeo,this.tuftMat);this.tuft.position.set(0,0,9);this.tuft.castShadow=true;this.brush.add(this.tuft);
-  const bristleGeo=new T.BufferGeometry(),points=[];for(let i=0;i<150;i++){const x=(Math.random()-.5)*48,z=4+Math.random()*10;points.push(x*.8,-15,z+2,x,17-Math.abs(x)*.13,z*.7)}bristleGeo.setAttribute('position',new T.Float32BufferAttribute(points,3));this.bristles=new T.LineSegments(bristleGeo,new T.LineBasicMaterial({color:'#c09965',transparent:true,opacity:.65}));this.brush.add(this.bristles);
+  this.brush=new T.Group();this.brush.visible=false;this.paperGroup.add(this.brush);this.brushVariants={};this.brushAngle=.65;
+  const wood=new T.MeshStandardMaterial({color:'#263538',roughness:.33,metalness:.12}),metal=new T.MeshStandardMaterial({color:'#bfc4be',metalness:.85,roughness:.25});
+  for(const [shape,dim] of Object.entries(BRUSHES)){
+   const group=new T.Group();this.brush.add(group);const width=dim.width;
+   const handle=new T.Mesh(new T.CylinderGeometry(5.5,8,155,16),wood);handle.position.set(0,-127,19);handle.rotation.x=.075;handle.castShadow=true;group.add(handle);
+   const end=new T.Mesh(new T.SphereGeometry(5.5,10,6),wood);end.position.set(0,-204,13);group.add(end);
+   const ferrule=new T.Mesh(new T.BoxGeometry(width*.69,32,11),metal);ferrule.position.set(0,-34,14);group.add(ferrule);
+   for(const y of [-47,-21]){const ring=new T.Mesh(new T.BoxGeometry(width*.71,1.5,11.5),metal);ring.position.set(0,y,14);group.add(ring);}
+   const geo=new T.CylinderGeometry(width*.5,width*.34,dim.depth,shape==='round'?24:32,1);geo.scale(1,1,shape==='round'?.62:.24);
+   const mat=new T.MeshStandardMaterial({color:'#b58b55',roughness:.94}),tuft=new T.Mesh(geo,mat);tuft.position.set(0,-2,8);tuft.castShadow=true;group.add(tuft);
+   const points=[],seeds=[];for(let i=0;i<100;i++){const seed=((i*16807)%997)/997,x=(seed-.5)*width,z=3+(i*37%101)/101*8;points.push(x*.68,-17,z+3,x,dim.depth*.5-Math.abs(x)/width*6,z*.55);seeds.push(seed);}
+   const bristleGeo=new T.BufferGeometry();bristleGeo.setAttribute('position',new T.Float32BufferAttribute(points,3));const strands=new T.LineSegments(bristleGeo,new T.LineBasicMaterial({color:'#ead5b3',transparent:true,opacity:.72}));group.add(strands);
+   this.brushVariants[shape]={group,tuft,strands,mat,base:Float32Array.from(points),dim};
+  }
+  this.tuftMat=this.brushVariants.flat.mat;
  }
  makeJars(){
   this.jars=[];
-  const stand=new T.Mesh(new T.BoxGeometry(470,65,9),new T.MeshStandardMaterial({color:'#41464b',metalness:.25,roughness:.35}));stand.position.set(0,460,-2);stand.castShadow=true;this.scene.add(stand);
+  const stand=new T.Mesh(new T.BoxGeometry(470,65,8),new T.MeshStandardMaterial({color:'#46524f',metalness:.32,roughness:.4}));stand.position.set(0,460,-2);stand.castShadow=true;this.scene.add(stand);
+  const fillTexture=canvasTexture((c,size)=>{c.fillStyle='#f5f5f5';c.fillRect(0,0,size,size);for(let i=0;i<6500;i++){c.fillStyle=i%17===0?'#ffffff':'#9c9c9c';c.fillRect((i*47%997)/997*size,(i*113%991)/991*size,.8,.8)}},128);
+  const profiles={glass:{points:[[18,0],[22,5],[24,45],[24,59]],mouth:59,radius:24,fill:38},slim:{points:[[14,0],[17,4],[18,55],[16,67]],mouth:67,radius:16,fill:45},bowl:{points:[[16,0],[27,7],[31,23],[31,43]],mouth:43,radius:31,fill:26}};
+  const glassMat=new T.MeshPhysicalMaterial({color:'#d9efeb',transparent:true,opacity:.22,roughness:.12,metalness:0,clearcoat:1,side:T.DoubleSide,depthWrite:false}),rimMat=new T.MeshStandardMaterial({color:'#e3e9e1',roughness:.2,metalness:.65});
   for(let i=0;i<6;i++){
-   const g=new T.Group();g.position.set((i-2.5)*72,460,4);g.rotation.x=Math.PI/2;this.scene.add(g);
-   const glass=new T.Mesh(new T.CylinderGeometry(23,19,58,24,1,true),new T.MeshPhysicalMaterial({color:'#f5ffff',transparent:true,opacity:.29,roughness:.1,metalness:0,clearcoat:1,side:T.DoubleSide,depthWrite:false}));glass.position.y=30;glass.castShadow=true;g.add(glass);
-   const fill=new T.Mesh(new T.CylinderGeometry(20,17,37,24),new T.MeshStandardMaterial({color:this.colors[i],roughness:.28,metalness:.65,bumpMap:this.heapTexture,bumpScale:.8,envMapIntensity:1.2}));fill.position.y=27;g.add(fill);g.userData.fill=fill;
-   const rim=new T.Mesh(new T.TorusGeometry(23,1.1,8,24),new T.MeshStandardMaterial({color:'#ffffff',roughness:.12,metalness:.7}));rim.rotation.x=Math.PI/2;rim.position.y=59;g.add(rim);g.userData.home=g.position.clone();g.userData.homeRotation=g.quaternion.clone();this.jars.push(g);
+   const g=new T.Group();g.position.set((i-2.5)*72,460,4);g.rotation.x=Math.PI/2;this.scene.add(g);g.userData.variants={};
+   for(const [name,profile] of Object.entries(profiles)){
+    const group=new T.Group();g.add(group);const glass=new T.Mesh(new T.LatheGeometry(profile.points.map(([x,y])=>new T.Vector2(x,y)),24),glassMat);group.add(glass);
+    const bottom=new T.Mesh(new T.CylinderGeometry(profile.points[0][0],profile.points[0][0],3,24),glassMat);bottom.position.y=1;group.add(bottom);
+    const fill=new T.Mesh(new T.CylinderGeometry(profile.radius-3,profile.points[0][0]-2,profile.fill,24),new T.MeshBasicMaterial({color:this.colors[i%this.colors.length],map:fillTexture,toneMapped:false}));fill.position.y=4+profile.fill/2;group.add(fill);
+    const rim=new T.Mesh(new T.TorusGeometry(profile.radius,1.25,6,24),rimMat);rim.rotation.x=Math.PI/2;rim.position.y=profile.mouth;group.add(rim);
+    const band=new T.Mesh(new T.CylinderGeometry(profile.radius+.2,profile.radius+.2,5,24,1,true),rimMat);band.position.y=profile.mouth-4;group.add(band);
+    g.userData.variants[name]={group,fill,profile};
+   }
+   g.userData.home=g.position.clone();g.userData.homeRotation=g.quaternion.clone();this.jars.push(g);
   }
  }
  makeTweezers(){
@@ -141,6 +160,12 @@ export class AtelierScene {
   for(const shader of this.shaders)shader.uniforms.uSparkEnabled.value=settings.sparkles?1:0;
   if(old?.shadow!==settings.shadow)this.scene.traverse(o=>{if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material])m.needsUpdate=true;}});
   for(const sp of this.glints)if(!settings.sparkles)sp.visible=false;
+  for(const jar of this.jars){
+   for(const [name,variant] of Object.entries(jar.userData.variants))variant.group.visible=name===settings.jarShape;
+   const selected=jar.userData.variants[settings.jarShape]||jar.userData.variants.glass;jar.userData.fill=selected.fill;jar.userData.profile=selected.profile;
+  }
+  for(const [name,variant] of Object.entries(this.brushVariants))variant.group.visible=name===settings.brushShape;
+  this.brush.scale.setScalar(settings.brushWidth);
   this.resize();
  }
  resize(){
@@ -152,23 +177,24 @@ export class AtelierScene {
  metrics(){const info=this.renderer.info;return{width:this.canvas.width,height:this.canvas.height,draws:info.render.calls,triangles:info.render.triangles,visible:this.current.count+this.spill.count+(this.boxGroup.visible?this.collected.count:0)};}
  posePour(pour){
   const jar=this.jars[this.activeColor%6];if(!jar)return;
-  if(!pour){jar.position.copy(jar.userData.home);jar.quaternion.copy(jar.userData.homeRotation);jar.userData.fill.scale.y=1;jar.userData.fill.position.y=27;return;}
+  if(!pour){jar.position.copy(jar.userData.home);jar.quaternion.copy(jar.userData.homeRotation);jar.userData.fill.scale.y=1;jar.userData.fill.position.y=4+jar.userData.profile.fill/2;return;}
   const t=pour.elapsed,travel=smooth(Math.min(1,t/.34)),back=smooth(Math.max(0,(t-1.32)/.33)),weight=travel*(1-back);
   this.paperGroup.updateMatrixWorld(true);
-  const destination=this.paperGroup.localToWorld(new T.Vector3(pour.x-300,400-pour.y+56,176));
-  jar.position.copy(jar.userData.home).lerp(destination,weight);
-  const tilted=new T.Quaternion().setFromEuler(new T.Euler(Math.PI+.24,0,this.paperGroup.rotation.z));
-  jar.quaternion.copy(jar.userData.homeRotation).slerp(tilted,weight);
-  const empty=1-Math.min(1,Math.max(0,(t-.48)/.82))*.86;
-  jar.userData.fill.scale.y=1+(empty-1)*weight;jar.userData.fill.position.y=8.5+18.5*jar.userData.fill.scale.y;
+  const profile=jar.userData.profile;
+  const tilted=new T.Quaternion().setFromEuler(new T.Euler(Math.PI+.30,0,this.paperGroup.rotation.z));
+  const lip=new T.Vector3(0,profile.mouth,profile.radius*.5).applyQuaternion(tilted);
+  const destination=this.paperGroup.localToWorld(new T.Vector3(pour.x-300,400-pour.y,142)).sub(lip);
+  jar.position.copy(jar.userData.home).lerp(destination,weight);jar.quaternion.copy(jar.userData.homeRotation).slerp(tilted,weight);
+  const empty=1-Math.min(1,Math.max(0,(t-.48)/.82))*.88;
+  jar.userData.fill.scale.y=1+(empty-1)*weight;jar.userData.fill.position.y=4+profile.fill/2*jar.userData.fill.scale.y;
   jar.updateMatrixWorld(true);
  }
  pourOrigin(){
-  const jar=this.jars[this.activeColor%6],mouth=jar.localToWorld(new T.Vector3(0,59,17));
+  const jar=this.jars[this.activeColor%6],mouth=jar.localToWorld(new T.Vector3(0,jar.userData.profile.mouth,jar.userData.profile.radius*.5));
   this.paperGroup.worldToLocal(mouth);return{x:mouth.x+300,y:400-mouth.y,z:mouth.z-3};
  }
  mapPointer(e){const r=this.canvas.getBoundingClientRect();this.mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);this.ray.setFromCamera(this.mouse,this.camera);const plane=new T.Plane(new T.Vector3(0,0,1),-3);if(!this.ray.ray.intersectPlane(plane,this.hit))return{x:300,y:400};this.paperGroup.worldToLocal(this.hit);return{x:this.hit.x+300,y:400-this.hit.y}}
- setStage(index){this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);this.tuftMat.color.set('#795235');this.heap.visible=true;this.hint.visible=true;this.jars[index%6].userData.fill.material.color.set(this.colors[index]);}
+ setStage(index){this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
  initInstance(mesh,i,seed,color){
   const mat=new T.Matrix4(),q=new T.Quaternion().setFromEuler(new T.Euler((seed*17%1-.5)*1.3,(seed*31%1-.5)*1.3,seed*79)),scale=1.15+(seed*197%1)*.9;
   mat.compose(new T.Vector3(0,0,-1000),q,new T.Vector3(scale,scale,scale));mesh.instanceMatrix.array.set(mat.elements,i*16);
@@ -178,11 +204,12 @@ export class AtelierScene {
   const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,seeds=this.current.geometry.attributes.flakeSeed,color=new T.Color(this.colors[this.activeColor]);let out=0;
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
-   const j=out*16,seed=sand.seed[i],angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=1.5+(seed*197%1)*1.1;
-   const point=bentPoint(sand.x[i]-300,400-sand.y[i],3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch);
+   const j=out*16,seed=sand.seed[i],angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*(this.settings?.grainSize||1);
+   let px=sand.x[i]-300,py=400-sand.y[i],pz=3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]);
+   if(this.bend||this.pitch){const point=bentPoint(px,py,pz,this.bend,this.pitch);px=point.x;py=point.y;pz=point.z;}
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
    a[j+4]=-sn*scale;a[j+5]=cs*scale;a[j+6]=(seed*31%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+7]=0;
-   a[j+8]=0;a[j+9]=0;a[j+10]=scale;a[j+11]=0;a[j+12]=point.x;a[j+13]=point.y;a[j+14]=point.z;a[j+15]=1;
+   a[j+8]=0;a[j+9]=0;a[j+10]=scale;a[j+11]=0;a[j+12]=px;a[j+13]=py;a[j+14]=pz;a[j+15]=1;
    const light=.7+(seed*47%1)*.5;c[out*3]=color.r*light;c[out*3+1]=color.g*light;c[out*3+2]=color.b*light;seeds.setX(out,seed);out++;
   }
   this.current.count=out;this.current.instanceMatrix.needsUpdate=true;this.current.instanceColor.needsUpdate=true;seeds.needsUpdate=true;
@@ -271,7 +298,7 @@ export class AtelierScene {
   p.needsUpdate=true;this.peelGeo.computeVertexNormals();
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
- render(sand,{time,dt,phase,down,pointer,peeled,pour,shakeProgress=0,finished=false}){
+ render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},shakeProgress=0,finished=false}){
   this.time=time;const pose=drainPose(shakeProgress);this.updateBend(pose.bend,pose.pitch);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
   const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.freshCount>0;
   this.heap.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
@@ -291,8 +318,14 @@ export class AtelierScene {
   }
   const rate=Math.min(1,dt*35);this.brushPoint.x+=(pointer.x-this.brushPoint.x)*rate;this.brushPoint.y+=(pointer.y-this.brushPoint.y)*rate;
   const brushCell=sand.cell(pointer.x,pointer.y),brushHeight=brushCell<0?0:sand.height[brushCell];
-  this.brush.position.set(this.brushPoint.x-300,400-this.brushPoint.y,down?3+Math.min(brushHeight*.2,14):35);this.brush.rotation.z=.65;
-  this.tuft.scale.set(1+(down?.08:0),down?.83:1,1);this.bristles.scale.y=down?1.14:1;
+  this.brush.position.set(this.brushPoint.x-300,400-this.brushPoint.y,down?4+Math.min(brushHeight*.15,9):28);
+  if(down&&brushMotion.speed>12){const desired=Math.atan2(-brushMotion.dy,brushMotion.dx)-Math.PI/2,delta=Math.atan2(Math.sin(desired-this.brushAngle),Math.cos(desired-this.brushAngle));this.brushAngle+=delta*Math.min(1,dt*13);}
+  this.brush.rotation.z=this.brushAngle;
+  const variant=this.brushVariants[this.settings.brushShape]||this.brushVariants.flat,flex=down?Math.min(1,.15+brushMotion.speed/700+brushMotion.load*.3):0;
+  variant.tuft.scale.set(1+flex*.13,1-flex*.16,1-flex*.35);variant.tuft.rotation.x=-flex*.12;
+  const p=variant.strands.geometry.attributes.position,base=variant.base;
+  for(let i=0;i<p.count;i++){const tip=i%2;p.setXYZ(i,base[i*3]*(1+tip*flex*.2),base[i*3+1]+tip*flex*5,base[i*3+2]*(1-tip*flex*.55));}p.needsUpdate=true;
+  variant.mat.color.set('#b58b55').lerp(new T.Color(this.colors[this.activeColor]),Math.min(.4,brushMotion.load*.5));
   this.posePour(pour);
   const sampleCount=this.settings.sparkles&&!finished?Math.min(sand.count,28):0;
   for(let j=0;j<28;j++){

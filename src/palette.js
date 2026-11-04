@@ -42,7 +42,7 @@ export const stages=[
  {
   "id": "silver",
   "name": "Gümüş saç",
-  "color": "#dfe1e4",
+  "color": "#faf6ec",
   "pour": {
    "x": 323,
    "y": 287
@@ -52,7 +52,7 @@ export const stages=[
  {
   "id": "skin",
   "name": "Sıcak ten",
-  "color": "#f2d0a5",
+  "color": "#edbb8e",
   "pour": {
    "x": 323,
    "y": 378
