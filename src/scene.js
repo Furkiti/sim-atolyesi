@@ -3,7 +3,7 @@ import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
 import {peelPoint} from './peel.js';
 import {TRAY,stepFalling} from './collector.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
-import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS} from './sand.js';
+import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS,MAX_HEAP_HEIGHT,MAX_GRAIN_HEIGHT} from './sand.js';
 const TAU=Math.PI*2,NO_BOX={...TRAY,halfWidth:-1};
 function canvasTexture(draw,size=256){const c=document.createElement('canvas');c.width=c.height=size;draw(c.getContext('2d'),size);const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;return t}
 function noiseTexture(){return canvasTexture((c,s)=>{c.fillStyle='#b9bcba';c.fillRect(0,0,s,s);for(let i=0;i<55000;i++){const v=150+Math.random()*85;c.fillStyle=`rgba(${v},${v+1},${v+3},.16)`;c.fillRect(Math.random()*s,Math.random()*s,.5+Math.random()*2,1)}},512)}
@@ -64,7 +64,7 @@ export class AtelierScene {
   this.heapGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);
   this.heapGeo.setAttribute('heapAmount',new T.Float32BufferAttribute(new Float32Array(this.heapGeo.attributes.position.count),1));
   this.heapMat=new T.MeshStandardMaterial({color:colors[0],roughness:.65,metalness:.9,bumpMap:this.heapTexture,bumpScale:.7,envMapIntensity:.8});
-  const clipHeap=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<.7) discard;');};
+  const clipHeap=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<2.2) discard;');};
   this.heapMat.onBeforeCompile=clipHeap;this.heap=new T.Mesh(this.heapGeo,this.heapMat);this.heap.frustumCulled=false;this.heap.receiveShadow=true;this.heap.castShadow=true;this.heap.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking});this.heap.customDepthMaterial.onBeforeCompile=clipHeap;this.paperGroup.add(this.heap);
   this.peelGeo=new T.PlaneGeometry(W,H,24,160);
   this.peelSheet=new T.Mesh(this.peelGeo,new T.MeshStandardMaterial({color:'#fff2b2',roughness:.8,transparent:true,alphaTest:.08,side:T.DoubleSide}));
@@ -179,7 +179,7 @@ export class AtelierScene {
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
    const j=out*16,seed=sand.seed[i],angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=1.5+(seed*197%1)*1.1;
-   const point=bentPoint(sand.x[i]-300,400-sand.y[i],3+sand.z[i],this.bend,this.pitch);
+   const point=bentPoint(sand.x[i]-300,400-sand.y[i],3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch);
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
    a[j+4]=-sn*scale;a[j+5]=cs*scale;a[j+6]=(seed*31%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+7]=0;
    a[j+8]=0;a[j+9]=0;a[j+10]=scale;a[j+11]=0;a[j+12]=point.x;a[j+13]=point.y;a[j+14]=point.z;a[j+15]=1;
@@ -191,7 +191,7 @@ export class AtelierScene {
   const p=this.heapGeo.attributes.position,cols=COLS/2,rows=ROWS/2;
   for(let row=0;row<=rows;row++)for(let col=0;col<=cols;col++){
    const x=Math.min(col*2,COLS-1),y=Math.min(row*2,ROWS-1),k=y*COLS+x;
-   const h=(sand.moundHeight[k]+sand.moundHeight[y*COLS+Math.max(x-1,0)]+sand.moundHeight[Math.max(y-1,0)*COLS+x]+sand.moundHeight[Math.max(y-1,0)*COLS+Math.max(x-1,0)])*.25;
+   const h=Math.min(MAX_HEAP_HEIGHT,(sand.moundHeight[k]+sand.moundHeight[y*COLS+Math.max(x-1,0)]+sand.moundHeight[Math.max(y-1,0)*COLS+x]+sand.moundHeight[Math.max(y-1,0)*COLS+Math.max(x-1,0)])*.25);
    const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=h>0?old+(h*.8-old)*Math.min(1,dt*30):0;
    this.heapGeo.attributes.heapAmount.setX(vertex,height);
    const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend,this.pitch);p.setXYZ(vertex,q.x,q.y,q.z);
@@ -215,7 +215,7 @@ export class AtelierScene {
   this.paperGroup.updateMatrixWorld(true);const color=new T.Color(this.colors[this.activeColor]);
   for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<30000){
    if(outsideOnly&&(sand.state[i]!==FREE||sand.cell(sand.x[i],sand.y[i])>=0))continue;
-   const q=bentPoint(sand.x[i]-300,400-(this.draining?Math.min(800,sand.y[i]):sand.y[i]),3+sand.z[i],this.bend,this.pitch),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
+   const q=bentPoint(sand.x[i]-300,400-(this.draining?Math.min(800,sand.y[i]):sand.y[i]),3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
    const speed=this.draining?surfaceVelocity(sand.x[i]-300,sand.vx[i],Math.max(180,sand.vy[i]),this.bend,this.pitch):{x:sand.vx[i],y:-sand.vy[i],z:Math.min(-15,sand.vz[i])};
    const velocity=new T.Vector3(speed.x,speed.y,speed.z).applyQuaternion(this.paperGroup.quaternion);
    this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],color});sand.state[i]=LOST;sand.lost++;

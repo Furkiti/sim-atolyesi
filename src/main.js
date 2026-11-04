@@ -1,7 +1,8 @@
 import {Sand,W,H} from './sand.js';
 import {AtelierScene} from './scene.js';
 import {Flow,PointerGate,FramePacer,drainPose,appendStroke} from './interaction.js';
-import {loadSettings,saveSettings,profileSettings,doseFor,pourPoint} from './settings.js';
+import {loadSettings,saveSettings,profileSettings,doseFor} from './settings.js';
+import {planPour,pourPoint} from './pouring.js';
 import {completionStatus,resumeIndex} from './progress.js';
 const $=s=>document.querySelector(s),canvas=$('#art'),dialog=$('#settings');
 import {stages} from './palette.js';
@@ -156,7 +157,7 @@ function prepareDose(){
    const score=nearby-Math.abs(y-referenceY)*1.2;if(score>best){best=score;anchor={x,y};}
   }
  }
- playedPour=-1;pour={...anchor,anchor,dose,emitted:0,elapsed:0};
+ const plan=planPour(anchor,sand.targetCount);playedPour=-1;pour={...plan.anchor,...plan,dose,emitted:0,elapsed:0};
 }
 function addSand(){if(finished||!flow.pour())return;down=false;strokes.length=0;prepareDose();readySince=0;updateUI()}
 function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();view.beginCleanup();if(advance)updateCoat(true,true);pour=null;view.posePour(null);readySince=0;updateUI()}
@@ -189,7 +190,7 @@ for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addE
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',releaseAll);
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
- Object.assign(canvas.dataset,{version:'5',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'5.1',phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -203,9 +204,9 @@ function frame(t){
  if(autoKick>0&&!dialog.open){autoKick-=dt;if(autoKick<=0)beginRoll()}
  if(flow.phase==='rolling')animatePeel();
  if(flow.phase==='pour'&&pour){
-  pour.elapsed=flow.elapsed;Object.assign(pour,pourPoint(masks[stages[index].id],pour.anchor,Math.max(0,(flow.elapsed-.48)/.82)));view.posePour(pour);
+  pour.elapsed=flow.elapsed;Object.assign(pour,pourPoint(pour,Math.max(0,(flow.elapsed-.48)/.82)));view.posePour(pour);
   const fraction=Math.min(1,Math.max(0,(flow.elapsed-.48)/.82)),desired=Math.floor(pour.dose*fraction),n=desired-pour.emitted;
-  if(n>0){const source=view.pourOrigin();pour.emitted+=sand.emit(source.x,source.y,n,{spread:4,fan:75,height:Math.max(12,source.z)});Object.assign(canvas.dataset,{emitterX:source.x.toFixed(2),emitterY:source.y.toFixed(2),emitterZ:source.z.toFixed(2)});}
+  if(n>0){const source=view.pourOrigin();pour.emitted+=sand.emit(source.x,source.y,n,{spread:4,fan:pour.fan,height:Math.max(12,source.z)});Object.assign(canvas.dataset,{emitterX:source.x.toFixed(2),emitterY:source.y.toFixed(2),emitterZ:source.z.toFixed(2)});}
  }
  for(const stroke of strokes)moved+=sand.brush(stroke.from,stroke.to,settings.pace==='fast'?48:39);strokes.length=0;
  const drainage=flow.phase==='shake'?drainPose(flow.progress):{bend:0,pitch:0};view.updateBend(drainage.bend,drainage.pitch);
