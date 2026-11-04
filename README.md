@@ -49,4 +49,4 @@ http://localhost:4173
 - `src/main.js`: girdi, oyun ve ayar ekranı.
 - `test/`: malzeme, çoklu dokunma, aşama tekrarları, zemin açıklığı, ayarlar ve FPS sınırı kontrolleri.
 
-GitHub Pages `main` dalının kökünden yayınlar. Kaynak değişikliğinden sonra `npm run build` çalıştırıp derlenmiş `game.js` dosyasını kaynaklarla birlikte commit/push etmek gerekir. Çalışma zamanı kütüphaneleri pakete dahildir; Three.js için bir CDN bağlantısı gerekmez.
+GitHub Pages, `main` dalına push sonrası `.github/workflows/pages.yml` ile yayınlanır. Akış yalnızca test edilmiş statik oyun dosyalarını paketler. Kaynak değişikliğinden sonra `npm run build` çalıştırıp derlenmiş `game.js` dosyasını kaynaklarla birlikte commit/push etmek gerekir. Çalışma zamanı kütüphaneleri pakete dahildir; Three.js için bir CDN bağlantısı gerekmez.
