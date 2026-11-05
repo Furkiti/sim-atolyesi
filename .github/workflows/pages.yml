@@ -29,9 +29,9 @@ jobs:
           cp -R assets _site/assets
           cp -R audio _site/audio
           mkdir -p _site/docs/handoff
-          cp docs/v20-reference-board.html docs/v20-ui-references.md docs/v21-feel-and-gallery.md docs/v22-entry-and-hold.md _site/docs/
+          cp docs/v20-reference-board.html docs/v20-ui-references.md docs/v21-feel-and-gallery.md docs/v22-entry-and-hold.md docs/v23-shared-local-pours.md _site/docs/
           cp docs/handoff/v20-cpu-benchmark.json _site/docs/handoff/
-          cp docs/handoff/v21-*.png docs/handoff/v22-*.png _site/docs/handoff/
+          cp docs/handoff/v21-*.png docs/handoff/v22-*.png docs/handoff/v23-*.png _site/docs/handoff/
       - uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: _site

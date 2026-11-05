@@ -1,3 +1,5 @@
+> v23: Yerel mod, üstteki döküşün boyayabildiği alt parçalar için tekrar sim dökmez. Fotoğraftaki Şapkalı Portre ilk renginde 8 döküş yerine 1 geniş üst döküş yeterli. [Detaylar](docs/v23-shared-local-pours.md).
+
 > v22: [Yeni giriş ve ana basılı tut modu](docs/v22-entry-and-hold.md). Tabloya dokunarak gir; ayarlarda **Tabloya giriş → Doğrudan** seç. Varsayılan: hedef genişliği / %500 yoğunluk / %170 boyut / son dokunuş kapalı. %90 üstünde parmağı bırakmadan tamamlanır.
 
 > v21: Sırayla açılan sergi, kısa swipe, üç döküş yerleşimi, otomatik/küçük parçalarda hızlı soyma, huni–kavanoz ve isteğe bağlı son dokunuş. [Güncel notlar](docs/v21-feel-and-gallery.md).
@@ -6,7 +8,7 @@
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=22&mod=basili&giris=direct)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=23&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 

@@ -1,5 +1,5 @@
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS} from './sand.js';
-import {holdLayout} from './hold-layout.js';
+import {holdLayout,holdSourceBand} from './hold-layout.js';
 import {residuePlan} from './cleanup.js';
 export const HOLD_MAX_CAPACITY=112000;
 export function holdLooseCount(settings={}){return Math.round(10500*(settings.holdDensity??settings.pourAmount??1));}
@@ -14,8 +14,8 @@ export class HoldCascade {
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
-   if(pixel){let group=layout.labels?.[Math.floor(pixel.y)*W+Math.floor(pixel.x)]||0;if(group===255)group=0;
-    const row=this.rows===2&&(this.placement==='local'||pixel.y>104)?(k*37%101)%2:0,band=Math.min(this.bands.length-1,group*this.rows+row);this.routes.push({...pixel,target:true,row,band});counts[band]++;
+   if(pixel){
+    const row=this.rows===2&&(this.placement==='local'||pixel.y>104)?(k*37%101)%2:0,band=this.placement==='local'?holdSourceBand(this.bands,pixel.x,pixel.y,row):Math.min(this.bands.length-1,row);this.routes.push({...pixel,target:true,row,band});counts[band]++;
    }
   }
   const available=sand.capacity-sand.count,loose=Math.min(plannedLoose,Math.max(0,available-this.routes.length)),totalWidth=this.bands.reduce((sum,b)=>sum+b.x1-b.x0,0);let assigned=0;

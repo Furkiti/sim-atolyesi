@@ -1,15 +1,15 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 6 Kasım 2026. Ürün/cache sürümü **v22**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 6 Kasım 2026. Ürün/cache sürümü **v23**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=22&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=23&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Güncel geliştirme: **v22**, doğrudan tablo girişi, yumuşak huni ve %90 sonrası basılı akış bitişi. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Güncel geliştirme: **v23**, ortak yerel döküş; v22 giriş/huni/ana mod davranışları korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
 - Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
 - v20 araştırma/önceki teknik kararlar: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
@@ -24,7 +24,7 @@ Tarih: 6 Kasım 2026. Ürün/cache sürümü **v22**. Bu belge mevcut oyunu devr
 
 `package.json` içindeki `1.0.0`, v20 cache sürümünden ayrıdır.
 
-Güncel mekanik ve doğrulamalar: [v22-entry-and-hold.md](v22-entry-and-hold.md). Önceki sürüm: [v21-feel-and-gallery.md](v21-feel-and-gallery.md).
+Güncel yerel döküş: [v23-shared-local-pours.md](v23-shared-local-pours.md). Giriş/ana mod: [v22-entry-and-hold.md](v22-entry-and-hold.md). Önceki sürüm: [v21-feel-and-gallery.md](v21-feel-and-gallery.md).
 
 ## 2. Ürünün amacı ve kullanıcının öncelikleri
 
@@ -85,10 +85,10 @@ Toplam **51 renk aşaması**. Oyuncu ilk bölümden başlar; önceki tamamlanın
 
 URL örnekleri:
 
-- `?v=22&mod=basili&bolum=barcelona`
-- `?v=22&mod=egim&bolum=naruto`
-- `?v=22&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=22&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=23&mod=basili&bolum=barcelona`
+- `?v=23&mod=egim&bolum=naruto`
+- `?v=23&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=23&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -185,7 +185,7 @@ Cache sürümünü artırırken bu anahtarları otomatik değiştirme; kullanıc
 
 Çerçeve tek opak dudaktır; krem ara boşluk yoktur. Kamera near=80, MSAA mobilde de istenir; sinüs hash yerine filtrelenen sabit parıltı alanı vardır. Kısa swipe 36 px veya yeterli hızla tek tablo atlar. Kilitli eserler gezilir ama oynanamaz; ayarlar/URL de `LevelProgress` kontrolündedir.
 
-`hold-layout.js` üç yerleşimi, parçaya göre şeritleri ve doz oranını üretir. `peelSeconds`/`peelGap` küçük parçaları hızlandırır, büyük ruloyu korur. Oyun yüzeyindeki touchstart/touchend varsayılanları iOS büyütecine karşı engellenir; pointer ve form kontrolleri korunur.
+`hold-layout.js` üç yerleşimi, parçaya göre şeritleri ve doz oranını üretir. v23 yerel modda her aday kaynağı çıkarınca tüm parçaların kalan üst akışlardan beslenebildiğini kontrol ederek gereksizleri eler; yatay akışların birleşimini de dikkate alır. `holdSourceBand` hedef paketlerini kalan en yakın üst kaynağa bağlar. Şapkalı Portre siyahında sekiz parça tek kaynak kullanır. `peelSeconds`/`peelGap` küçük parçaları hızlandırır, büyük ruloyu korur. Oyun yüzeyindeki touchstart/touchend varsayılanları iOS büyütecine karşı engellenir; pointer ve form kontrolleri korunur.
 
 `funnel.js` eğimli koni/boğaz/kavanoz fiziğidir. `cleanup.js` değişken artık planı ve gerçek gevşek paketlerin ikinci temizlik geçişini yönetir. `Sand.step(...,{pinned})` bu paketleri ilk bükmede yerinde tutar. Sonra aynı paketler hareket eder; yapışmış sim ve kaplama korunur. Kavanozun hacim gösterimi bütün yakalanan miktardan, üst taneler en fazla 2.200 örnekten gelir. Masa önce çizilir; alttaki kavanoz dolumu örtülmez.
 
@@ -232,7 +232,7 @@ Ham videolar/sohbet ekleri ve `/tmp` içindeki çıkarım scriptleri clone için
 
 ## 11. Test ve görsel QA
 
-`npm run build` başarılı ve **137 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
+`npm run build` başarılı ve **141 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
 
 Özellikle dikkat edilecek regresyon testleri:
 
@@ -300,4 +300,4 @@ Kimlik bilgisi/token depoya yazma veya loga basma. Bu makinenin mevcut Git crede
 
 Başlangıç için Claude’a verilebilecek metin:
 
-> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v22 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
+> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v23 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
