@@ -15,3 +15,7 @@ test('new garden level covers the entire card with eight disjoint, playable colo
 test('level selection and resume remain separate; unknown levels safely open Gotham',()=>{
  assert.equal(selectLevel('?bolum=ay-bahcesi&devam=6').id,'ay-bahcesi');assert.equal(selectLevel('?devam=6').id,'gotham');assert.equal(selectLevel('?bolum=unknown').id,'gotham');
 });
+
+test('all three sweet illustrations exactly partition a complete card and have playable peel pieces',()=>{
+ for(const level of levels.slice(2)){assert.equal(level.stages.length,8);const seen=new Uint8Array(480000);for(const stage of level.stages){const data=PNG.sync.read(readFileSync(new URL(`../assets/${stage.id}.png`,import.meta.url))).data;let area=0;for(let i=0;i<seen.length;i++)if(data[i*4+3]>80){seen[i]++;area++;}assert.equal(area,stage.area);assert.ok(piecesByStage[stage.id].length);}assert.ok(seen.every(n=>n===1),level.id);}
+});

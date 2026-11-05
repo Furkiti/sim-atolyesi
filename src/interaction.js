@@ -32,7 +32,8 @@ export function surfaceVelocity(x,vx,vy,amount,pitch=amount*.58){
 // One phase owns its timers. Repeated taps cannot enqueue duplicate pours or shakes.
 export class Flow {
  constructor(){this.reset()}
- reset(){this.phase='peel';this.elapsed=0;this.advance=false;this.pendingNext=false;this.serial=0;this.rollDuration=2.8;this.drainDoneAt=null;}
+ reset(){this.phase='peel';this.elapsed=0;this.advance=false;this.pendingNext=false;this.serial=0;this.rollDuration=2.8;this.pourDuration=1.65;this.drainDoneAt=null;}
+ setPourDuration(seconds){if(Number.isFinite(seconds)&&seconds>0)this.pourDuration=seconds;}
  setRollDuration(seconds){if(Number.isFinite(seconds)&&seconds>0)this.rollDuration=seconds;}
  get busy(){return ['rolling','pour','shake'].includes(this.phase)}
  roll(){if(this.phase!=='peel')return false;this.phase='rolling';this.elapsed=0;this.serial++;return true;}
@@ -41,7 +42,7 @@ export class Flow {
  tick(dt,{drainComplete=true}={}){
   if(!this.busy)return null;this.elapsed+=dt;
   if(this.phase==='rolling'&&this.elapsed>=this.rollDuration){this.phase='pour';this.elapsed=0;return'rolled';}
-  if(this.phase==='pour'&&this.elapsed>=1.65){this.phase='brush';this.elapsed=0;return'poured';}
+  if(this.phase==='pour'&&this.elapsed>=this.pourDuration){this.phase='brush';this.elapsed=0;return'poured';}
   if(this.phase==='shake'){
    if(this.elapsed>=3.9&&drainComplete&&this.drainDoneAt===null)this.drainDoneAt=Math.max(3.9,this.elapsed-dt);
    if(this.drainDoneAt!==null&&this.elapsed-this.drainDoneAt>=1){this.phase='brush';this.elapsed=0;const next=this.advance;this.advance=false;return next?'advance':'shaken';}
@@ -50,7 +51,7 @@ export class Flow {
  }
  get progress(){
   if(this.phase==='shake')return this.drainDoneAt===null?Math.min(.8,this.elapsed/4.875):Math.min(1,.8+.2*(this.elapsed-this.drainDoneAt));
-  return Math.max(0,Math.min(1,this.elapsed/(this.phase==='rolling'?this.rollDuration:1.65)));
+  return Math.max(0,Math.min(1,this.elapsed/(this.phase==='rolling'?this.rollDuration:this.pourDuration)));
  }
 }
 export class FramePacer {

@@ -2,15 +2,15 @@ import {materialResponse} from './feel.js';
 // Each particle is material. A brush may move it, but cannot create or stamp it.
 export const AIR=0, FREE=1, BOUND=2, LOST=3;
 export const W=600,H=800,CELL=5,COLS=W/CELL,ROWS=H/CELL;
-export const MAX_HEAP_HEIGHT=32;
+export const MAX_HEAP_HEIGHT=52;
 export const MAX_GRAIN_HEIGHT=MAX_HEAP_HEIGHT+2;
 const FLOW_X=[-1,1,0,0,-.707,.707,-.707,.707],FLOW_Y=[0,0,-1,1,-.707,-.707,.707,.707];
 export class Sand {
-  constructor({capacity=30000,random=Math.random}={}) {
-    this.behavior=materialResponse();this.lastMoved=0;this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
+  constructor({capacity=48000,random=Math.random}={}) {
+    this.heapDepth=1.25;this.behavior=materialResponse();this.lastMoved=0;this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
     for (const name of ['x','y','z','vx','vy','vz','seed','contactTime']) this[name]=new Float32Array(capacity);
     this.pressed=new Uint8Array(capacity);this.freshCount=0;this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
-    this.density=new Float32Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);this.pressure=new Float32Array(COLS*ROWS);this.moundDensity=new Float32Array(COLS*ROWS);this.moundHeight=new Float32Array(COLS*ROWS);
+    this.density=new Float32Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);this.pressure=new Float32Array(COLS*ROWS);this.top=new Float32Array(COLS*ROWS);this.moundDensity=new Float32Array(COLS*ROWS);this.moundHeight=new Float32Array(COLS*ROWS);
     this.neighbors=new Int32Array(COLS*ROWS*8);
     for(let k=0;k<COLS*ROWS;k++){const c=k%COLS,r=(k/COLS)|0;this.neighbors.set([c>0?k-1:k,c<COLS-1?k+1:k,r>0?k-COLS:k,r<ROWS-1?k+COLS:k,r>0&&c>0?k-COLS-1:k,r>0&&c<COLS-1?k-COLS+1:k,r<ROWS-1&&c>0?k+COLS-1:k,r<ROWS-1&&c<COLS-1?k+COLS+1:k],k*8);}
     this.flowSum=new Float32Array(COLS*ROWS);this.flowCDF=new Float32Array(COLS*ROWS*8);this.flowForce=new Float32Array(COLS*ROWS*8);
@@ -61,7 +61,7 @@ export class Sand {
     this.coveredWeight+=this.target[k]/(CELL*CELL);
     this.bound[k]++;return true;
   }
-  setBehavior(settings){this.behavior=materialResponse(settings)}
+  setBehavior(settings){this.behavior=materialResponse(settings);this.heapDepth=settings.heapDepth||1.25}
   brush(from,to,radius=34,seconds=1/60){
     const dx=to.x-from.x,dy=to.y-from.y,d2=dx*dx+dy*dy,d=Math.sqrt(d2);if(d<.02)return 0;
     const rr=radius*radius,ux=dx/d,uy=dy/d,b=this.behavior,speed=Math.min(1.5,d/Math.max(.001,seconds)/700);let moved=0;
@@ -73,8 +73,8 @@ export class Sand {
       // Bristles shear and fan real grains, rather than dragging a rigid blob.
       // Never move material farther merely because a pointer sends more events.
       const contact=Math.sqrt(Math.max(0,1-q/rr)),cell=this.cell(this.x[i],this.y[i]);
-      const load=cell<0?0:this.density[cell],mass=1/(1+Math.min(70,load)*.004/b.response);
-      const strength=b.carry*(.72+.28*contact)*(.78+.22*this.seed[i])*mass,travel=d*(1-t)*strength;
+      const load=cell<0?0:this.density[cell],mass=1/(1+Math.min(70,load)*.0006/b.response);
+      const strength=b.carry*(.95+.05*contact)*(.95+.05*this.seed[i])*mass,travel=d*(1-t)*strength;
       const side=(ax*(-uy)+ay*ux)/radius,fan=(side+(this.seed[i]*137%1-.5)*.4)*b.fan*(.65+.35*speed);
       this.pressed[i]=1;this.contactTime[i]=this.time;
       if(cell>=0)this.z[i]=Math.min(this.z[i],1.7+this.height[cell]*.32*(.1+this.seed[i]*.9));
@@ -88,17 +88,18 @@ export class Sand {
     }
     this.lastMoved=moved;return moved;
   }
-  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58}={}){
-    this.time+=dt;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
-    for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundDensity[k]+=.95;this.freshCount++;}}}
+  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0}={}){
+    this.time+=dt;this.top.fill(0);this.surfaceCount=0;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
+    for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundDensity[k]+=.95;this.freshCount++;}else if(this.z[i]>6){this.moundDensity[k]+=.65;}this.top[k]=Math.max(this.top[k],this.z[i]);this.surfaceCount++;}}
     for(let k=0;k<this.height.length;k++){
       this.pressure[k]=this.density[k]*.95;
       let load=this.density[k]*4,fresh=this.moundDensity[k]*4;
       for(let j=0;j<8;j++){const n=this.neighbors[k*8+j],weight=j<4?2:1;load+=this.density[n]*weight;fresh+=this.moundDensity[n]*weight;}
       load*=.95/16;fresh/=16;
       // Pressure can be large; the physical sheet of glitter cannot become a tower.
-      this.height[k]=load>0?MAX_HEAP_HEIGHT*(1-Math.exp(-load/MAX_HEAP_HEIGHT)):0;
-      this.moundHeight[k]=fresh>0?MAX_HEAP_HEIGHT*(1-Math.exp(-fresh/MAX_HEAP_HEIGHT)):0;
+      this.height[k]=load>0?MAX_HEAP_HEIGHT*(1-Math.exp(-load*2.15*this.heapDepth/MAX_HEAP_HEIGHT)):0;
+      let top=this.top[k];for(let j=0;j<8;j++)top=Math.max(top,this.top[this.neighbors[k*8+j]]);
+      this.moundHeight[k]=fresh>0?Math.min(top,MAX_HEAP_HEIGHT*(1-Math.exp(-fresh*2.15*this.heapDepth/MAX_HEAP_HEIGHT))):0;
     }
     // Pressure is a property of a cell, computed once rather than allocating
     // neighbour lists for every flake on every frame.
@@ -128,11 +129,11 @@ export class Sand {
       }else if(k<0&&!shaking){
         this.vz[i]-=900*dt;this.z[i]=Math.max(-9,this.z[i]+this.vz[i]*dt);if(this.z[i]<=-9)this.vz[i]=0;
       }else if(k>=0&&!shaking){
-        const h=this.height[k];let fx=0,fy=0;
+        const h=this.height[k];let fx=980*Math.sin(tiltX)-220*Math.sin((this.x[i]-300)/300*cup),fy=980*Math.sin(tiltY);
         if(this.flowSum[k]>0){
           const choice=((this.seed[i]+this.time*.17)%1)*this.flowSum[k];let j=0;
           while(j<7&&choice>this.flowCDF[k*8+j])j++;
-          const force=this.flowForce[k*8+j],skew=(this.seed[i]*97%1-.5)*.75;fx=(FLOW_X[j]-FLOW_Y[j]*skew)*force;fy=(FLOW_Y[j]+FLOW_X[j]*skew)*force;
+          const force=this.flowForce[k*8+j],skew=(this.seed[i]*97%1-.5)*.75;fx+=(FLOW_X[j]-FLOW_Y[j]*skew)*force;fy+=(FLOW_Y[j]+FLOW_X[j]*skew)*force;
         }
         this.vx[i]+=fx*dt;this.vy[i]+=fy*dt;
         const resting=1.7+h*(.10+this.seed[i]*.90);

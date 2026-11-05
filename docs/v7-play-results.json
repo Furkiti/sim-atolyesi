@@ -1,0 +1,186 @@
+{
+  "pointerStrokes": 425,
+  "viewport": [
+    390,
+    844
+  ],
+  "device": "desktop browser at phone viewport",
+  "cases": [
+    {
+      "case": "natural-curtain-12",
+      "strokes": 12,
+      "level": "gotham",
+      "feel": "natural",
+      "supply": "curtain",
+      "emitted": "40600",
+      "coverage": "0.21089",
+      "height": "38.07",
+      "fps": "60"
+    },
+    {
+      "case": "natural-curtain-32",
+      "strokes": 32,
+      "level": "gotham",
+      "feel": "natural",
+      "supply": "curtain",
+      "emitted": "40600",
+      "coverage": "0.35116",
+      "height": "35.66",
+      "fps": "60"
+    },
+    {
+      "case": "natural-curtain-tuned-32",
+      "strokes": 64,
+      "level": "gotham",
+      "feel": "natural",
+      "supply": "curtain",
+      "emitted": "40600",
+      "coverage": "0.62115",
+      "height": "35.36",
+      "fps": "60"
+    },
+    {
+      "case": "natural-curtain-tuned-48",
+      "strokes": 80,
+      "level": "gotham",
+      "feel": "natural",
+      "supply": "curtain",
+      "emitted": "40600",
+      "coverage": "0.75057",
+      "height": "33.15",
+      "fps": "60"
+    },
+    {
+      "case": "fluid-islands-refill",
+      "strokes": 93,
+      "level": "gotham",
+      "feel": "fluid",
+      "supply": "islands",
+      "emitted": "48655",
+      "coverage": "0.89370",
+      "height": "27.00",
+      "fps": "60"
+    },
+    {
+      "case": "velvet-generous",
+      "strokes": 125,
+      "level": "gotham",
+      "feel": "velvet",
+      "supply": "generous",
+      "emitted": "32625",
+      "coverage": "0.21167",
+      "height": "49.47",
+      "fps": "60"
+    },
+    {
+      "case": "velvet-islands",
+      "strokes": 157,
+      "level": "gotham",
+      "feel": "velvet",
+      "supply": "islands",
+      "emitted": "37700",
+      "coverage": "0.30480",
+      "height": "46.70",
+      "fps": "60"
+    },
+    {
+      "case": "velvet-curtain",
+      "strokes": 189,
+      "level": "gotham",
+      "feel": "velvet",
+      "supply": "curtain",
+      "emitted": "40600",
+      "coverage": "0.28012",
+      "height": "44.45",
+      "fps": "60"
+    },
+    {
+      "case": "natural-generous",
+      "strokes": 221,
+      "level": "gotham",
+      "feel": "natural",
+      "supply": "generous",
+      "emitted": "32625",
+      "coverage": "0.44645",
+      "height": "42.78",
+      "fps": "60"
+    },
+    {
+      "case": "natural-islands",
+      "strokes": 253,
+      "level": "gotham",
+      "feel": "natural",
+      "supply": "islands",
+      "emitted": "37700",
+      "coverage": "0.52912",
+      "height": "37.40",
+      "fps": "60"
+    },
+    {
+      "case": "fluid-generous",
+      "strokes": 285,
+      "level": "gotham",
+      "feel": "fluid",
+      "supply": "generous",
+      "emitted": "32625",
+      "coverage": "0.50049",
+      "height": "34.95",
+      "fps": "60"
+    },
+    {
+      "case": "fluid-islands",
+      "strokes": 317,
+      "level": "gotham",
+      "feel": "fluid",
+      "supply": "islands",
+      "emitted": "37700",
+      "coverage": "0.65042",
+      "height": "28.51",
+      "fps": "60"
+    },
+    {
+      "case": "fluid-curtain",
+      "strokes": 349,
+      "level": "gotham",
+      "feel": "fluid",
+      "supply": "curtain",
+      "emitted": "40600",
+      "coverage": "0.70616",
+      "height": "31.98",
+      "fps": "60"
+    },
+    {
+      "case": "sweet-berry-first",
+      "strokes": 369,
+      "level": "cilekli-kedi",
+      "feel": "natural",
+      "supply": "auto",
+      "emitted": "4444",
+      "coverage": "0.82296",
+      "height": "15.03",
+      "fps": "60"
+    },
+    {
+      "case": "sweet-boba-background",
+      "strokes": 401,
+      "level": "boba-molasi",
+      "feel": "natural",
+      "supply": "auto",
+      "emitted": "40600",
+      "coverage": "0.64793",
+      "height": "34.29",
+      "fps": "60"
+    },
+    {
+      "case": "sweet-frog-first",
+      "strokes": 425,
+      "level": "kurbaga-pastanesi",
+      "feel": "fluid",
+      "supply": "auto",
+      "emitted": "11647",
+      "coverage": "0.67568",
+      "height": "14.72",
+      "fps": "60"
+    }
+  ]
+}

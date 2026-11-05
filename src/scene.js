@@ -9,14 +9,14 @@ const TAU=Math.PI*2,NO_BOX={...TRAY,halfWidth:-1};
 function canvasTexture(draw,size=256){const c=document.createElement('canvas');c.width=c.height=size;draw(c.getContext('2d'),size);const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;return t}
 function noiseTexture(){return canvasTexture((c,s)=>{c.fillStyle='#b9bcba';c.fillRect(0,0,s,s);for(let i=0;i<55000;i++){const v=150+Math.random()*85;c.fillStyle=`rgba(${v},${v+1},${v+3},.16)`;c.fillRect(Math.random()*s,Math.random()*s,.5+Math.random()*2,1)}},512)}
 function flakeGeometry(){
- const geo=new T.BufferGeometry(),v=[];const n=5;
+ const geo=new T.BufferGeometry(),v=[];const n=3;
  for(let j=0;j<n;j++){const a=j/n*TAU,b=(j+1)/n*TAU;v.push(0,0,.12,Math.cos(a),Math.sin(a),0,Math.cos(b),Math.sin(b),0);}
  geo.setAttribute('position',new T.Float32BufferAttribute(v,3));geo.computeVertexNormals();return geo;
 }
 export class AtelierScene {
  constructor(canvas,paperCanvas,colors,settings){
   this.settings=settings;this.baseDpr=Math.min(devicePixelRatio||1,matchMedia('(pointer: coarse)').matches?1.4:2);
-  this.canvas=canvas;this.colors=colors;this.activeColor=0;this.time=0;this.renderTick=0;this.mouse=new T.Vector2();this.ray=new T.Raycaster();this.hit=new T.Vector3();
+  this.canvas=canvas;this.colors=colors;this.activeColor=0;this.time=0;this.renderTick=0;this.mouse=new T.Vector2();this.ray=new T.Raycaster();this.hit=new T.Vector3();this.localRay=new T.Ray();this.inversePaper=new T.Matrix4();
   this.renderer=new T.WebGLRenderer({canvas,antialias:!matchMedia('(pointer: coarse)').matches,alpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});
   this.renderer.setPixelRatio(this.baseDpr*settings.renderScale);this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFShadowMap;
   this.renderer.outputColorSpace=T.SRGBColorSpace;this.renderer.toneMapping=T.ACESFilmicToneMapping;this.renderer.toneMappingExposure=.95;
@@ -61,15 +61,19 @@ export class AtelierScene {
     gl_FragColor.rgb+=uSparkEnabled*step(.975,vFlakeSeed)*glint*1.8*vec3(1.0,0.95,0.82);`);
    this.shaders.push(shader);
   };
-  this.current=this.makeGrains(30000);this.savedCount=0;this.currentInitialized=0;
-  this.spill=this.makeGrains(30000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=false;this.spill.material.depthWrite=false;this.spill.renderOrder=20;this.spills=[];this.spillObject=new T.Object3D();
+  this.current=this.makeGrains(48000);this.savedCount=0;this.currentInitialized=0;
+  this.spill=this.makeGrains(48000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=false;this.spill.material.depthWrite=false;this.spill.renderOrder=20;this.spills=[];this.spillObject=new T.Object3D();
   this.coatMask=new T.CanvasTexture(document.createElement('canvas'));this.coatUniforms.uCoat.value=this.coatMask;
   this.heapTexture=canvasTexture((c,s)=>{c.fillStyle='#898989';c.fillRect(0,0,s,s);for(let i=0;i<18000;i++){const g=Math.random()*255|0;c.fillStyle=`rgb(${g},${g},${g})`;c.fillRect(Math.random()*s,Math.random()*s,1,1)}},128);this.heapTexture.wrapS=this.heapTexture.wrapT=T.RepeatWrapping;this.heapTexture.repeat.set(11,15);
   this.heapGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);
   this.heapGeo.setAttribute('heapAmount',new T.Float32BufferAttribute(new Float32Array(this.heapGeo.attributes.position.count),1));
   this.heapMat=new T.MeshStandardMaterial({color:colors[0],roughness:.65,metalness:.9,bumpMap:this.heapTexture,bumpScale:.7,envMapIntensity:.8});
-  const clipHeap=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<2.2) discard;');shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>','#include <dithering_fragment>\ngl_FragColor.rgb=mix(linearToOutputTexel(vec4(diffuseColor.rgb,1.0)).rgb,gl_FragColor.rgb,.3);');};
+  const clipHeap=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<3.0) discard;');shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>','#include <dithering_fragment>\ngl_FragColor.rgb=mix(linearToOutputTexel(vec4(diffuseColor.rgb,1.0)).rgb,gl_FragColor.rgb,.35);\n#ifdef USE_BUMPMAP\nvec2 tile=floor(vBumpMapUv*128.0);float fleck=fract(sin(dot(tile,vec2(12.9898,78.233)))*43758.5453);gl_FragColor.rgb*=.78+fleck*.36;gl_FragColor.rgb+=step(.983,fleck)*.32;\n#endif');};
   this.heapMat.onBeforeCompile=clipHeap;this.heap=new T.Mesh(this.heapGeo,this.heapMat);this.heap.frustumCulled=false;this.heap.receiveShadow=true;this.heap.castShadow=true;this.heap.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking});this.heap.customDepthMaterial.onBeforeCompile=clipHeap;this.paperGroup.add(this.heap);
+  this.heapShadowGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);this.heapShadowGeo.setAttribute('heapAmount',new T.Float32BufferAttribute(new Float32Array(this.heapShadowGeo.attributes.position.count),1));
+  const shadowMat=new T.MeshBasicMaterial({color:'#1c2830',transparent:true,opacity:.23,depthWrite:false});
+  shadowMat.onBeforeCompile=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','diffuseColor.a*=smoothstep(0.0,12.0,vHeap);\n#include <opaque_fragment>');};
+  this.heapShadow=new T.Mesh(this.heapShadowGeo,shadowMat);this.heapShadow.frustumCulled=false;this.paperGroup.add(this.heapShadow);
   this.peelGeo=new T.PlaneGeometry(W,H,24,160);
   this.peelSheet=new T.Mesh(this.peelGeo,new T.MeshStandardMaterial({color:'#fff2b2',roughness:.8,transparent:true,alphaTest:.08,side:T.DoubleSide}));
   this.peelSheet.frustumCulled=false;this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
@@ -131,7 +135,7 @@ export class AtelierScene {
   const back=new T.Mesh(new T.BoxGeometry(224,8,63),shell);back.position.set(0,92,31.5);this.boxGroup.add(back);
   const front=new T.Mesh(new T.BoxGeometry(224,5,51),new T.MeshPhysicalMaterial({color:'#e5ebdf',transparent:true,opacity:.38,roughness:.2,metalness:.1,depthWrite:false}));front.position.set(0,-92,25.5);this.boxGroup.add(front);
   for(const x of [-96,96])for(const y of [-70,70]){const foot=new T.Mesh(new T.BoxGeometry(18,18,4),dark);foot.position.set(x,y,-6);this.boxGroup.add(foot);}
-  this.collected=this.makeGrains(30000);this.paperGroup.remove(this.collected);this.boxGroup.add(this.collected);
+  this.collected=this.makeGrains(48000);this.paperGroup.remove(this.collected);this.boxGroup.add(this.collected);
  }
  makeHands(){
   this.hands=[];const skin=new T.MeshStandardMaterial({color:'#d9ac8e',roughness:.85}),nail=new T.MeshStandardMaterial({color:'#f0cec0',roughness:.42});
@@ -172,20 +176,20 @@ export class AtelierScene {
   const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;
   this.renderer.setSize(w,h,false);this.camera.aspect=w/h;
   const t=Math.tan(35*Math.PI/360),dist=Math.max(1180/(2*t),650/(2*t*this.camera.aspect));
-  this.camera.position.set(0,-dist*.18,dist);this.camera.lookAt(0,-35,20);this.camera.updateProjectionMatrix();
+  this.camera.position.set(0,-dist*.30,dist);this.camera.lookAt(0,-35,20);this.camera.updateProjectionMatrix();
  }
  metrics(){const info=this.renderer.info;return{width:this.canvas.width,height:this.canvas.height,draws:info.render.calls,triangles:info.render.triangles,visible:this.current.count+this.spill.count+(this.boxGroup.visible?this.collected.count:0)};}
  posePour(pour){
   const jar=this.jars[this.activeColor%6];if(!jar)return;
   if(!pour){jar.position.copy(jar.userData.home);jar.quaternion.copy(jar.userData.homeRotation);jar.userData.fill.scale.y=1;jar.userData.fill.position.y=4+jar.userData.profile.fill/2;return;}
-  const t=pour.elapsed,travel=smooth(Math.min(1,t/.34)),back=smooth(Math.max(0,(t-1.32)/.33)),weight=travel*(1-back);
+  const t=pour.elapsed,unit=t/pour.duration,travel=smooth(Math.min(1,unit/.12)),back=smooth(Math.max(0,(unit-.89)/.11)),weight=travel*(1-back);
   this.paperGroup.updateMatrixWorld(true);
   const profile=jar.userData.profile;
   const tilted=new T.Quaternion().setFromEuler(new T.Euler(Math.PI+.30,0,this.paperGroup.rotation.z));
   const lip=new T.Vector3(0,profile.mouth,profile.radius*.5).applyQuaternion(tilted);
   const destination=this.paperGroup.localToWorld(new T.Vector3(pour.x-300,400-pour.y,142)).sub(lip);
   jar.position.copy(jar.userData.home).lerp(destination,weight);jar.quaternion.copy(jar.userData.homeRotation).slerp(tilted,weight);
-  const empty=1-Math.min(1,Math.max(0,(t-.48)/.82))*.88;
+  const empty=1-Math.min(1,Math.max(0,(t-.5)/(pour.duration-1)))*.88;
   jar.userData.fill.scale.y=1+(empty-1)*weight;jar.userData.fill.position.y=4+profile.fill/2*jar.userData.fill.scale.y;
   jar.updateMatrixWorld(true);
  }
@@ -193,8 +197,14 @@ export class AtelierScene {
   const jar=this.jars[this.activeColor%6],mouth=jar.localToWorld(new T.Vector3(0,jar.userData.profile.mouth,jar.userData.profile.radius*.5));
   this.paperGroup.worldToLocal(mouth);return{x:mouth.x+300,y:400-mouth.y,z:mouth.z-3};
  }
- mapPointer(e){const r=this.canvas.getBoundingClientRect();this.mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);this.ray.setFromCamera(this.mouse,this.camera);const plane=new T.Plane(new T.Vector3(0,0,1),-3);if(!this.ray.ray.intersectPlane(plane,this.hit))return{x:300,y:400};this.paperGroup.worldToLocal(this.hit);return{x:this.hit.x+300,y:400-this.hit.y}}
- setStage(index){this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
+ mapPointer(e){
+  const r=this.canvas.getBoundingClientRect();this.mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);this.ray.setFromCamera(this.mouse,this.camera);
+  this.paperGroup.updateMatrixWorld(true);this.inversePaper.copy(this.paperGroup.matrixWorld).invert();this.localRay.copy(this.ray.ray).applyMatrix4(this.inversePaper);
+  let z=3;for(let i=0;i<3;i++){const t=(z-this.localRay.origin.z)/this.localRay.direction.z;this.localRay.at(t,this.hit);z=bentPoint(this.hit.x,this.hit.y,3,this.bend,this.pitch).z;}
+  return{x:this.hit.x+300,y:400-this.hit.y};
+ }
+
+ setStage(index){this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.heapShadow.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
  initInstance(mesh,i,seed,color){
   const mat=new T.Matrix4(),q=new T.Quaternion().setFromEuler(new T.Euler((seed*17%1-.5)*1.3,(seed*31%1-.5)*1.3,seed*79)),scale=1.15+(seed*197%1)*.9;
   mat.compose(new T.Vector3(0,0,-1000),q,new T.Vector3(scale,scale,scale));mesh.instanceMatrix.array.set(mat.elements,i*16);
@@ -222,8 +232,9 @@ export class AtelierScene {
    const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=h>0?old+(h*.8-old)*Math.min(1,dt*30):0;
    this.heapGeo.attributes.heapAmount.setX(vertex,height);
    const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend,this.pitch);p.setXYZ(vertex,q.x,q.y,q.z);
+   if(this.heapShadowGeo){const shadow=bentPoint(Math.min(300,col/cols*W-300+height*.14),Math.max(-400,400-row/rows*H-height*.32),4.5,this.bend,this.pitch);this.heapShadowGeo.attributes.position.setXYZ(vertex,shadow.x,shadow.y,shadow.z);this.heapShadowGeo.attributes.heapAmount.setX(vertex,height);}
   }
-  p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.renderTick++%4===0)this.heapGeo.computeVertexNormals();
+  p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.heapShadowGeo){this.heapShadowGeo.attributes.position.needsUpdate=true;this.heapShadowGeo.attributes.heapAmount.needsUpdate=true;}if(this.renderTick++%4===0)this.heapGeo.computeVertexNormals();
  }
  updateBend(amount,pitch=amount*.58){
   if(amount<=1e-6)amount=0;
@@ -240,7 +251,7 @@ export class AtelierScene {
  preserve(sand){this.collectSpill(sand);}
  collectSpill(sand,outsideOnly=false){
   this.paperGroup.updateMatrixWorld(true);const color=new T.Color(this.colors[this.activeColor]);
-  for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<30000){
+  for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<48000){
    if(outsideOnly&&(sand.state[i]!==FREE||sand.cell(sand.x[i],sand.y[i])>=0))continue;
    const q=bentPoint(sand.x[i]-300,400-(this.draining?Math.min(800,sand.y[i]):sand.y[i]),3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
    const speed=this.draining?surfaceVelocity(sand.x[i]-300,sand.vx[i],Math.max(180,sand.vy[i]),this.bend,this.pitch):{x:sand.vx[i],y:-sand.vy[i],z:Math.min(-15,sand.vz[i])};
@@ -259,7 +270,7 @@ export class AtelierScene {
   }
  }
  catchGrain(p){
-  if(this.collectedCount>=30000)return;
+  if(this.collectedCount>=48000)return;
   const col=Math.max(0,Math.min(27,Math.floor((p.x+TRAY.halfWidth)/(TRAY.halfWidth*2)*28))),row=Math.max(0,Math.min(21,Math.floor((p.y-this.collectorBox.centerY+TRAY.halfDepth)/(TRAY.halfDepth*2)*22)));
   let chosen=row*28+col,score=this.trayBins[chosen]*.32;
   for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=col+dx,y=row+dy;if(x<0||x>=28||y<0||y>=22)continue;const k=y*28+x,cost=this.trayBins[k]*.32+Math.hypot(dx,dy)*1.3;if(cost<score){chosen=k;score=cost;}}
@@ -298,17 +309,18 @@ export class AtelierScene {
   p.needsUpdate=true;this.peelGeo.computeVertexNormals();
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
- render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},shakeProgress=0,finished=false}){
-  this.time=time;const pose=drainPose(shakeProgress);this.updateBend(pose.bend,pose.pitch);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
-  const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.freshCount>0;
-  this.heap.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
+ render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,shakeProgress=0,finished=false}){
+  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:0};this.updateBend(pose.bend,pose.pitch);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
+  const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
+  this.heap.visible=showHeap;this.heapShadow.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;
    this.key.position.y+=((340-(pointer.y-400)*.25)-this.key.position.y)*.045;
   }
   this.sparkLight.set(this.key.position.x*.0015,this.key.position.y*.0015,1).normalize();
-  this.paperGroup.rotation.x=0;this.paperGroup.position.z=0;
+  this.paperGroup.rotation.x=phase==='shake'?0:paperPose.y;this.paperGroup.rotation.y=phase==='shake'?0:paperPose.x;this.paperGroup.position.z=0;
   this.paperGroup.updateMatrixWorld(true);
+  if(paperHeld&&phase==='brush')for(let i=0;i<2;i++){const q=bentPoint(i?300:-300,0,5,this.bend,this.pitch),hand=this.hands[i];hand.visible=true;hand.position.copy(this.paperGroup.localToWorld(new T.Vector3(q.x+(i?8:-8),q.y,q.z)));hand.rotation.y=(i?-1:1)*this.bend*.7;}
   this.brush.visible=phase==='brush'&&pointer.visible&&!finished;this.tweezers.visible=phase==='rolling';this.hint.visible=phase==='peel';
   if(phase==='peel'){this.hint.position.set(this.peelAnchor.x-300,400-this.peelAnchor.y,12);this.hint.material.opacity=.65+.25*Math.sin(time*.004);}
   if(phase==='rolling'&&this.peelPiece){

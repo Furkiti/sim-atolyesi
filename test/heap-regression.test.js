@@ -15,7 +15,7 @@ test('the rendered mound has a second height limit even if a density field is ex
 });
 test('the mouth stays unpainted after pouring and becomes paintable only through actual brush contact',()=>{
  const stage=stages.find(s=>s.id==='mouth'),s=new Sand({random:rng()});s.setMask(mask('mouth'));const plan=planPour(stage.pour,s.targetCount),dose=doseFor(s.targetCount,DEFAULTS,s.capacity);
- assert.ok(dose<=400);assert.ok(plan.anchor.y<=stage.pour.y-75);
+ assert.ok(dose>=1400&&dose<=1600);assert.ok(plan.anchor.y<=stage.pour.y-75);
  for(let f=0;f<50;f++){const p=pourPoint(plan,f/49);s.emit(p.x,p.y,Math.round(dose/50),{spread:4,fan:plan.fan,height:142});s.step(1/60);}settle(s);
  assert.equal(s.coverage,0);assert.equal(s.stats().bound,0);
  s.brush(plan.anchor,{x:stage.pour.x,y:stage.pour.y+20},48);settle(s,60);assert.ok(s.coverage>.25,`${s.coverage}`);

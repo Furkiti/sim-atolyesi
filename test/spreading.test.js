@@ -7,8 +7,8 @@ test('brushed grains do not regenerate the solid poured mound after release',()=
  const sand=new Sand({random:rng()});sand.emit(300,400,1200,{spread:7});settle(sand);
  assert.ok(sand.stats().maxMoundHeight>5);assert.equal(sand.stats().freshFree,1200);
  sand.brush({x:270,y:400},{x:330,y:400},160);sand.step(1/60);
- assert.equal(sand.stats().pressedFree,1200);assert.equal(sand.stats().maxMoundHeight,0);
- const before=sand.emitted,heights=sand.z.slice(0,sand.count);settle(sand,180);for(let i=0;i<sand.count;i++)assert.ok(sand.z[i]<=heights[i]+1e-6);assert.equal(sand.stats().maxMoundHeight,0);assert.equal(sand.emitted,before);assert.equal(sand.stats().free,1200);
+ assert.equal(sand.stats().pressedFree,1200);assert.ok(sand.stats().maxMoundHeight>0);
+ const before=sand.emitted,heights=sand.z.slice(0,sand.count);settle(sand,180);for(let i=0;i<sand.count;i++)assert.ok(sand.z[i]<=heights[i]+1e-6);assert.ok(sand.stats().maxMoundHeight<=Math.max(...heights)+1e-5);assert.equal(sand.stats().freshFree,0);assert.equal(sand.emitted,before);assert.equal(sand.stats().free,1200);
 });
 
 test('sub-pixel pointer events do not amplify a twenty-pixel stroke into a large jump',()=>{

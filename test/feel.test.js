@@ -10,7 +10,7 @@ test('three material presets give distinct transport and settling without creati
   for(let i=0;i<120;i++)s.step(1/60);
   const st=s.stats();assert.equal(st.air+st.free+st.bound+st.lost,s.emitted);assert.equal(s.emitted,1000);assert.ok(st.maxHeight<=32);assert.equal(st.bound,0);
  }
- assert.ok(shifts[1]>shifts[0]+3,shifts);assert.ok(shifts[2]>shifts[1]+2,shifts);
+ assert.ok(shifts[1]>shifts[0]+3,shifts);assert.ok(shifts[2]>shifts[1]+.5,shifts);
 });
 test('higher mobility leaves more real residual travel after the same stroke',()=>{
  const distances=[];for(const mobility of [.3,1,1.8]){

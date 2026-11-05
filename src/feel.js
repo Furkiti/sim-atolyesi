@@ -8,7 +8,7 @@ export const BRUSHES={flat:{radius:34,width:68,depth:26},round:{radius:23,width:
 export function brushRadius(s){return (BRUSHES[s.brushShape]||BRUSHES.flat).radius*(s.brushWidth||1)}
 export function materialResponse(s={}){
  const mobility=s.mobility??1,response=s.response??1;
- return {mobility,response,drag:19-mobility*6,pressure:.45+mobility*.55,repose:6-mobility*1.5,carry:Math.min(.98,.65+response*.25),fan:.08+mobility*.18,inertia:8+mobility*24};
+ return {mobility,response,drag:19-mobility*6,pressure:.45+mobility*.55,repose:6-mobility*1.5,carry:Math.min(1,.72+response*.27),fan:.08+mobility*.18,inertia:8+mobility*24};
 }
 export function feelSettings(current,id){return {...current,...FEELS[id],feel:id}}
 export function pourFraction(t,style='fan'){
