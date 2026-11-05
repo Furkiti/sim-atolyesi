@@ -1,5 +1,5 @@
-import {readFileSync,writeFileSync} from 'node:fs';import {PNG} from 'pngjs';import {levels} from '../src/levels.js';
-const stages=levels.flatMap(l=>l.stages);
+import {readFileSync,writeFileSync} from 'node:fs';import {PNG} from 'pngjs';import {levelCatalog} from '../src/levels.js';
+const stages=levelCatalog.flatMap(l=>l.stages);
 const W=600,H=800,result={};
 for(const stage of stages){
  const {data}=PNG.sync.read(readFileSync(new URL(`../assets/${stage.id}.png`,import.meta.url))),labels=new Int32Array(W*H),queue=new Int32Array(W*H),components=[];
