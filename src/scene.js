@@ -1,3 +1,4 @@
+import {paperExit,exitVelocity} from './spill.js';
 import * as T from 'three';
 import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
 import {peelPoint} from './peel.js';
@@ -29,7 +30,7 @@ export class AtelierScene {
   this.key.shadow.mapSize.set(1536,1536);Object.assign(this.key.shadow.camera,{left:-600,right:600,top:700,bottom:-650,near:1,far:1800});this.key.shadow.bias=-.00008;this.key.shadow.normalBias=.15;this.key.shadow.radius=3;this.scene.add(this.key);
   this.fill=new T.DirectionalLight('#b9d4ff',.8);this.fill.position.set(500,-200,400);this.scene.add(this.fill);
   const floorTex=noiseTexture();floorTex.wrapS=floorTex.wrapT=T.RepeatWrapping;floorTex.repeat.set(4,4);
-  const floor=new T.Mesh(new T.PlaneGeometry(2400,2400),new T.MeshStandardMaterial({map:floorTex,bumpMap:floorTex,bumpScale:.8,roughness:.94,color:'#d9ddda'}));floor.position.z=-8;floor.receiveShadow=true;this.scene.add(floor);
+  const floor=new T.Mesh(new T.PlaneGeometry(2400,2400),new T.MeshStandardMaterial({map:floorTex,bumpMap:floorTex,bumpScale:.8,roughness:.94,color:'#d9ddda',depthWrite:false}));floor.position.z=-8;floor.receiveShadow=true;this.scene.add(floor);
   this.paperGroup=new T.Group();this.paperGroup.rotation.z=.018;this.scene.add(this.paperGroup);
   const edge=new T.Mesh(new T.BoxGeometry(W,H,3.2,30,40,1),new T.MeshStandardMaterial({color:'#d6c68b',roughness:.85}));edge.castShadow=true;edge.receiveShadow=true;this.paperGroup.add(edge);this.edge=edge;this.edgeBase=edge.geometry.attributes.position.array.slice();
   this.paperTexture=new T.CanvasTexture(paperCanvas);this.paperTexture.colorSpace=T.SRGBColorSpace;this.paperTexture.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());
@@ -63,7 +64,7 @@ export class AtelierScene {
    this.shaders.push(shader);
   };
   this.current=this.makeGrains(48000);this.savedCount=0;this.currentInitialized=0;
-  this.spill=this.makeGrains(48000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=false;this.spill.material.depthWrite=false;this.spill.renderOrder=20;this.spills=[];this.spillObject=new T.Object3D();
+  this.spill=this.makeGrains(48000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=true;this.spill.material.depthWrite=true;this.spills=[];this.spillObject=new T.Object3D();
   this.coatMask=new T.CanvasTexture(document.createElement('canvas'));this.coatUniforms.uCoat.value=this.coatMask;
   this.heapTexture=canvasTexture((c,s)=>{c.fillStyle='#898989';c.fillRect(0,0,s,s);for(let i=0;i<18000;i++){const g=Math.random()*255|0;c.fillStyle=`rgb(${g},${g},${g})`;c.fillRect(Math.random()*s,Math.random()*s,1,1)}},128);this.heapTexture.wrapS=this.heapTexture.wrapT=T.RepeatWrapping;this.heapTexture.repeat.set(11,15);
   this.heapGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);
@@ -215,7 +216,7 @@ export class AtelierScene {
   const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,seeds=this.current.geometry.attributes.flakeSeed,color=new T.Color(this.colors[this.activeColor]);let out=0;
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
-   const j=out*16,seed=sand.seed[i],angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*(this.settings?.grainSize||1);
+   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*(this.settings?.grainSize||1)*(sand.granular?.86:1);
    let px=sand.x[i]-300,py=400-sand.y[i],pz=3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]);
    if(this.bend||this.pitch){const point=bentPoint(px,py,pz,this.bend,this.pitch);px=point.x;py=point.y;pz=point.z;}
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
@@ -235,7 +236,7 @@ export class AtelierScene {
    const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend,this.pitch);p.setXYZ(vertex,q.x,q.y,q.z);
    if(this.heapShadowGeo){const shadow=bentPoint(Math.min(300,col/cols*W-300+height*.14),Math.max(-400,400-row/rows*H-height*.32),4.5,this.bend,this.pitch);this.heapShadowGeo.attributes.position.setXYZ(vertex,shadow.x,shadow.y,shadow.z);this.heapShadowGeo.attributes.heapAmount.setX(vertex,height);}
   }
-  p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.heapShadowGeo){this.heapShadowGeo.attributes.position.needsUpdate=true;this.heapShadowGeo.attributes.heapAmount.needsUpdate=true;}if(this.renderTick++%4===0)this.heapGeo.computeVertexNormals();
+  p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.heapShadowGeo){this.heapShadowGeo.attributes.position.needsUpdate=true;this.heapShadowGeo.attributes.heapAmount.needsUpdate=true;}if(this.heap?.visible!==false&&this.renderTick++%4===0)this.heapGeo.computeVertexNormals();
  }
  updateBend(amount,pitch=amount*.58){
   if(amount<=1e-6)amount=0;
@@ -248,16 +249,23 @@ export class AtelierScene {
    p.needsUpdate=true;mesh.geometry.computeVertexNormals();
   }
  }
+ setCardPose(paperPose,phase,bendPose){
+  this.updateBend(bendPose.bend,bendPose.pitch);
+  this.paperGroup.rotation.x=phase==='shake'?0:paperPose.y;this.paperGroup.rotation.y=phase==='shake'?0:paperPose.x;this.paperGroup.position.z=phase==='shake'?0:paperLift(paperPose);this.paperGroup.updateMatrixWorld(true);
+ }
  setCoatMask(canvas){this.coatMask.image=canvas;this.coatMask.needsUpdate=true;}
  preserve(sand){this.collectSpill(sand);}
  collectSpill(sand,outsideOnly=false){
   this.paperGroup.updateMatrixWorld(true);const color=new T.Color(this.colors[this.activeColor]);
   for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<48000){
    if(outsideOnly&&(sand.state[i]!==FREE||sand.cell(sand.x[i],sand.y[i])>=0))continue;
-   const q=bentPoint(sand.x[i]-300,400-(this.draining?Math.min(800,sand.y[i]):sand.y[i]),3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
-   const speed=this.draining?surfaceVelocity(sand.x[i]-300,sand.vx[i],Math.max(180,sand.vy[i]),this.bend,this.pitch):{x:sand.vx[i],y:-sand.vy[i],z:Math.min(-15,sand.vz[i])};
+   const outside=sand.cell(sand.x[i],sand.y[i])<0,exit=outside?paperExit(sand.previousX[i],sand.previousY[i],sand.x[i],sand.y[i]):null;
+   const x=exit?exit.x+exit.nx*2:sand.x[i],y=exit?exit.y+exit.ny*2:sand.y[i];
+   const q=bentPoint(x-300,400-y,3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
+   const tangent=exit?exitVelocity(exit,sand.vx[i],sand.vy[i],this.draining):{vx:sand.vx[i],vy:sand.vy[i]};
+   const speed=surfaceVelocity(x-300,tangent.vx,tangent.vy,this.bend,this.pitch);speed.z+=Math.min(-15,sand.vz[i]);
    const velocity=new T.Vector3(speed.x,speed.y,speed.z).applyQuaternion(this.paperGroup.quaternion);
-   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],color});sand.state[i]=LOST;sand.lost++;
+   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],edge:exit?.edge,color});sand.state[i]=LOST;sand.lost++;
   }
  }
  beginCleanup(){this.draining=true;this.collectedCount=0;this.collected.count=0;this.trayBins.fill(0);}
@@ -286,7 +294,7 @@ export class AtelierScene {
    const caught=stepFalling(p,dt,this.boxMotion>.95?this.collectorBox:NO_BOX);
    if(caught){this.catchGrain(p);continue;}
    projected.set(p.x,p.y,p.z).project(this.camera);
-   if(projected.y < -1.15 || Math.abs(projected.x)>1.3 || projected.z>1)continue;
+   if(projected.y > 1.3 || projected.y < -1.15 || Math.abs(projected.x)>1.3 || projected.z>1)continue;
    object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar(1.8+p.seed);object.updateMatrix();
    this.spill.setMatrixAt(out,object.matrix);this.spill.setColorAt(out,p.color);this.spills[out++]=p;
   }
@@ -311,16 +319,14 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,finished=false}){
-  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:0};this.updateBend(pose.bend,pose.pitch);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
+  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:0};this.setCardPose(paperPose,phase,pose);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
   const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
-  this.heap.visible=showHeap;this.heapShadow.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
+  this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=sand.granular?.10:.23;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;
    this.key.position.y+=((340-(pointer.y-400)*.25)-this.key.position.y)*.045;
   }
   this.sparkLight.set(this.key.position.x*.0015,this.key.position.y*.0015,1).normalize();
-  this.paperGroup.rotation.x=phase==='shake'?0:paperPose.y;this.paperGroup.rotation.y=phase==='shake'?0:paperPose.x;this.paperGroup.position.z=phase==='shake'?0:paperLift(paperPose);
-  this.paperGroup.updateMatrixWorld(true);
   if(paperHeld&&phase==='brush')for(let i=0;i<2;i++){const q=bentPoint(i?300:-300,0,5,this.bend,this.pitch),hand=this.hands[i];hand.visible=true;hand.position.copy(this.paperGroup.localToWorld(new T.Vector3(q.x+(i?8:-8),q.y,q.z)));hand.rotation.y=(i?-1:1)*this.bend*.7;}
   this.brush.visible=showBrush&&phase==='brush'&&pointer.visible&&!finished;this.tweezers.visible=phase==='rolling';this.hint.visible=phase==='peel';
   if(phase==='peel'){this.hint.position.set(this.peelAnchor.x-300,400-this.peelAnchor.y,12);this.hint.material.opacity=.65+.25*Math.sin(time*.004);}

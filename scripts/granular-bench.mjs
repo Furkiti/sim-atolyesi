@@ -1,0 +1,12 @@
+import {Sand,FREE,LOST} from '../src/sand.js';import {levels} from '../src/levels.js';import {supplyPlan,supplyPose,supplyDose,supplyQuota} from '../src/supply.js';import {piecesByStage} from '../src/peel-pieces.js';import {DEFAULTS} from '../src/settings.js';import {PNG} from 'pngjs';import {readFileSync} from 'node:fs';
+function rng(){let seed=271;return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}}
+function stats(a){const mean=a.reduce((x,y)=>x+y,0)/a.length;return{mean,sd:Math.sqrt(a.reduce((v,x)=>v+(x-mean)**2,0)/a.length)}}
+const s=new Sand({random:rng()});s.emit(300,350,6000,{spread:38,height:0,fan:0});s.state.fill(FREE);for(let i=0;i<s.count;i++){s.z[i]=2+s.seed[i]*25;s.vx[i]=s.vy[i]=0;}for(let f=0;f<60;f++)s.step(1/60,{contactAdhesion:true});
+const before=s.x.slice(0,s.count),ys=s.y.slice(0,s.count),core=[];for(let i=0;i<s.count;i++)if(Math.abs(before[i]-300)<12&&Math.abs(ys[i]-350)<12)core.push(i);
+for(let f=0;f<90;f++)s.step(1/60,{contactAdhesion:true,tiltX:.35});
+console.log(JSON.stringify({case:'dense-pile',core:core.length,coreDisplacement:stats(core.map(i=>s.x[i]-before[i])),widthRatio:stats(Array.from(s.x.slice(0,s.count))).sd/stats(Array.from(before)).sd,emitted:s.emitted}));
+const level=levels.find(l=>l.id==='cilekli-kedi'),stage=level.stages[3],data=PNG.sync.read(readFileSync(new URL(`../assets/${stage.id}.png`,import.meta.url))).data,mask=Uint8Array.from({length:480000},(_,i)=>data[i*4+3]>80?1:0),sand=new Sand({random:rng()}),settings={...DEFAULTS,controlMode:'tilt'};sand.setMask(mask);sand.setBehavior(settings);const plan=supplyPlan(stage.pour,mask,sand.bound,sand.targetCount,{...settings,pieces:piecesByStage[stage.id]}),dose=supplyDose(sand.targetCount,settings,sand.capacity);let emitted=0;
+for(let f=0;f<Math.ceil(plan.duration*60);f++){const p=Math.min(1,f/(60*(plan.duration-1))),pose=supplyPose(plan,p),n=Math.floor(dose*supplyQuota(plan,p))-emitted;if(n>0&&pose.flow)emitted+=sand.emit(pose.x,pose.y,n,{spread:4,fan:52,height:139});sand.step(1/60,{granular:true});}
+const path=[[.3,.1],[-.3,.2],[0,-.3],[.25,.35],[-.25,-.25],[0,.35]];
+for(const [x,y] of path)for(let f=0;f<120;f++){sand.step(1/60,{contactAdhesion:true,tiltX:x,tiltY:y});for(let i=0;i<sand.count;i++)if(sand.state[i]===FREE&&sand.cell(sand.x[i],sand.y[i])<0){sand.state[i]=LOST;sand.lost++;}}
+const st=sand.stats();console.log(JSON.stringify({case:'recorded-pink-mask',coverage:st.coverage,bound:st.bound,free:st.free,emitted:sand.emitted,conserved:st.free+st.bound+st.air+st.lost===sand.emitted}));
