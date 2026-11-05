@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as T from 'three';
+import {piecesByStage} from '../src/peel-pieces.js';
 import {AtelierScene} from '../src/scene.js';import {bentPoint,bendAmount} from '../src/interaction.js';import {Sand,FREE,BOUND,COLS,ROWS} from '../src/sand.js';
 const mesh=()=>new T.Mesh(new T.PlaneGeometry(600,800,2,2),new T.MeshBasicMaterial());
 function card(){const paper=mesh(),edge=mesh();return {paper,edge,paperBase:paper.geometry.attributes.position.array.slice(),edgeBase:edge.geometry.attributes.position.array.slice(),bend:0};}
@@ -31,4 +32,17 @@ test('fresh heaps settle smoothly but removed material leaves no phantom heap',(
  const scene={heapGeo,bend:0,renderTick:0},sand=new Sand();sand.moundHeight.fill(20);
  AtelierScene.prototype.updateHeap.call(scene,sand,1/60);const before=heapGeo.attributes.heapAmount.getX(0);assert.ok(before>0&&before<16);
  sand.moundHeight.fill(5);AtelierScene.prototype.updateHeap.call(scene,sand,1/60);const after=heapGeo.attributes.heapAmount.getX(0);assert.ok(after>0&&after<before);sand.moundHeight.fill(0);AtelierScene.prototype.updateHeap.call(scene,sand,1/60);assert.equal(heapGeo.attributes.heapAmount.getX(0),0);
+});
+
+
+test('a flat attached peel sheet is hidden until its grip lifts; lifted clipping uses a signed distance',()=>{
+ const piece=piecesByStage.blue[0],b=piece.bounds,geometry=new T.PlaneGeometry(b.w,b.h,8,8);geometry.setAttribute('peelLift',new T.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count),1));
+ const scene={peelPiece:piece,peelGeo:geometry,peelSheet:{visible:true},peelSegments:{x:8,y:8}};
+ for(const p of [0,.05,.12,.19,.2]){AtelierScene.prototype.peelProgress.call(scene,p);assert.equal(scene.peelSheet.visible,false);}
+ AtelierScene.prototype.peelProgress.call(scene,.35);assert.equal(scene.peelSheet.visible,true);const distances=geometry.attributes.peelLift.array;assert.ok(Math.min(...distances)<0);assert.ok(Math.max(...distances)>0);AtelierScene.prototype.peelProgress.call(scene,1);assert.equal(scene.peelSheet.visible,false);
+});
+
+test('contact sheen timestamps only newly coated cells and does not relight old coating',()=>{
+ const scene={time:1000,contactData:new Uint8Array(16),contactSeen:new Uint8Array(4),contactTexture:{needsUpdate:false}},bound=new Uint8Array([0,1,0,0]);
+ AtelierScene.prototype.markContacts.call(scene,bound);assert.equal(scene.contactData[4],255);assert.equal(scene.contactData[5],60);assert.equal(scene.contactData[0],0);scene.time=5000;bound[3]=1;AtelierScene.prototype.markContacts.call(scene,bound);assert.equal(scene.contactData[5],60);assert.equal(scene.contactData[13],44);assert.equal(scene.contactData[14],1);
 });

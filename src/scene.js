@@ -1,7 +1,7 @@
 import {paperExit,exitVelocity} from './spill.js';
 import * as T from 'three';
 import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
-import {peelPoint} from './peel.js';
+import {peelFront,peelPoint} from './peel.js';
 import {TRAY,stepFalling} from './collector.js';
 import {paperLift} from './paper-motion.js';
 import {BRUSHES} from './feel.js';
@@ -37,16 +37,23 @@ export class AtelierScene {
   const surfaceGeo=new T.PlaneGeometry(W,H,30,40),pp=surfaceGeo.attributes.position;
   for(let i=0;i<pp.count;i++){const x=pp.getX(i),y=pp.getY(i),edge=Math.max(Math.abs(x)/300,Math.abs(y)/400);pp.setZ(i,2.8+Math.pow(edge,14)*1.5+Math.sin(x*.013+y*.006)*.12)}surfaceGeo.computeVertexNormals();
   this.paper=new T.Mesh(surfaceGeo,new T.MeshBasicMaterial({map:this.paperTexture,color:'#ffffff',toneMapped:false}));this.paper.receiveShadow=true;this.paperGroup.add(this.paper);this.paperBase=pp.array.slice();this.bend=0;this.pitch=0;
-  this.coatUniforms={uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null}};
+  this.contactData=new Uint8Array(COLS*ROWS*4);this.contactSeen=new Uint8Array(COLS*ROWS);this.contactTexture=new T.DataTexture(this.contactData,COLS,ROWS);this.contactTexture.magFilter=T.NearestFilter;this.contactTexture.minFilter=T.NearestFilter;this.contactTexture.needsUpdate=true;
+  this.coatUniforms={uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null}};
   this.paper.material.onBeforeCompile=shader=>{
    Object.assign(shader.uniforms,this.coatUniforms);
-   shader.fragmentShader='uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat;\n'+shader.fragmentShader;
+   shader.fragmentShader='uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
     vec2 cell=floor(vMapUv*vec2(600.0,800.0));
     float rnd=fract(sin(dot(cell,vec2(127.1,311.7)))*43758.5453);
     float flicker=pow(max(0.0,sin(uTime*1.4+rnd*197.0)),32.0);
     float coat=texture2D(uCoat,vMapUv).a;
-    gl_FragColor.rgb+=coat*uSparkle*step(.986,rnd)*flicker*.65;`);
+    gl_FragColor.rgb+=coat*uSparkle*step(.986,rnd)*flicker*.65;
+    vec4 contact=texture2D(uContact,vec2(vMapUv.x,1.0-vMapUv.y));
+    float birth=floor(contact.g*255.0+.5)+floor(contact.b*255.0+.5)*256.0;
+    float age=mod(uTime*60.0-birth+65536.0,65536.0);
+    float seated=contact.r*(1.0-smoothstep(0.0,19.0,age))*coat*uSparkle;
+    // Brief, faceted seating sheen, confined to newly coated mask pixels.
+    gl_FragColor.rgb+=seated*(.035+step(.73,rnd)*.14)*vec3(1.0,.93,.76);`);
   };
   this.shaders=[];this.sparkLight=new T.Vector3(-.35,.45,1);
   this.grainMaterial=new T.MeshStandardMaterial({color:'#ffffff',metalness:.95,roughness:.43,envMapIntensity:.5,side:T.DoubleSide});
@@ -78,6 +85,8 @@ export class AtelierScene {
   this.heapShadow=new T.Mesh(this.heapShadowGeo,shadowMat);this.heapShadow.frustumCulled=false;this.paperGroup.add(this.heapShadow);
   this.peelGeo=new T.PlaneGeometry(W,H,24,160);
   this.peelSheet=new T.Mesh(this.peelGeo,new T.MeshStandardMaterial({color:'#fff2b2',roughness:.8,transparent:true,alphaTest:.08,side:T.DoubleSide}));
+  const clipAttached=shader=>{shader.vertexShader='attribute float peelLift; varying float vPeelLift;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvPeelLift=peelLift;');shader.fragmentShader='varying float vPeelLift;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vPeelLift<.35) discard;');};
+  this.peelSheet.material.onBeforeCompile=clipAttached;this.peelSheet.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking,side:T.DoubleSide});this.peelSheet.customDepthMaterial.onBeforeCompile=clipAttached;
   this.peelSheet.frustumCulled=false;this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
   this.makeBrush();this.makeTweezers();this.makeGlints();this.makeJars();this.makeCollector();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
   this.desiredBrush={x:130,y:250,angle:-.72,contact:false,visible:false};this.brushPoint={x:130,y:250};this.pourPoint={x:140,y:180};this.autoPour=false;
@@ -206,7 +215,7 @@ export class AtelierScene {
   return{x:this.hit.x+300,y:400-this.hit.y};
  }
 
- setStage(index){this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.heapShadow.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
+ setStage(index){this.contactData.fill(0);this.contactSeen.fill(0);this.contactTexture.needsUpdate=true;this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.heapShadow.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
  initInstance(mesh,i,seed,color){
   const mat=new T.Matrix4(),q=new T.Quaternion().setFromEuler(new T.Euler((seed*17%1-.5)*1.3,(seed*31%1-.5)*1.3,seed*79)),scale=1.15+(seed*197%1)*.9;
   mat.compose(new T.Vector3(0,0,-1000),q,new T.Vector3(scale,scale,scale));mesh.instanceMatrix.array.set(mat.elements,i*16);
@@ -252,6 +261,11 @@ export class AtelierScene {
  setCardPose(paperPose,phase,bendPose){
   this.updateBend(bendPose.bend,bendPose.pitch);
   this.paperGroup.rotation.x=phase==='shake'?0:paperPose.y;this.paperGroup.rotation.y=phase==='shake'?0:paperPose.x;this.paperGroup.position.z=phase==='shake'?0:paperLift(paperPose);this.paperGroup.updateMatrixWorld(true);
+ }
+ markContacts(bound){
+  const frame=Math.floor((this.time||0)*.06)%65536;let changed=false;
+  for(let k=0;k<bound.length;k++)if(bound[k]&&!this.contactSeen[k]){this.contactSeen[k]=1;const i=k*4;this.contactData[i]=255;this.contactData[i+1]=frame%256;this.contactData[i+2]=Math.floor(frame/256);this.contactData[i+3]=255;changed=true;}
+  if(changed)this.contactTexture.needsUpdate=true;
  }
  setCoatMask(canvas){this.coatMask.image=canvas;this.coatMask.needsUpdate=true;}
  preserve(sand){this.collectSpill(sand);}
@@ -310,16 +324,16 @@ export class AtelierScene {
   this.peelPiece=piece;this.peelAnchor=piece.grip;
   const {w,h}=piece.bounds,step=this.settings.profile==='economy'?14:10;
   this.peelSegments={x:Math.max(4,Math.ceil(w/step)),y:Math.max(4,Math.ceil(h/step))};
-  this.peelGeo.dispose();this.peelGeo=new T.PlaneGeometry(w,h,this.peelSegments.x,this.peelSegments.y);this.peelSheet.geometry=this.peelGeo;
-  this.peelSheet.material.map?.dispose();this.peelSheet.material.map=new T.CanvasTexture(image);this.peelSheet.material.map.colorSpace=T.SRGBColorSpace;this.peelSheet.material.color.set('#ffffff');this.peelSheet.material.needsUpdate=true;this.peelProgress(0);
+  this.peelGeo.dispose();this.peelGeo=new T.PlaneGeometry(w,h,this.peelSegments.x,this.peelSegments.y);this.peelSheet.geometry=this.peelGeo;this.peelGeo.setAttribute('peelLift',new T.Float32BufferAttribute(new Float32Array(this.peelGeo.attributes.position.count),1));
+  this.peelSheet.material.map?.dispose();this.peelSheet.material.map=new T.CanvasTexture(image);this.peelSheet.material.map.colorSpace=T.SRGBColorSpace;this.peelSheet.customDepthMaterial.map=this.peelSheet.material.map;this.peelSheet.customDepthMaterial.alphaTest=.08;this.peelSheet.customDepthMaterial.needsUpdate=true;this.peelSheet.material.color.set('#ffffff');this.peelSheet.material.needsUpdate=true;this.peelProgress(0);
  }
  peelProgress(progress){
   this.peelValue=progress;if(!this.peelPiece)return;
-  this.peelSheet.visible=progress>.12&&progress<1;const p=this.peelGeo.attributes.position,{x:nx,y:ny}=this.peelSegments,b=this.peelPiece.bounds;
+  this.peelSheet.visible=progress>.2&&progress<1;const p=this.peelGeo.attributes.position,lift=this.peelGeo.attributes.peelLift,front=peelFront(this.peelPiece,progress),{x:nx,y:ny}=this.peelSegments,b=this.peelPiece.bounds;
   for(let row=0;row<=ny;row++)for(let col=0;col<=nx;col++){
-   const q=peelPoint(this.peelPiece,b.x+col/nx*b.w,b.y+row/ny*b.h,progress);p.setXYZ(row*(nx+1)+col,q.x,q.y,q.z);
+   const x=b.x+col/nx*b.w,y=b.y+row/ny*b.h,q=peelPoint(this.peelPiece,x,y,progress),i=row*(nx+1)+col;const along=(x-this.peelPiece.grip.x)*this.peelPiece.axis.x+(y-this.peelPiece.grip.y)*this.peelPiece.axis.y;lift.setX(i,front-along);p.setXYZ(i,q.x,q.y,q.z);
   }
-  p.needsUpdate=true;this.peelGeo.computeVertexNormals();
+  p.needsUpdate=true;lift.needsUpdate=true;this.peelGeo.computeVertexNormals();
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,finished=false}){

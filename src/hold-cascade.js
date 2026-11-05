@@ -1,9 +1,10 @@
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS} from './sand.js';
+const REST_POCKETS=[{x:105,y:205,rx:38,ry:21},{x:470,y:340,rx:34,ry:20},{x:265,y:515,rx:46,ry:24},{x:425,y:675,rx:32,ry:18}];
 // Directed material choreography for the hold interaction. Each coating cell
 // consumes an actual packet that travels from the top reservoir to that cell.
 export class HoldCascade {
  constructor(sand,settings={}){
-  this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();
+  this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.retainedIndices=[];
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
@@ -18,6 +19,9 @@ export class HoldCascade {
   const desired=Math.floor(Math.max(0,Math.min(1,progress))*this.routes.length),s=this.sand;
   while(this.emitted<desired){const route=this.routes[this.emitted++],i=s.count;if(!s.emit(route.x,22,1,{spread:0,height,fan:0}))break;
    const seed=s.seed[i];route.i=i;route.startY=route.target?Math.max(.02,Math.min(route.y-.2,2+seed*27)):2+seed*28;
+   if(!route.target&&seed*173%1<.65){const pocket=REST_POCKETS.find(p=>Math.abs(route.x-p.x)<p.rx);
+    if(pocket){const nx=(route.x-pocket.x)/pocket.rx,ny=(seed*137%1-.5)*2*Math.sqrt(Math.max(0,1-nx*nx));route.rest={x:route.x,y:pocket.y+ny*pocket.ry,z:3+(1-nx*nx-ny*ny)*13*(.25+seed*.75)};}
+   }
    route.delay=(seed*97%1)*1.1;route.speed=105+(seed*197%1)*43;route.distance=0;
    s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.byParticle.set(i,route);
   }
@@ -29,6 +33,12 @@ export class HoldCascade {
    const i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST)continue;
    if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+(s.seed[i]*127%1)*25*this.depth/1.25;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;}continue;}
    s.previousX[i]=s.x[i];s.previousY[i]=s.y[i];s.vx[i]=s.vy[i]=0;if(!held)continue;
+   if(route.parked){s.z[i]+=(route.rest.z*this.depth/1.25-s.z[i])*Math.min(1,dt*14);continue;}
+   if(route.landing!==undefined){
+    route.landing+=dt;const progress=Math.min(1,route.landing/.18),ease=progress*progress*(3-2*progress);
+    s.z[i]=route.contactZ+(2.2-route.contactZ)*ease;s.roll[i]+=dt*2;
+    if(progress===1){s.z[i]=2.2;s.bind(i,true);}continue;
+   }
    const travel=route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0)continue;
    const old=s.y[i],next=old+travel;route.distance+=travel;
    // A dense rolling front becomes a thinner trail. The motion is tied only to
@@ -36,12 +46,14 @@ export class HoldCascade {
    s.z[i]=2.2+(s.seed[i]*127%1)*(4+23*Math.exp(-route.distance/300))*this.depth/1.25;
    s.x[i]=route.x+(route.target?0:Math.sin(route.distance*.035+s.seed[i]*31)*2.2);
    s.x[i]=Math.max(.2,Math.min(W-.2,s.x[i]));s.y[i]=next;s.vy[i]=route.speed;s.roll[i]+=travel*.075;
-   if(route.target&&old<=route.y&&next>=route.y){s.x[i]=route.x;s.y[i]=route.y;s.z[i]=2.2;if(s.bind(i,true))continue;s.y[i]=next;}
+   if(route.rest&&next>=route.rest.y){s.x[i]=route.rest.x;s.y[i]=route.rest.y;s.vy[i]=0;route.parked=true;this.retainedIndices.push(i);continue;}
+   if(route.target&&old<=route.y&&next>=route.y){s.x[i]=route.x;s.y[i]=route.y;s.vy[i]=0;route.contactZ=s.z[i];s.z[i]=route.contactZ;route.landing=0;}
   }
   // Reuse the existing density/height representation without advancing its
   // independent physics solver. Painting is exclusively the travelling packets.
   s.step(0,{granular:true,refreshOnly:true});
  }
+ get retainedCount(){let count=0;for(const i of this.retainedIndices)if(this.sand.state[i]===FREE)count++;return count;}
  get pose(){return {x:0,y:0,cup:this.press*.38,pitch:this.press*.34};}
  get front(){return Math.min(H,this.elapsed*125);}
 }
