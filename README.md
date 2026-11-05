@@ -1,16 +1,18 @@
+> v22: [Yeni giriş ve ana basılı tut modu](docs/v22-entry-and-hold.md). Tabloya dokunarak gir; ayarlarda **Tabloya giriş → Doğrudan** seç. Varsayılan: hedef genişliği / %500 yoğunluk / %170 boyut / son dokunuş kapalı. %90 üstünde parmağı bırakmadan tamamlanır.
+
 > v21: Sırayla açılan sergi, kısa swipe, üç döküş yerleşimi, otomatik/küçük parçalarda hızlı soyma, huni–kavanoz ve isteğe bağlı son dokunuş. [Güncel notlar](docs/v21-feel-and-gallery.md).
 
 > v20: Sade stüdyo, ekran dışından gelen tek kap, kaydırılabilir altı eserlik sergi ve aynı WebGL sahnesinde tabloya girerek bölüm geçişi. [Araştırma ve teknik notlar](docs/v20-ui-references.md) · [Üç UI yönü](docs/v20-reference-board.html).
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=21&mod=basili)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=22&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
 **Claude ile devam:** önce [CLAUDE.md](CLAUDE.md), ardından [ayrıntılı devir belgesi](docs/CLAUDE_HANDOFF.md). Kayıt noktası: `v19-handoff`.
 
-Kâğıda bir kez dokun: cımbız bir kenarı tutar ve sarı parçayı yavaşça kıvırarak soyar. Aynı rengin ayrı parçaları sırayla açılır; örneğin mavi, üç ayrı parçadır. Kontrastlı, taralı yapışkan tek tek ortaya çıkar. Raftaki şişe boyanacak alanın biraz üstüne sim bırakır. Dudak gibi küçük ayrıntılara daha küçük bir doz dökülür. Parmağını yığından başlatıp simi eksik alanlara taşı. Fırça modunda sadece dökmek alanı boyamaz; simin yapışması için fırçanın tanelere temas etmesi gerekir. Boş fırça boya oluşturmaz. Fırçalanan sim incelip yanlara yayılır; parmak kalkınca yeniden dolu bir yığın gibi şişmez. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
+Fırça modu (ana basılı tut modu yukarıda): Cımbız otomatik başlar, bir kenarı tutar ve sarı parçayı yavaşça kıvırarak soyar. Aynı rengin ayrı parçaları sırayla açılır; örneğin mavi, üç ayrı parçadır. Kontrastlı, taralı yapışkan tek tek ortaya çıkar. Raftaki şişe boyanacak alanın biraz üstüne sim bırakır. Dudak gibi küçük ayrıntılara daha küçük bir doz dökülür. Parmağını yığından başlatıp simi eksik alanlara taşı. Fırça modunda sadece dökmek alanı boyamaz; simin yapışması için fırçanın tanelere temas etmesi gerekir. Boş fırça boya oluşturmaz. Fırçalanan sim incelip yanlara yayılır; parmak kalkınca yeniden dolu bir yığın gibi şişmez. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
 
 Kaplanan alan, aralıksız ve doygun bir sim yüzeyi olur. On bir renkle Batman/Joker çiziminin tamamı ve kırmızı arka plan boyanabilir. Renk tamamlanınca **Akış** düzeni kâğıdın iki yanını tutup oluk gibi büker. Fazlalıklar ortada toplanır ve aşağıdaki kutuya yerçekimiyle düşer; son tane boşalmadan kâğıt geri açılmaz. Ardından sıradaki rengi açar. **Kenar** ve **Şerit** düzenlerinde geçişi sen yönetebilirsin. Düşen parçalar ekran dışına çıkana kadar çizilir.
 

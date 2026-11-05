@@ -1,3 +1,4 @@
+import {exitOpacity,FINISH_DUST_SCALE} from './spill-appearance.js';
 const MAX_RENDER_GRAINS=128000;
 const grainScale=settings=>settings?.controlMode==='hold'?(settings.holdGrainSize||1):(settings?.grainSize||1);
 import {paperExit,exitVelocity} from './spill.js';
@@ -7,7 +8,7 @@ import {peelFront,peelPoint} from './peel.js';
 import {FUNNEL,stepFunnel} from './funnel.js';
 import {paperLift} from './paper-motion.js';
 import {completionLayout,completionEase,galleryCamera,GALLERY} from './completion.js';
-import {galleryOffset,entryProgress} from './exhibition.js';
+import {entryZoomDistance,entryFrameOpacity,galleryOffset,entryProgress} from './exhibition.js';
 import {BRUSHES} from './feel.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS,MAX_HEAP_HEIGHT,MAX_GRAIN_HEIGHT} from './sand.js';
@@ -109,7 +110,11 @@ export class AtelierScene {
    shader.vertexShader=shader.vertexShader.replace('#include <worldpos_vertex>',T.ShaderChunk.worldpos_vertex.replace('worldPosition = instanceMatrix * worldPosition;','worldPosition = instanceMatrix * worldPosition; worldPosition.xyz += surfaceOffset(instanceMatrix[3].xyz);'));
   };
   this.savedCount=0;this.currentInitialized=0;
-  this.spill=this.makeGrains(48000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=true;this.spill.material.depthWrite=true;this.spills=[];this.spillObject=new T.Object3D();
+  this.spill=this.makeGrains(48000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=true;this.spill.material.depthWrite=false;this.spill.material.transparent=true;
+  this.spill.material.customProgramCacheKey=()=> 'soft-spill-v22';this.spill.material.onBeforeCompile=shader=>{
+   this.grainMaterial.onBeforeCompile(shader);shader.vertexShader='attribute float grainOpacity; varying float vGrainOpacity;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvGrainOpacity=grainOpacity;');
+   shader.fragmentShader='varying float vGrainOpacity;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','diffuseColor.a*=vGrainOpacity;\n#include <opaque_fragment>');
+  };this.spills=[];this.spillObject=new T.Object3D();
   this.coatMask=new T.CanvasTexture(document.createElement('canvas'));this.coatUniforms.uCoat.value=this.coatMask;
   this.heapTexture=canvasTexture((c,s)=>{c.fillStyle='#898989';c.fillRect(0,0,s,s);for(let i=0;i<18000;i++){const g=Math.random()*255|0;c.fillStyle=`rgb(${g},${g},${g})`;c.fillRect(Math.random()*s,Math.random()*s,1,1)}},128);this.heapTexture.wrapS=this.heapTexture.wrapT=T.RepeatWrapping;this.heapTexture.repeat.set(11,15);
   this.heapGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);
@@ -132,7 +137,7 @@ export class AtelierScene {
  }
  makeGrains(capacity){
   const g=flakeGeometry(),seeds=new Float32Array(capacity);for(let i=0;i<capacity;i++)seeds[i]=((i*16807)%2147483647)/2147483647;
-  g.setAttribute('flakeSeed',new T.InstancedBufferAttribute(seeds,1));
+  g.setAttribute('flakeSeed',new T.InstancedBufferAttribute(seeds,1));g.setAttribute('grainOpacity',new T.InstancedBufferAttribute(new Float32Array(capacity).fill(1),1));
   const m=new T.InstancedMesh(g,this.grainMaterial,capacity);m.instanceMatrix.setUsage(T.DynamicDrawUsage);m.instanceColor=new T.InstancedBufferAttribute(new Float32Array(capacity*3),3);m.frustumCulled=false;m.count=0;this.paperGroup.add(m);return m;
  }
  ensureGrainCapacity(name,required){
@@ -183,7 +188,7 @@ export class AtelierScene {
  }
  makeTweezers(){
   this.tweezers=new T.Group();this.paperGroup.add(this.tweezers);this.tweezers.visible=false;
-  const metal=new T.MeshStandardMaterial({color:'#c8d4d7',roughness:.29,metalness:.82}),outline=new T.MeshBasicMaterial({color:'#263e48',side:T.BackSide}),grip=new T.MeshStandardMaterial({color:'#425b63',roughness:.7});
+  const metal=new T.MeshStandardMaterial({color:'#c8d4d7',roughness:.29,metalness:.82}),outline=new T.MeshBasicMaterial({color:'#263e48',side:T.BackSide}),grip=new T.MeshStandardMaterial({color:'#bd735f',roughness:.7});
   for(const side of [-1,1]){
    const arm=new T.Group();arm.position.set(side*6,-60,25);arm.rotation.z=side*.075;arm.rotation.x=.16;this.tweezers.add(arm);
    const body=new T.Mesh(new T.BoxGeometry(6.2,130,5),metal);body.castShadow=true;arm.add(body);
@@ -195,14 +200,15 @@ export class AtelierScene {
  makeCollector(){
   this.boxGroup=new T.Group();this.boxGroup.position.set(0,FUNNEL.centerY,0);this.boxGroup.visible=false;this.scene.add(this.boxGroup);this.boxMotion=0;this.collectorBox={...FUNNEL};this.collectedCount=0;this.collectedDust=new Uint8Array(JAR_SAMPLES);this.trayBins=new Uint16Array(28*22);
   this.funnelBody=new T.Group();this.funnelBody.rotation.x=-FUNNEL.tilt;this.funnelBody.position.z=FUNNEL.rim;this.boxGroup.add(this.funnelBody);
-  const shell=new T.MeshStandardMaterial({color:'#aeb8a4',metalness:.38,roughness:.34,side:T.DoubleSide});
-  const cone=new T.CylinderGeometry(FUNNEL.radius,FUNNEL.throat,FUNNEL.length,64,1,true);cone.rotateX(Math.PI/2);cone.translate(0,0,-FUNNEL.length/2);
+  const profile=[[22,-125],[23,-111],[29,-101],[46,-83],[74,-55],[104,-27],[129,-5],[136,1],[135,7],[131,10],[126,6],[126,0],[108,-21],[78,-50],[48,-80],[24,-104],[18,-113],[18,-125],[22,-125]];
+  const curve=new T.CatmullRomCurve3(profile.map(([r,z])=>new T.Vector3(r,z,0))),cone=new T.LatheGeometry(curve.getPoints(64).map(p=>new T.Vector2(p.x,p.y)),64),colours=[];
+  const mint=new T.Color('#a8cfbd'),cream=new T.Color('#f1e4c9'),positions=cone.attributes.position;
+  for(let i=0;i<positions.count;i++){const c=mint.clone().lerp(cream,smooth((positions.getY(i)+5)/13));colours.push(c.r,c.g,c.b);}cone.setAttribute('color',new T.Float32BufferAttribute(colours,3));cone.rotateX(Math.PI/2);
+  const shell=new T.MeshStandardMaterial({color:'#ffffff',vertexColors:true,metalness:0,roughness:.64,side:T.DoubleSide});
   const bowl=new T.Mesh(cone,shell);bowl.castShadow=true;bowl.receiveShadow=true;this.funnelBody.add(bowl);
-  const rim=new T.Mesh(new T.TorusGeometry(FUNNEL.radius,3.1,8,64),shell);this.funnelBody.add(rim);
-  const spout=new T.Mesh(new T.CylinderGeometry(18,15,15,32,1,true),shell);spout.rotation.x=Math.PI/2;spout.position.z=-FUNNEL.length-7;this.funnelBody.add(spout);
   const glass=new T.MeshPhysicalMaterial({color:'#ddebe5',transparent:true,opacity:.3,roughness:.12,metalness:.05,side:T.DoubleSide,depthWrite:false});
   const jar=new T.Mesh(new T.CylinderGeometry(43,39,80,40,1,true),glass);jar.rotation.x=Math.PI/2;jar.position.z=-FUNNEL.length-54;this.funnelBody.add(jar);
-  const lip=new T.Mesh(new T.TorusGeometry(43,2,6,40),shell);lip.position.z=-FUNNEL.length-14;this.funnelBody.add(lip);
+  const lip=new T.Mesh(new T.TorusGeometry(43,2.8,10,40),new T.MeshStandardMaterial({color:'#bdcfc1',roughness:.65,metalness:0}));lip.position.z=-FUNNEL.length-14;this.funnelBody.add(lip);
   const base=new T.Mesh(new T.CylinderGeometry(39,39,4,40),glass);base.rotation.x=Math.PI/2;base.position.z=-FUNNEL.length-94;this.funnelBody.add(base);
   const outline=new T.BufferGeometry().setFromPoints([new T.Vector3(-43,0,-FUNNEL.length-14),new T.Vector3(-39,0,-FUNNEL.length-94),new T.Vector3(43,0,-FUNNEL.length-14),new T.Vector3(39,0,-FUNNEL.length-94)]);
   this.funnelBody.add(new T.LineSegments(outline,new T.LineBasicMaterial({color:'#789084',transparent:true,opacity:.7})));
@@ -243,7 +249,7 @@ export class AtelierScene {
   this.galleryMaterials=[new T.MeshStandardMaterial({color:'#8d7e65',roughness:.58,metalness:.18}),new T.MeshStandardMaterial({color:'#302a22',roughness:.8})];
   // One continuous lip overlaps the opaque artwork. No coplanar cream rings.
   const geometries=[ring(660,860,598,798,14,2),new T.BoxGeometry(654,854,6)],zs=[0,-12];
-  const frame=()=>{const group=new T.Group();for(let i=0;i<geometries.length;i++){const mesh=new T.Mesh(geometries[i],this.galleryMaterials[i]);mesh.position.z=zs[i];mesh.castShadow=i===0;mesh.receiveShadow=true;group.add(mesh)}return group};
+  const frame=()=>{const group=new T.Group();for(let i=0;i<geometries.length;i++){const mesh=new T.Mesh(geometries[i],this.galleryMaterials[i]);mesh.userData.framePart=true;mesh.position.z=zs[i];mesh.castShadow=i===0;mesh.receiveShadow=true;group.add(mesh)}return group};
   this.galleryFrame=frame();this.galleryFrame.visible=false;this.paperGroup.add(this.galleryFrame);
   this.gallerySides=new T.Group();this.gallerySides.visible=false;this.scene.add(this.gallerySides);this.galleryNeighbors=[];
   this.frameFactory=frame;this.galleryCurrent=0;this.galleryFocus=0;this.galleryActive=false;this.entry=null;
@@ -261,12 +267,21 @@ export class AtelierScene {
    group.visible=index!==current;this.galleryNeighbors.push({group,picture,label,index});
   });
  }
+ pickArtwork(e){
+  const r=this.canvas.getBoundingClientRect();this.mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);this.ray.setFromCamera(this.mouse,this.camera);
+  const choices=[];if(this.galleryFrame.visible){choices.push({mesh:this.paper,index:this.galleryCurrent});for(const mesh of this.galleryFrame.children)choices.push({mesh,index:this.galleryCurrent});}
+  for(const item of this.galleryNeighbors)if(item.group.visible){choices.push({mesh:item.picture,index:item.index});for(const mesh of item.group.children)if(mesh.userData.framePart)choices.push({mesh,index:item.index});}
+  const hits=this.ray.intersectObjects(choices.map(c=>c.mesh),false);return hits.length?choices.find(c=>c.mesh===hits[0].object).index:null;
+ }
+ restoreEntryFrame(entry){for(const item of entry.frameMaterials||[]){item.mesh.material.dispose();item.mesh.material=item.original;}}
  beginEntry(index,image,onCovered,onDone){
   const item=this.galleryNeighbors[index],texture=new T.CanvasTexture(image);texture.colorSpace=T.SRGBColorSpace;
   this.entryCover.material.map?.dispose();this.entryCover.material.map=texture;this.entryCover.material.needsUpdate=true;
   // The same sharp picture is used on both sides of the coordinate rebase.
   if(item&&index!==this.galleryCurrent){item.picture.material.map.dispose();item.picture.material.map=texture.clone();item.picture.material.map.needsUpdate=true;}
-  this.entry={index,age:0,stage:'in',start:this.camera.position.clone(),rotation:this.camera.quaternion.clone(),onCovered,onDone};
+  const frame=index===this.galleryCurrent?this.galleryFrame:item?.group,frameMaterials=[];
+  for(const mesh of frame?.children||[])if(mesh.userData.framePart){const original=mesh.material;mesh.material=original.clone();mesh.material.transparent=true;mesh.material.depthWrite=false;frameMaterials.push({mesh,original});}
+  this.entry={index,age:0,stage:'in',style:this.settings.entryMode||'classic',frameMaterials,start:this.camera.position.clone(),rotation:this.camera.quaternion.clone(),onCovered,onDone};
  }
  updateCompletion(finished,dt,time){
   const active=finished||this.galleryActive;this.finishClock=Math.max(0,Math.min(1.65,this.finishClock+(active?dt:-dt)*1.3));
@@ -290,9 +305,16 @@ export class AtelierScene {
    if(entry.stage==='in'){
     const p=entryProgress(entry.age,this.reducedMotion.matches),pan=smooth(Math.min(1,p/.52)),zoom=smooth(Math.max(0,(p-.25)/.75)),x=galleryOffset(entry.index,this.galleryCurrent,GALLERY.spacing);
     const distance=Math.min(W/this.camera.aspect,H)/(2*Math.tan(this.camera.fov*Math.PI/360))*.89;
+    if(entry.style==='direct'){
+     const d=entryZoomDistance(this.camera.aspect,this.camera.fov),normal=new T.Vector3(0,0,1).applyQuaternion(entry.rotation),end=new T.Vector3(x,0,113).addScaledVector(normal,d);
+     const initialDepth=Math.max(1,entry.start.z-113);end.y+=this.heroFrame?((this.heroFrame.y+this.heroFrame.height/2)/this.canvas.clientHeight-.5)*2*Math.tan(this.camera.fov*Math.PI/360)*d:entry.start.y*d/initialDepth;
+     this.camera.position.copy(entry.start).lerp(end,p);this.camera.quaternion.copy(entry.rotation);
+    }else{
     this.camera.position.copy(entry.start);this.camera.position.x+=(x-entry.start.x)*pan;this.camera.position.y=entry.start.y*(1-zoom);this.camera.position.z=entry.start.z+(110+distance-entry.start.z)*zoom;this.camera.quaternion.copy(entry.rotation).slerp(new T.Quaternion(),zoom);
+    }
+    this.entryFrameAlpha=entryFrameOpacity(p);for(const item of entry.frameMaterials||[])item.mesh.material.opacity=this.entryFrameAlpha;
     if(p===1){
-     this.camera.position.x-=x;entry.start.copy(this.camera.position);entry.rotation.copy(this.camera.quaternion);entry.stage='out';entry.age=0;
+     this.restoreEntryFrame(entry);this.camera.position.x-=x;entry.start.copy(this.camera.position);entry.rotation.copy(this.camera.quaternion);entry.stage='out';entry.age=0;
      entry.onCovered();this.camera.position.copy(entry.start);this.camera.quaternion.copy(entry.rotation);this.finishClock=0;this.galleryActive=false;this.galleryFrame.visible=this.gallerySides.visible=false;this.paperGroup.position.set(0,0,110);this.paperGroup.rotation.set(0,0,0);this.entryCover.visible=true;this.entryCover.material.opacity=1;
     }
    }else{
@@ -379,7 +401,7 @@ export class AtelierScene {
   const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,seeds=this.current.geometry.attributes.flakeSeed,color=new T.Color(this.colors[this.activeColor]);let out=0,changedFrom=Infinity,changedTo=0;
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
-   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*grainScale(this.settings)*(sand.granular?.86:1);
+   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*grainScale(this.settings)*(sand.finishDust?.[i]?FINISH_DUST_SCALE:1)*(sand.granular?.86:1);
    let px=sand.x[i]-300,py=400-sand.y[i],pz=3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]);
    if(!this.current.userData?.gpuBend&&py>=-400&&(this.bend||this.pitch)){const theta=px/300*curve,crossZ=curve>1e-6?2*Math.sin(theta/2)**2*r:0,along=py+400;px=curve>1e-6?Math.sin(theta)*r:px;py=-400+along*cp-crossZ*sp;pz+=110*this.bend+along*sp+crossZ*cp;}
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
@@ -445,7 +467,7 @@ export class AtelierScene {
    const tangent=exit?exitVelocity(exit,sand.vx[i],sand.vy[i],this.draining):{vx:sand.vx[i],vy:sand.vy[i]};
    const speed=surfaceVelocity(x-300,tangent.vx,tangent.vy,this.bend,this.pitch);speed.z+=Math.min(-15,sand.vz[i]);
    const velocity=new T.Vector3(speed.x,speed.y,speed.z).applyQuaternion(this.paperGroup.quaternion);
-   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],dust:!!sand.dust?.[i],edge:exit?.edge,color});sand.state[i]=LOST;sand.lost++;
+   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],dust:!!sand.dust?.[i],tiny:!!sand.finishDust?.[i],fadeOnExit:!this.draining,fadeAge:0,edge:exit?.edge,color});sand.state[i]=LOST;sand.lost++;
   }
  }
  beginCleanup(){this.draining=true;this.collectedCount=0;this.collected.count=0;this.trayBins.fill(0);this.jarFill.material.color.set(this.colors[this.activeColor]);}
@@ -461,21 +483,23 @@ export class AtelierScene {
  }
  catchGrain(p){
   const i=this.collectedCount%JAR_SAMPLES,seed=p.seed,angle=seed*7919,r=Math.sqrt(seed*197%1)*35,object=this.spillObject;
-  object.position.set(Math.cos(angle)*r,Math.sin(angle)*r,seed*13%1*2);object.rotation.set(.05,.03,seed*79);const size=grainScale(this.settings);object.scale.set(2.1*size,2.1*size,.65*size);object.updateMatrix();
+  object.position.set(Math.cos(angle)*r,Math.sin(angle)*r,seed*13%1*2);object.rotation.set(.05,.03,seed*79);const size=grainScale(this.settings)*(p.tiny?FINISH_DUST_SCALE:1);object.scale.set(2.1*size,2.1*size,.65*size);object.updateMatrix();
   this.collected.setMatrixAt(i,object.matrix);this.collected.setColorAt(i,p.color);this.collected.geometry.attributes.flakeSeed.setX(i,seed);this.collectedCount++;
  }
  updateSpill(dt){
   if(this.spills.length>this.spill.instanceMatrix.count)this.ensureGrainCapacity('spill',this.spills.length);
   let out=0;const object=this.spillObject,projected=new T.Vector3();
   for(const p of this.spills){
-   const caught=stepFunnel(p,dt,this.boxMotion>.95?this.collectorBox:NO_FUNNEL);
+   p.fadeAge=(p.fadeAge||0)+dt;if(p.fadeOnExit&&exitOpacity(p.fadeAge)<=0)continue;
+   const caught=stepFunnel(p,dt,!p.fadeOnExit&&this.boxMotion>.95?this.collectorBox:NO_FUNNEL);
    if(caught){this.catchGrain(p);continue;}
    projected.set(p.x,p.y,p.z).project(this.camera);
    if(projected.y > 1.3 || projected.y < -1.15 || Math.abs(projected.x)>1.3 || projected.z>1)continue;
-   object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar((1.8+p.seed)*grainScale(this.settings));object.updateMatrix();
-   this.spill.setMatrixAt(out,object.matrix);this.spill.setColorAt(out,p.color);this.spills[out++]=p;
+   object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar((1.8+p.seed)*grainScale(this.settings)*(p.tiny?FINISH_DUST_SCALE:1));object.updateMatrix();
+   this.spill.setMatrixAt(out,object.matrix);this.spill.setColorAt(out,p.color);this.spill.geometry.attributes.grainOpacity.setX(out,p.fadeOnExit?exitOpacity(p.fadeAge):1);this.spill.geometry.attributes.flakeSeed.setX(out,p.seed);this.spills[out++]=p;
   }
-  this.spills.length=out;this.spill.count=out;this.spill.instanceMatrix.needsUpdate=true;this.spill.instanceColor.needsUpdate=true;
+  this.spills.length=out;this.spill.count=out;
+  for(const attr of [this.spill.instanceMatrix,this.spill.instanceColor,this.spill.geometry.attributes.grainOpacity,this.spill.geometry.attributes.flakeSeed]){attr.clearUpdateRanges();if(out){attr.addUpdateRange(0,out*attr.itemSize);attr.needsUpdate=true;}}
   this.collected.count=Math.min(JAR_SAMPLES,this.collectedCount);this.collected.instanceMatrix.needsUpdate=true;this.collected.instanceColor.needsUpdate=true;this.collected.geometry.attributes.flakeSeed.needsUpdate=true;
  }
  reset(){this.galleryFrame.visible=this.gallerySides.visible=false;this.floor.material.color.copy(this.floorRestColor);this.finishClock=0;this.heroProgress=0;this.celebration.visible=false;this.coatUniforms.uCelebrate.value=0;this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);this.stand.visible=false;for(const jar of this.jars)jar.visible=false;this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}

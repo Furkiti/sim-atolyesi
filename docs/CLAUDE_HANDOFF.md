@@ -1,15 +1,15 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 6 Kasım 2026. Ürün/cache sürümü **v21**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 6 Kasım 2026. Ürün/cache sürümü **v22**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=21&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=22&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Güncel geliştirme: **v21**, sıralı sergi, hedefli döküş ve huni/son dokunuş. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Güncel geliştirme: **v22**, doğrudan tablo girişi, yumuşak huni ve %90 sonrası basılı akış bitişi. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
 - Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
 - v20 araştırma/önceki teknik kararlar: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
@@ -24,7 +24,7 @@ Tarih: 6 Kasım 2026. Ürün/cache sürümü **v21**. Bu belge mevcut oyunu devr
 
 `package.json` içindeki `1.0.0`, v20 cache sürümünden ayrıdır.
 
-Güncel mekanik ve v21 doğrulamaları: [v21-feel-and-gallery.md](v21-feel-and-gallery.md).
+Güncel mekanik ve doğrulamalar: [v22-entry-and-hold.md](v22-entry-and-hold.md). Önceki sürüm: [v21-feel-and-gallery.md](v21-feel-and-gallery.md).
 
 ## 2. Ürünün amacı ve kullanıcının öncelikleri
 
@@ -40,7 +40,7 @@ Geçmişte özellikle düzeltilen ve geri getirilmemesi gereken davranışlar:
 - Gevşek malzemenin tek katı kalıp gibi hareket etmesi.
 - Üst/yan kenardan çıkan simlerin hâlâ kâğıdın ön yüzünden aşağı çizilmesi.
 - Bükülen kâğıdın zeminin içine girmesi.
-- Ekrandayken düşen parçaların bir anda silinmesi.
+- Huniyle boşaltılan parçaların ekrandayken bir anda silinmesi. v22’de kullanıcının yeni isteğiyle huni gelmeden kâğıttan çıkan parçalar 280 ms içinde saydamlaşır.
 - iOS’ta istemsiz zoom, metin seçimi/kopyala menüsü ve ikinci parmağın kontrolü devralması.
 - Büyük arayüzün resmi küçültmesi veya bitiş modalının eseri kapatması.
 
@@ -85,10 +85,10 @@ Toplam **51 renk aşaması**. Oyuncu ilk bölümden başlar; önceki tamamlanın
 
 URL örnekleri:
 
-- `?v=21&mod=basili&bolum=barcelona`
-- `?v=21&mod=egim&bolum=naruto`
-- `?v=21&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=21&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=22&mod=basili&bolum=barcelona`
+- `?v=22&mod=egim&bolum=naruto`
+- `?v=22&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=22&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -104,7 +104,7 @@ Son kullanıcı çalışmalarının ağırlığı bu moddadır. Cımbız şablon
 - Tane boyutu: 0,7–4 kat; yoğunluktan bağımsızdır.
 - Tek sıra / iki sıra: toplam malzeme seçilen şeritlere bölünür; normal hızda döküş 4 / 6 oyun saniyesidir.
 - Fazla gevşek paket miktarı yoğunluğa göre yaklaşık 5.250–84.000’dir; hedef paketleri buna eklenir.
-- Her döküşte rastgele yerlerde ufak tozlar kalır. Sabit, büyük birikinti adaları yoktur. Artık miktarı/yerleri değişkendir; seçili tane boyutunu izler. İsteğe bağlı son dokunuş, bükmede kalan gerçek taneleri hafif vuruşlarla döker.
+- Her döküşte rastgele yerlerde ufak tozlar kalır. Sabit, büyük birikinti adaları yoktur. Artık miktarı/yerleri değişkendir; seçili tane boyutunu izler. Varsayılan kapalı son dokunuş açıksa en fazla 24 / gevşek malzemenin %4’ü / rastgele 6–22 tanelik sınırdan düşük olanı tutulur. Ana bükmeden sonra yalnız bu taneler %38 boyuta iner ve hafif vuruşlarla dökülür.
 - `Bu rengi yeniden dene`, tamamlanmış önceki renkleri koruyarak mevcut rengi yeni ayarlarla döker.
 
 ### Fırça (`brush`)
@@ -115,17 +115,19 @@ Fırça yalnızca mevcut simi taşır. Boş fırça boya üretmez. Sadece dökme
 
 Telefonun duruşu simi taşır; yapışkana temas eden taneler fırça olmadan tutunur. iOS hareket izni kullanıcı dokunuşu içinde istenir. HTTPS ve destekleyen cihaz gerekir. Düz say kalibrasyonu ve açıkça etiketli sensörsüz ekran denemesi bulunur. Sensörün filtrelenmesi/izin akışı oyun hızıyla çoğaltılmaz.
 
-Modlara ait ayarlar kısmen farklıdır. Basılı tut modunda fırçaya özgü hissiyat seçenekleri gizlenir; tüm ayarların bütün modlarda aynı etkiyi yapmasını varsayma.
+Basılı tut varsayılandır: hedef genişliği / yoğunluk %500 / boyut %170 / son dokunuş kapalı. `holdPresetVersion:22` geçişi yalnız bir kez yeni varsayılanları yükler. `settingAvailable` basılı tut modunu etkilemeyen fırça, eğim, düzen, tolerans ve manuel ilerletme ayarlarını gizler/devre dışı bırakır; mod değişince geri açılır.
+
+Sergi girişi: `entryMode:classic` eski kamera yolunu korur. `direct` / `?giris=direct` ek pan yapmadan, tüm resmi kadraja sığdırarak yaklaşır. Her iki modda çerçeve .25–.90 giriş aralığında söner; sevilen geri uzaklaşma ve renk karışımı aynı kalır. Açık tablolara doğrudan dokunulabilir; kilitler geçerlidir.
 
 ## 6. Oyun akışı ve fizik sınırları
 
 `Flow` fazları: `peel → rolling → pour → brush → shake → sonraki renk / complete`.
 
 - İlk soyma otomatik başlar. Aynı rengin bağlantısız parçaları sırayla açılır.
-- Soyarken basılı tutmak soyma saatini ayrıca 4 kat hızlandırır. Genel hızla çarpılır; örneğin 4x + basılı soyma toplam 16x olabilir.
+- Basılı tutarak soyma hızlandırması v22’de kaldırıldı. Küçük parçalar .62–1.39 saniye, büyük parçalar önceki yavaş rulo temposuyla açılır; genel oyun hızı geçerlidir.
 - Açılmadan hemen önce beyaz bir yapışkan parlaması eklenmez. Açılan alan kontrastlı taralı yüzeydir.
 - Son rötuş sınırı `min(8 piksel, alanın %0,02’si)`; Titiz modda `min(2 piksel, alanın %0,02’si)`.
-- Basılı akışta renk hazır olunca **bırakmak** temizlemeyi/ilerlemeyi tetikler.
+- Basılı akışta %90 üstünde kalan gerçek hedef paketleri .30 saniyede hedefe ilerleyip .18 saniyede oturur. Sonra parmak tutulsa da temizlik/renk geçişi başlar. Fırça ve eğim toleransı değişmedi.
 - Temizleme iki yandan oluk oluşturup ortadaki simi aşağıdaki huni ve küçük cam kavanoza boşaltır. `extraFinish` açıksa `CleanupCycle` fold → unfold → tap → settle → done alt sekansını yönetir. Drenajın bitmesi kontrol edilmeden renk değiştirilmez.
 - Temizleme sonrasında kâğıt tam düzleşir; küçük bükülme değerlerinde kararlı geometri önemlidir.
 
@@ -230,7 +232,7 @@ Ham videolar/sohbet ekleri ve `/tmp` içindeki çıkarım scriptleri clone için
 
 ## 11. Test ve görsel QA
 
-`npm run build` başarılı ve **129 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
+`npm run build` başarılı ve **137 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
 
 Özellikle dikkat edilecek regresyon testleri:
 
@@ -245,7 +247,7 @@ Gerçek UI ile 390×844 tarayıcı görünümünde doğrulananlar: bütün hız 
 
 DOM’daki `#art.dataset`, salt okunur tanılama için yararlıdır: `version`, `phase`, `stage` (0 tabanlı), `coverage`, `gameSpeed`, `gameTime`, `emitted`, `bound`, `free`, `air`, `detached`, `holding`, `advances`, `peelPart`, `peelParts`, `galleryPrevious`, `galleryNext`, `galleryCount`, `heroProgress` vb. Oyun durumunu dışarıdan enjekte edip bunu oynanış testi gibi raporlama.
 
-Klavye testi: `hold-control` görünürken **Enter**, basılı tutmayı açıp kapatan erişilebilir alternatiftir. Soyma bittiğinde latch temizlenir; brush fazında tekrar Enter ile akış başlatılır. %100 olduktan sonra bırakmak gerekir. `?devam=sonRenk` ile yalnızca son akış test edilebilir; bu tüm renklerin elle oynandığı anlamına gelmez.
+Klavye testi: `hold-control` görünürken **Enter**, basılı tutmayı açıp kapatan erişilebilir alternatiftir. Soyma bittiğinde latch temizlenir; brush fazında tekrar Enter ile akış başlatılır. %90 üstünde bitiş ve boşaltma parmak kaldırılmadan tamamlanır. `?devam=sonRenk` ile yalnızca son akış test edilebilir; bu tüm renklerin elle oynandığı anlamına gelmez.
 
 ### Görsel referanslar (bu repo içinde)
 
@@ -298,4 +300,4 @@ Kimlik bilgisi/token depoya yazma veya loga basma. Bu makinenin mevcut Git crede
 
 Başlangıç için Claude’a verilebilecek metin:
 
-> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v21 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
+> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v22 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.

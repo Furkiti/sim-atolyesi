@@ -9,7 +9,7 @@ export class Sand {
   constructor({capacity=48000,random=Math.random}={}) {
     this.heapDepth=1.25;this.behavior=materialResponse();this.lastMoved=0;this.capacity=capacity;this.random=random;this.time=0;this.count=0;this.emitted=0;
     for (const name of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll']) this[name]=new Float32Array(capacity);
-    this.dust=new Uint8Array(capacity);this.pressed=new Uint8Array(capacity);this.freshCount=0;this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
+    this.finishDust=new Uint8Array(capacity);this.dust=new Uint8Array(capacity);this.pressed=new Uint8Array(capacity);this.freshCount=0;this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
     this.density=new Float32Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);this.pressure=new Float32Array(COLS*ROWS);this.top=new Float32Array(COLS*ROWS);this.moundDensity=new Float32Array(COLS*ROWS);this.moundHeight=new Float32Array(COLS*ROWS);
     this.ground=new Int32Array(COLS*ROWS);this.slopeX=new Float32Array(COLS*ROWS);this.slopeY=new Float32Array(COLS*ROWS);
     this.neighbors=new Int32Array(COLS*ROWS*8);
@@ -20,7 +20,7 @@ export class Sand {
   }
   reserve(capacity){
     if(capacity<=this.capacity)return;
-    for(const key of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll','dust','pressed','state','bin']){const previous=this[key],next=new previous.constructor(capacity);next.set(previous);this[key]=next;}
+    for(const key of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll','dust','finishDust','pressed','state','bin']){const previous=this[key],next=new previous.constructor(capacity);next.set(previous);this[key]=next;}
     this.capacity=capacity;
   }
   setMask(mask) {
@@ -37,7 +37,7 @@ export class Sand {
     let added=0;
     for(let j=0;j<n&&this.count<this.capacity;j++){
       const i=this.count++,a=this.random()*Math.PI*2,r=Math.sqrt(this.random())*spread;
-      this.dust[i]=0;this.pressed[i]=0;this.seed[i]=this.random();this.x[i]=x+Math.cos(a)*r;this.y[i]=y+Math.sin(a)*r;
+      this.finishDust[i]=0;this.dust[i]=0;this.pressed[i]=0;this.seed[i]=this.random();this.x[i]=x+Math.cos(a)*r;this.y[i]=y+Math.sin(a)*r;
       this.previousX[i]=this.x[i];this.previousY[i]=this.y[i];this.roll[i]=0;this.z[i]=height+this.random()*32;this.vz[i]=-45-this.random()*35;const cone=Math.sqrt(this.random())*fan;this.vx[i]=Math.cos(a)*cone;this.vy[i]=Math.sin(a)*cone;this.state[i]=AIR;added++;
     }
     this.emitted+=added;return added;
@@ -193,7 +193,7 @@ export class Sand {
   compact(){
     let out=0;
     for(let i=0;i<this.count;i++)if(this.state[i]!==LOST){
-      if(out!==i){for(const key of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll','dust','pressed','state','bin'])this[key][out]=this[key][i];}
+      if(out!==i){for(const key of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll','dust','finishDust','pressed','state','bin'])this[key][out]=this[key][i];}
       out++;
     }
     this.count=out;

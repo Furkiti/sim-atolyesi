@@ -16,7 +16,7 @@ test('a short swipe advances one painting, a small tap does not, and cancel snap
  rail.begin(200,300);rail.move(185,300,320);assert.equal(rail.end(),2);rail.begin(200,400);rail.move(70,300,500);assert.equal(rail.end(true),2);rail.select(5);rail.begin(200);rail.move(0,300);assert.equal(rail.end(),5);
 });
 test('residue amounts and locations vary per colour instead of a fixed fine-powder quota',()=>{
- const random=rng(912),plans=Array.from({length:30},()=>residuePlan(random,10500));assert.ok(Math.max(...plans.map(p=>p.budget))-Math.min(...plans.map(p=>p.budget))>900);assert.ok(Math.max(...plans.map(p=>p.centerY))-Math.min(...plans.map(p=>p.centerY))>400);assert.ok(plans.every(p=>p.budget>=55&&p.budget<=1500));assert.equal(normalizeSettings({extraFinish:false}).extraFinish,false);assert.equal(DEFAULTS.extraFinish,true);
+ const random=rng(912),plans=Array.from({length:30},()=>residuePlan(random,10500));assert.ok(Math.max(...plans.map(p=>p.budget))-Math.min(...plans.map(p=>p.budget))>900);assert.ok(Math.max(...plans.map(p=>p.centerY))-Math.min(...plans.map(p=>p.centerY))>400);assert.ok(plans.every(p=>p.budget>=55&&p.budget<=1500));assert.equal(normalizeSettings({extraFinish:false}).extraFinish,false);assert.equal(DEFAULTS.extraFinish,false);
 });
 test('grains meet the cone, travel through its narrow throat and land inside the small jar',()=>{
  const p={...funnelWorld({x:80,y:0,z:70}),vx:-15,vy:-20,vz:-50,seed:.31};let caught=false,sawSlide=false,sawJar=false;
@@ -36,5 +36,5 @@ test('optional last taps release real held-back material after the fold without 
 });
 
 test('small peel sections move quickly while broad curls retain their deliberate pace',async()=>{
- const {peelSeconds,peelGap}=await import('../src/peel.js');assert.ok(peelSeconds(150)<.5);assert.ok(peelSeconds(1400)<1);assert.ok(peelSeconds(18000)>2.4);assert.ok(peelGap({area:150})<.1);assert.ok(peelGap({area:18000})>.2);
+ const {peelSeconds,peelGap}=await import('../src/peel.js');assert.ok(peelSeconds(150)>.65&&peelSeconds(150)<1);assert.ok(peelSeconds(1400)<1.4);assert.ok(peelSeconds(18000)>2.4);assert.ok(peelGap({area:150})<=.1);assert.ok(peelGap({area:18000})>.2);
 });

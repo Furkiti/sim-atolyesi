@@ -14,3 +14,6 @@ export class ExhibitionRail {
 }
 export function galleryOffset(index,current,spacing){return(index-current)*spacing;}
 export function entryProgress(seconds,reduced=false){const t=Math.min(1,Math.max(0,seconds/(reduced?.4:1.7)));return t*t*(3-2*t);}
+
+export function entryZoomDistance(aspect,fov=35){return Math.max(600/aspect,800)/(2*Math.tan(fov*Math.PI/360))*1.04;}
+export function entryFrameOpacity(progress){const t=Math.max(0,Math.min(1,(progress-.25)/.65));return 1-t*t*(3-2*t);}

@@ -9,13 +9,13 @@ export class CleanupCycle {
  constructor(sand,candidates=[],random=sand.random){
   this.sand=sand;this.stage='fold';this.elapsed=0;this.pinned=new Uint8Array(sand.capacity);this.routes=[];this.random=random;
   const eligible=(candidates.length?candidates:Array.from({length:sand.count},(_,i)=>i)).filter(i=>sand.state[i]===FREE&&sand.cell(sand.x[i],sand.y[i])>=0);
-  const fraction=Math.pow(random(),.75)*.92;this.tapCount=1+Math.floor(random()*3);this.strength=.55+random()*.6;
-  for(const i of eligible)if(this.routes.length<1450&&random()<fraction){this.pinned[i]=1;this.routes.push({i,x:sand.x[i],y:sand.y[i],delay:.05+random()*.42,duration:.5+random()*.65,endX:300+(random()-.5)*115,hop:4+random()*13,turn:(random()-.5)*.06,released:false});}
+  const limit=Math.min(24,Math.ceil(eligible.length*.04),6+Math.floor(random()*17)),fraction=eligible.length?limit/eligible.length:0;this.tapCount=1+Math.floor(random()*3);this.strength=.55+random()*.6;
+  for(const i of eligible)if(this.routes.length<limit&&random()<fraction){this.pinned[i]=1;this.routes.push({i,x:sand.x[i],y:sand.y[i],delay:.05+random()*.42,duration:.5+random()*.65,endX:300+(random()-.5)*115,hop:4+random()*13,turn:(random()-.5)*.06,released:false});}
   this.heldCount=this.routes.length;this.tapDuration=this.heldCount?Math.max(1.1,this.tapCount*.48):0;this.releasedCount=0;
  }
  get done(){return this.stage==='done';}
  get tapping(){return this.stage==='tap'||this.stage==='settle';}
- transition(stage){this.stage=stage;this.elapsed=0;}
+ transition(stage){this.stage=stage;this.elapsed=0;if(stage==='unfold')for(const route of this.routes)this.sand.finishDust[route.i]=1;}
  advance(dt,falling=0){
   this.elapsed+=dt;const s=this.sand;
   if(this.stage==='fold'){

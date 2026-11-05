@@ -26,13 +26,15 @@ test('batched grain transforms match the original bend, and upload only the popu
  const colorVersion=current.instanceColor.version;AtelierScene.prototype.updateGrains.call(scene,s);assert.equal(current.instanceColor.version,colorVersion);assert.equal(scene.grainUploadBytes,50*64);
 });
 
-test('level replacement cannot reset the camera for one frame under the entry cover',()=>{
+test('level replacement cannot reset the camera for one frame under either entry cover',()=>{
+ for(const entryMode of ['classic','direct']){
  const camera=new T.PerspectiveCamera(35,390/844,1,16000),play=new T.Vector3(0,-669,2230),paperGroup=new T.Group();camera.position.copy(play);
- const scene={camera,playCameraPosition:play,playCameraQuaternion:new T.Quaternion(),paperGroup,finishClock:1.65,reducedMotion:{matches:false},settings:{sparkles:false},celebration:{visible:false},galleryFrame:{visible:true},gallerySides:{visible:true},paperOutline:{visible:true},galleryMaterials:[],galleryNeighbors:[],floor:{material:{color:new T.Color()}},scene:{background:new T.Color()},floorRestColor:new T.Color(),galleryWallColor:new T.Color(),coatUniforms:{uCelebrate:{value:0}},heroFrame:{x:73,y:252,width:244,height:318},canvas:{clientHeight:844},galleryCurrent:0,galleryFocus:1,celebrationStars:[],bend:0,pitch:0,updateBend(){},entryCover:new T.Mesh(new T.PlaneGeometry(600,800),new T.MeshBasicMaterial())};
+ const scene={restoreEntryFrame:AtelierScene.prototype.restoreEntryFrame,camera,playCameraPosition:play,playCameraQuaternion:new T.Quaternion(),paperGroup,finishClock:1.65,reducedMotion:{matches:false},settings:{sparkles:false,entryMode},celebration:{visible:false},galleryFrame:{visible:true},gallerySides:{visible:true},paperOutline:{visible:true},galleryMaterials:[],galleryNeighbors:[],floor:{material:{color:new T.Color()}},scene:{background:new T.Color()},floorRestColor:new T.Color(),galleryWallColor:new T.Color(),coatUniforms:{uCelebrate:{value:0}},heroFrame:{x:73,y:252,width:244,height:318},canvas:{clientHeight:844},galleryCurrent:0,galleryFocus:1,celebrationStars:[],bend:0,pitch:0,updateBend(){},entryCover:new T.Mesh(new T.PlaneGeometry(600,800),new T.MeshBasicMaterial())};
  let covered=0,done=0;AtelierScene.prototype.beginEntry.call(scene,1,{width:480,height:640},()=>{covered++;camera.position.copy(play);scene.galleryCurrent=1;},()=>done++);
  let sawCovered=false;for(let f=0;f<260;f++){
   AtelierScene.prototype.updateCompletion.call(scene,f<104,1/60,f*1000/60);
   if(covered&&!sawCovered){sawCovered=true;assert.ok(camera.position.distanceTo(scene.entry.start)<1e-8,'reset callback must not move the covered camera');assert.ok(scene.entryCover.visible);assert.equal(scene.entryCover.material.opacity,1);}
  }
  assert.equal(covered,1);assert.equal(done,1);assert.ok(camera.position.distanceTo(play)<1e-8);assert.equal(scene.entryCover.visible,false);
+ }
 });

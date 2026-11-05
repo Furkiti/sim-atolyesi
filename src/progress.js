@@ -12,3 +12,5 @@ export function resumeIndex(search,stageCount){
  const stage=Number(value);
  return Number.isSafeInteger(stage)&&stage>=1&&stage<=stageCount?stage-1:0;
 }
+
+export function shouldFinishHeld(coverage,mode){return mode==='hold'&&Number.isFinite(coverage)&&coverage>.9;}

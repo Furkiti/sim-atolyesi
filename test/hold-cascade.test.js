@@ -1,4 +1,5 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {HoldCascade} from '../src/hold-cascade.js';import {Sand,FREE,BOUND,LOST} from '../src/sand.js';import {normalizeSettings,DEFAULTS} from '../src/settings.js';import {levels} from '../src/levels.js';import {PNG} from 'pngjs';import {readFileSync} from 'node:fs';
+import test from 'node:test';import assert from 'node:assert/strict';import {HoldCascade} from '../src/hold-cascade.js';import {Sand,FREE,BOUND,LOST} from '../src/sand.js';import {normalizeSettings,DEFAULTS as CURRENT_DEFAULTS} from '../src/settings.js';import {levels} from '../src/levels.js';import {PNG} from 'pngjs';import {readFileSync} from 'node:fs';
+const DEFAULTS={...CURRENT_DEFAULTS,holdDensity:1,holdGrainSize:1,holdPlacement:'sheet'};
 function rng(){let seed=631;return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}}
 function mask(id){const data=PNG.sync.read(readFileSync(new URL(`../assets/${id}.png`,import.meta.url))).data;return Uint8Array.from({length:480000},(_,i)=>data[i*4+3]>80?1:0)}
 function leave(s){for(let i=0;i<s.count;i++)if(s.state[i]===FREE&&s.y[i]>=800){s.state[i]=LOST;s.lost++;}}

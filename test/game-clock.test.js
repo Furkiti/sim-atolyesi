@@ -14,7 +14,7 @@ test('peeling, pouring and cleanup preserve their order and shorten proportional
  for(const speed of GAME_SPEEDS)for(const held of [false,true]){
   const flow=new Flow();flow.setRollDuration(3);flow.setPourDuration(2);flow.roll();let wall=0;const events=[];
   for(let frame=0;frame<1000&&events.length<3;frame++){wall+=1/60;const plan=gameSteps(1/60,speed);for(let i=0;i<plan.count;i++){const event=flow.tick(plan.dt,{peelHeld:held});if(event){events.push({event,wall});if(event==='poured')flow.shake(true);}}}
-  assert.deepEqual(events.map(e=>e.event),['rolled','poured','advance']);assert.ok(Math.abs(events[0].wall-3/speed/(held?4:1))<.04);assert.ok(Math.abs(events[1].wall-events[0].wall-2/speed)<.04);assert.ok(Math.abs(events[2].wall-events[1].wall-4.9/speed)<.07);assert.equal(flow.phase,'brush');
+  assert.deepEqual(events.map(e=>e.event),['rolled','poured','advance']);assert.ok(Math.abs(events[0].wall-3/speed)<.04);assert.ok(Math.abs(events[1].wall-events[0].wall-2/speed)<.04);assert.ok(Math.abs(events[2].wall-events[1].wall-4.9/speed)<.07);assert.equal(flow.phase,'brush');
  }
 });
 test('even 4x at 30 FPS coats every adhesive island with finite, conserved hold-mode glitter',()=>{

@@ -57,7 +57,9 @@ export class HoldCascade {
    s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.byParticle.set(i,route);this.activeRoutes.push(route);
   }
  }
+ requestFinish(){this.finishing=true;this.finishElapsed??=0;}
  step(dt,held=false,refresh=true){
+  held=held||!!this.finishing;if(this.finishing)this.finishElapsed+=dt;
   const s=this.sand;this.press+=(Number(held)-this.press)*(1-Math.exp(-dt*(held?8:11)));
   const previousTime=this.elapsed;if(held)this.elapsed+=dt;
   let active=0;for(let at=0;at<this.activeRoutes.length;at++){
@@ -70,8 +72,8 @@ export class HoldCascade {
     s.z[i]=route.contactZ+(2.2-route.contactZ)*ease;s.roll[i]+=dt*2;
     if(progress===1){s.z[i]=2.2;s.bind(i,true);}continue;
    }
-   const travel=route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0)continue;
-   const old=s.y[i],next=old+travel;route.distance+=travel;
+   const travel=route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
+   const old=s.y[i],next=this.finishing&&route.target?old+(route.y-old)*Math.min(1,dt/Math.max(.001,.30-this.finishElapsed)):old+travel;route.distance+=travel;
    // A dense rolling front becomes a thinner trail. The motion is tied only to
    // held time: releasing cannot grow, paint or advance the stream.
    s.z[i]=2.2+(s.seed[i]*127%1)*(4+23*Math.exp(-route.distance/300))*this.depth/1.25;
