@@ -406,7 +406,7 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,finished=false}){
-  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,dt,time);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;if(!finished)this.updateGrains(sand);this.updateSpill(dt);
+  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,dt,time);this.updateCollector(phase,0);this.coatUniforms.uTime.value=time*.001;if(!finished)this.updateGrains(sand);
   const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
   this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=sand.granular?.10:.23;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){

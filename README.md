@@ -1,6 +1,6 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=18&mod=basili)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=19&mod=basili)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
@@ -11,6 +11,10 @@ Kaplanan alan, aralıksız ve doygun bir sim yüzeyi olur. On bir renkle Batman/
 Referans videodan alınan gerçek fırça ve döküş sesleri ilk dokunuşla açılır; ayarlardan kapatılabilir. İlk parmak hareketi yönetir; ikinci parmak devralmaz. Oyun alanında zoom ve sayfa kaydırma kapalıdır.
 
 Otomatik rötuş yalnızca kaynak resimde en fazla 8 piksel (Titiz ayarda 2 piksel) ve toplam alanın %0,02’si kaldığında uygulanır. Küçük ayrıntılarda tam kaplama gerekir; görünür boşluklar boyanmaz. Parmak kalkınca renk ilerler. **Sonraki renk** düğmesi de kullanılabilir. Tamamlanmış renkleri tekrar yapmadan dönmek için `?devam=4` gibi bir bağlantı dördüncü renkten başlatır ve önceki üç rengi tamamlanmış olarak çizer.
+
+## Oyun hızı
+
+⚙ → **Hissiyat → Oyun hızı**: **1x, 1.25x, 1.5x, 1.75x, 2x, 3x, 4x**. Varsayılan 1x; seçim anında uygulanır ve bu tarayıcıda hatırlanır. Soyma, döküş, sim akışı, temizleme ve renk/bitiş geçişleri birlikte hızlanır. Fırça hareketin, düğmeler ve FPS ölçümü gerçek zamanda kalır. [Uygulama ve doğrulama](docs/v19-game-speed.md).
 
 ## Telefonu eğerek oyna
 
