@@ -6,7 +6,7 @@ import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
 import {peelFront,peelPoint} from './peel.js';
 import {TRAY,stepFalling} from './collector.js';
 import {paperLift} from './paper-motion.js';
-import {completionLayout,completionEase} from './completion.js';
+import {completionLayout,completionEase,galleryCamera,GALLERY} from './completion.js';
 import {BRUSHES} from './feel.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS,MAX_HEAP_HEIGHT,MAX_GRAIN_HEIGHT} from './sand.js';
@@ -34,7 +34,7 @@ export class AtelierScene {
   this.key.shadow.mapSize.set(1536,1536);Object.assign(this.key.shadow.camera,{left:-600,right:600,top:700,bottom:-650,near:1,far:1800});this.key.shadow.bias=-.00008;this.key.shadow.normalBias=.15;this.key.shadow.radius=3;this.scene.add(this.key);
   this.fill=new T.DirectionalLight('#b9d4ff',.8);this.fill.position.set(500,-200,400);this.scene.add(this.fill);
   const floorTex=noiseTexture();floorTex.wrapS=floorTex.wrapT=T.RepeatWrapping;floorTex.repeat.set(10,10);
-  const floor=new T.Mesh(new T.PlaneGeometry(6000,6000),new T.MeshStandardMaterial({map:floorTex,bumpMap:floorTex,bumpScale:.8,roughness:.94,color:'#d9ddda',depthWrite:false}));floor.position.z=-8;floor.receiveShadow=true;this.scene.add(floor);
+  const floor=new T.Mesh(new T.PlaneGeometry(6000,6000),new T.MeshStandardMaterial({map:floorTex,bumpMap:floorTex,bumpScale:.8,roughness:.94,color:'#d9ddda',depthWrite:false}));floor.position.z=-8;floor.receiveShadow=true;this.scene.add(floor);this.floor=floor;this.floorRestColor=new T.Color('#d9ddda');this.galleryWallColor=new T.Color('#dfd7c7');
   this.paperGroup=new T.Group();this.paperGroup.rotation.z=.018;this.scene.add(this.paperGroup);
   const edge=new T.Mesh(new T.BoxGeometry(W,H,3.2,30,40,1),new T.MeshStandardMaterial({color:'#d6c68b',roughness:.85}));edge.castShadow=true;edge.receiveShadow=true;this.paperGroup.add(edge);this.edge=edge;this.edgeBase=edge.geometry.attributes.position.array.slice();
   this.paperTexture=new T.CanvasTexture(paperCanvas);this.paperTexture.colorSpace=T.SRGBColorSpace;this.paperTexture.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());
@@ -94,7 +94,7 @@ export class AtelierScene {
   const clipAttached=shader=>{shader.vertexShader='attribute float peelLift; varying float vPeelLift;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvPeelLift=peelLift;');shader.fragmentShader='varying float vPeelLift;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vPeelLift<.35) discard;');};
   this.peelSheet.material.onBeforeCompile=clipAttached;this.peelSheet.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking,side:T.DoubleSide});this.peelSheet.customDepthMaterial.onBeforeCompile=clipAttached;
   this.peelSheet.frustumCulled=false;this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
-  this.makeBrush();this.makeTweezers();this.makeGlints();this.makeCelebration();this.makeJars();this.makeCollector();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
+  this.makeBrush();this.makeTweezers();this.makeGlints();this.makeCelebration();this.makeGallery();this.makeJars();this.makeCollector();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
   this.desiredBrush={x:130,y:250,angle:-.72,contact:false,visible:false};this.brushPoint={x:130,y:250};this.pourPoint={x:140,y:180};this.autoPour=false;
   this.applySettings(settings);this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();
  }
@@ -185,20 +185,43 @@ export class AtelierScene {
    this.celebration.add(sprite);this.celebrationStars.push(sprite);
   }
  }
+ makeGallery(){
+  const ring=(w,h,iw,ih,depth,bevel=0)=>{
+   const shape=new T.Shape();shape.moveTo(-w/2,-h/2);shape.lineTo(w/2,-h/2);shape.lineTo(w/2,h/2);shape.lineTo(-w/2,h/2);shape.closePath();
+   const hole=new T.Path();hole.moveTo(-iw/2,-ih/2);hole.lineTo(-iw/2,ih/2);hole.lineTo(iw/2,ih/2);hole.lineTo(iw/2,-ih/2);hole.closePath();shape.holes.push(hole);
+   return new T.ExtrudeGeometry(shape,{depth,steps:1,bevelEnabled:bevel>0,bevelSize:bevel,bevelThickness:bevel*.7,bevelSegments:2,curveSegments:1});
+  };
+  this.galleryMaterials=[new T.MeshStandardMaterial({color:'#51412e',roughness:.46,metalness:.18,transparent:true}),new T.MeshStandardMaterial({color:'#b49c63',roughness:.29,metalness:.72,transparent:true}),new T.MeshStandardMaterial({color:'#eee6d4',roughness:.88,transparent:true}),new T.MeshStandardMaterial({color:'#302a22',roughness:.8,transparent:true})];
+  const geometries=[ring(660,860,614,814,13,2),ring(614,814,608,808,3,.7),ring(608,808,600,800,1),new T.BoxGeometry(660,860,8)],zs=[0,3,2,-5];
+  const frame=()=>{const group=new T.Group();for(let i=0;i<4;i++){const mesh=new T.Mesh(geometries[i],this.galleryMaterials[i]);mesh.position.z=zs[i];mesh.castShadow=i===0;mesh.receiveShadow=true;group.add(mesh)}return group};
+  this.galleryFrame=frame();this.galleryFrame.visible=false;this.paperGroup.add(this.galleryFrame);
+  this.gallerySides=new T.Group();this.gallerySides.visible=false;this.scene.add(this.gallerySides);this.galleryNeighbors=[];
+  const blank=document.createElement('canvas');blank.width=480;blank.height=640;const c=blank.getContext('2d');c.fillStyle='#e4dfd2';c.fillRect(0,0,480,640);c.strokeStyle='#c4b9a2';c.lineWidth=1;c.strokeRect(32,32,416,576);c.fillStyle='#a69b85';c.font='32px serif';c.textAlign='center';c.fillText('✧',240,320);
+  for(const side of [-1,1]){
+   const group=frame();group.position.set(side*GALLERY.spacing,0,0);group.rotation.y=-side*.045;this.gallerySides.add(group);
+   const map=new T.CanvasTexture(blank);map.colorSpace=T.SRGBColorSpace;const material=new T.MeshBasicMaterial({map,color:'#e7e5dc',toneMapped:false,transparent:true});const picture=new T.Mesh(new T.PlaneGeometry(600,800),material);picture.position.z=3;group.add(picture);this.galleryNeighbors.push({group,picture,side});
+  }
+ }
+ setGalleryNeighbors(previous,next){
+  for(const [index,image] of [previous,next].entries())if(image){const material=this.galleryNeighbors[index].picture.material;material.map.dispose();material.map=new T.CanvasTexture(image);material.map.colorSpace=T.SRGBColorSpace;material.map.anisotropy=Math.min(4,this.renderer.capabilities.getMaxAnisotropy());material.needsUpdate=true;}
+ }
  updateCompletion(finished,dt,time){
-  this.finishClock=finished?this.finishClock+dt:0;const e=completionEase(this.finishClock,this.reducedMotion.matches);this.heroProgress=finished?e:0;
+  this.finishClock=finished?this.finishClock+dt:0;const e=finished?completionEase(this.finishClock,this.reducedMotion.matches):0;this.heroProgress=e;
   this.stand.visible=!(finished&&e>.12);for(const jar of this.jars)jar.visible=this.stand.visible;
   this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);
   this.paperGroup.rotation.z=.018;this.celebration.visible=finished&&this.settings.sparkles&&!this.reducedMotion.matches;
+  this.galleryFrame.visible=this.gallerySides.visible=finished&&e>.02;
+  for(const material of this.galleryMaterials)material.opacity=Math.min(1,e*3);
+  for(const neighbor of this.galleryNeighbors){neighbor.picture.material.opacity=Math.min(1,e*2);neighbor.group.position.x=neighbor.side*(GALLERY.spacing+(1-e)*90);}
+  this.gallerySides.position.z=68*e;this.floor.material.color.lerpColors(this.floorRestColor,this.galleryWallColor,e);
   this.coatUniforms.uCelebrate.value=finished&&!this.reducedMotion.matches?e:0;
   if(!finished)return;
-  const frame=this.heroFrame,w=this.canvas.clientWidth,h=this.canvas.clientHeight,tan=Math.tan(this.camera.fov*Math.PI/360),distance=800*h/(2*tan*frame.height),cameraY=((frame.y+frame.height/2)/h-.5)*2*tan*distance;
-  this.camera.position.lerp(new T.Vector3(0,cameraY,distance+110),e);this.camera.quaternion.slerp(new T.Quaternion(),e);
-  const flutter=this.reducedMotion.matches?0:Math.sin(time*.0006)*.004*e;
-  this.paperGroup.position.z=110*e;this.paperGroup.rotation.set(flutter,-flutter*.6,.018*(1-e));this.paperGroup.updateMatrixWorld(true);
+  const pose=galleryCamera(this.heroFrame,this.canvas.clientHeight,this.camera.fov);
+  this.camera.position.lerp(new T.Vector3(pose.x,pose.y,pose.z),e);this.camera.quaternion.slerp(new T.Quaternion().setFromEuler(new T.Euler(0,GALLERY.yaw,0)),e);
+  this.paperGroup.position.z=110*e;this.paperGroup.rotation.set(0,0,.018*(1-e));this.paperGroup.updateMatrixWorld(true);
   for(const star of this.celebrationStars){
    const {x,y,seed}=star.userData,age=this.finishClock,drift=(1-Math.exp(-age*.9))*12;
-   star.position.set(x+Math.sign(x)*drift*.35+Math.sin(time*.0008+seed)*3,y+Math.sign(y)*drift+Math.cos(time*.0007+seed)*4,10);
+   star.position.set(x+Math.sign(x)*drift*.35+Math.sin(time*.0008+seed)*3,y+Math.sign(y)*drift+Math.cos(time*.0007+seed)*4,24);
    const flash=Math.pow(Math.max(0,Math.sin(time*.002+seed)),5);star.scale.setScalar(7+flash*15);star.material.opacity=e*(.12+flash*.75);star.material.rotation=Math.sin(time*.0004+seed)*.3;
   }
  }
@@ -365,7 +388,7 @@ export class AtelierScene {
   this.spills.length=out;this.spill.count=out;this.spill.instanceMatrix.needsUpdate=true;this.spill.instanceColor.needsUpdate=true;
   this.collected.count=this.collectedCount;this.collected.instanceMatrix.needsUpdate=true;this.collected.instanceColor.needsUpdate=true;this.collected.geometry.attributes.flakeSeed.needsUpdate=true;
  }
- reset(){this.finishClock=0;this.heroProgress=0;this.celebration.visible=false;this.coatUniforms.uCelebrate.value=0;this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);this.stand.visible=true;for(const jar of this.jars)jar.visible=true;this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}
+ reset(){this.galleryFrame.visible=this.gallerySides.visible=false;this.floor.material.color.copy(this.floorRestColor);this.finishClock=0;this.heroProgress=0;this.celebration.visible=false;this.coatUniforms.uCelebrate.value=0;this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);this.stand.visible=true;for(const jar of this.jars)jar.visible=true;this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}
  setPeelPiece(image,piece){
   this.peelPiece=piece;this.peelAnchor=piece.grip;
   const {w,h}=piece.bounds,step=this.settings.profile==='economy'?14:10;

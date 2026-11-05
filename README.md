@@ -1,6 +1,6 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=17&mod=basili)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=18&mod=basili)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
@@ -48,9 +48,11 @@ Tüm açık bölümler basılı tutma, fırça ve eğim modlarında bulunur. [İ
 
 ## Eser tamamlanınca
 
-Poster 1,65 saniyelik bir kamera hareketiyle öne gelir; çevresinde parıltılar ve yüzeyinde hafif bir ışık geçişi görünür. Oyun araçları çekilir. Paylaş ve Yeni bölüm alt kenarda, kaydet ve tekrar üst köşelerde durur; posteri kapatan pencere yoktur. Paylaş desteklenen cihazlarda 1200×1600 PNG ile sistem paylaşım ekranını açar. Kaydet ve desteklenmeyen tarayıcılardaki paylaşım aynı temiz PNG’yi indirir; arayüz ve kutlama efektleri görsele eklenmez.
+Poster çerçevelenir; kamera 1,65 saniyelik hareketle hafif çapraz bir galeri görünümüne geçer. Ortada yeni eser, solda son tamamladığın farklı eserin bir kısmı, sağda sıradaki bölümün bulanık tablosu görünür. **Yeni bölüm**, sağdaki önizlemenin bölümünü açar. Tamamlanan altı farklı eserin küçük görselleri bu tarayıcıda saklanır; eski sürümlerde geçmiş tutulmadığından ilk tamamlamada soldaki çerçeve boştur.
 
-Düğmeler basınca esner, seçimler ve ayar paneli yumuşak geçişler kullanır. Sistem hareket azaltma tercihi açıkken giriş hareketleri, kutlama parçacıkları ve ışık süpürmesi kapanır. [v16 uygulama ve doğrulama](docs/v16-completion.md).
+Oyun araçları çekilir. Paylaş ve Yeni bölüm alt kenarda, kaydet ve tekrar üst köşelerde durur. Paylaş desteklenen cihazlarda 1200×1600 PNG ile sistem paylaşım ekranını açar. Kaydet ve desteklenmeyen tarayıcılardaki paylaşım aynı temiz PNG’yi indirir; çerçeveler, arayüz ve efektler dosyaya eklenmez.
+
+Düğmeler basınca esner; seçimler ve ayar paneli yumuşak geçişler kullanır. Sistem hareket azaltma tercihi açıkken dekoratif hareketler kapanır. [Galeri ve doğrulama notları](docs/v18-gallery.md).
 
 ## Geliştirme
 

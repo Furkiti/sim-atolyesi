@@ -1,9 +1,13 @@
-// Reserve separate header and action rails; the poster never sits behind buttons.
+export const GALLERY={width:660,height:860,spacing:676,yaw:.075};
+// Fit the complete frame between the header/actions, leaving room for adjacent artworks.
 export function completionLayout(width,height,safeTop=0,safeBottom=0){
- const top=safeTop+(height<520?68:112),bottom=safeBottom+(height<520?82:112);
- const availableHeight=Math.max(100,height-top-bottom),posterHeight=Math.min(availableHeight,(width-12)*4/3)*.99;
- const posterWidth=posterHeight*.75;
+ const top=safeTop+(height<520?68:112),bottom=safeBottom+(height<520?92:132),ratio=GALLERY.width/GALLERY.height;
+ const availableHeight=Math.max(100,height-top-bottom),posterHeight=Math.min(availableHeight,width*.78/ratio)*.96,posterWidth=posterHeight*ratio;
  return{x:(width-posterWidth)/2,y:top+(availableHeight-posterHeight)/2,width:posterWidth,height:posterHeight};
+}
+export function galleryCamera(frame,height,fov=35){
+ const tan=Math.tan(fov*Math.PI/360),distance=GALLERY.height*height/(2*tan*frame.height);
+ return{x:Math.sin(GALLERY.yaw)*distance,y:((frame.y+frame.height/2)/height-.5)*2*tan*distance,z:110+Math.cos(GALLERY.yaw)*distance,distance};
 }
 export function completionEase(elapsed,reduced=false){const t=Math.max(0,Math.min(1,reduced?1:elapsed/1.65));return t*t*(3-2*t)}
 export async function posterBlob(source){
