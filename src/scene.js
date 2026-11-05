@@ -483,8 +483,8 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,finished=false}){
-  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;if(!finished)this.updateGrains(sand);
-  const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
+  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;if(!finished&&!this.galleryActive&&!this.entry)this.updateGrains(sand);
+  const showHeap=this.settings.relief&&!finished&&!this.galleryActive&&!this.entry&&phase!=='shake'&&sand.surfaceCount>0;
   this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=sand.granular?.10:.23;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;
@@ -519,6 +519,7 @@ export class AtelierScene {
    sp.visible=true;const glintPoint=bentPoint(sand.x[i]-300,400-sand.y[i],sand.z[i]+4,this.bend,this.pitch);sp.position.set(glintPoint.x,glintPoint.y,glintPoint.z);sp.scale.setScalar(8+flash*7);sp.material.opacity=flash*.8;
   }
   if(this.galleryActive||finished||this.entry){this.brush.visible=this.tweezers.visible=this.hint.visible=this.peelSheet.visible=false;this.current.visible=this.heap.visible=this.heapShadow.visible=false;for(const hand of this.hands)hand.visible=false;for(const jar of this.jars)jar.visible=false;for(const glint of this.glints)glint.visible=false;}
+  this.spill.visible=!(this.galleryActive||finished||this.entry);
   this.renderer.render(this.scene,this.camera);
  }
  capture(){this.renderer.render(this.scene,this.camera);return this.canvas.toDataURL('image/png')}
