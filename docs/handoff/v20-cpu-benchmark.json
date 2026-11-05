@@ -1,0 +1,62 @@
+{
+  "runtime": "v22.23.4",
+  "method": "Median of 5 runs; 90 measured frames; CPU hold + grain transforms; v20 curve runs on GPU (GPU time excluded); no GPU render",
+  "results": [
+    {
+      "density": 1,
+      "speed": 1,
+      "before": {
+        "ms": 6.361181522222212,
+        "uploadBytes": 3840000,
+        "particles": 29700
+      },
+      "after": {
+        "ms": 6.140074955555575,
+        "uploadBytes": 2203390,
+        "particles": 29700
+      }
+    },
+    {
+      "density": 1,
+      "speed": 4,
+      "before": {
+        "ms": 7.299713399999988,
+        "uploadBytes": 3840000,
+        "particles": 29700
+      },
+      "after": {
+        "ms": 6.03742354444429,
+        "uploadBytes": 1414648,
+        "particles": 29700
+      }
+    },
+    {
+      "density": 8,
+      "speed": 1,
+      "before": {
+        "ms": 22.795385199999995,
+        "uploadBytes": 8256000,
+        "particles": 103200
+      },
+      "after": {
+        "ms": 21.031869922222377,
+        "uploadBytes": 8071320,
+        "particles": 103200
+      }
+    },
+    {
+      "density": 8,
+      "speed": 4,
+      "before": {
+        "ms": 35.7833847777787,
+        "uploadBytes": 8256000,
+        "particles": 103200
+      },
+      "after": {
+        "ms": 31.383556922222326,
+        "uploadBytes": 7291747,
+        "particles": 103200
+      }
+    }
+  ]
+}

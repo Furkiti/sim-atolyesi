@@ -1,17 +1,17 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 5 Kasım 2026. Ürün/cache sürümü **v19**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 5 Kasım 2026. Ürün/cache sürümü **v20**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=19&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=20&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Son oynanış commit’i: **`bec29b5043b9d8807f9d1507df896126f66459a1`**.
-- Devir dokümanlarıyla checkpoint: **`v19-handoff`** etiketi. Etiket bu belgeyle birlikte commit’lenmiş hâli gösterir.
-- Oyun kodu zaten commit’li, push edilmiş ve yayındaydı. Devir commit’i sadece dokümanlar ve görsel örnekler ekler; runtime dosyalarını değiştirmez.
+- Güncel geliştirme: **v20**, sade stüdyo ve kesintisiz sergi. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
+- v20 ürün/teknik kararları: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
 Önemli yakın geçmiş:
 
@@ -22,7 +22,7 @@ Tarih: 5 Kasım 2026. Ürün/cache sürümü **v19**. Bu belge mevcut oyunu devr
 | `3a20f58` | Şapkalı Portre ve Afro Çocuk bölümleri |
 | `da7fc70` | Yeni bitiş sunumu, paylaş/kaydet ve düğme animasyonları |
 
-`package.json` içindeki `1.0.0`, v19 cache sürümünden ayrıdır.
+`package.json` içindeki `1.0.0`, v20 cache sürümünden ayrıdır.
 
 ## 2. Ürünün amacı ve kullanıcının öncelikleri
 
@@ -83,10 +83,10 @@ Toplam **51 açık renk aşaması**. Şu dört bölüm kullanıcının isteğiyl
 
 URL örnekleri:
 
-- `?v=19&mod=basili&bolum=barcelona`
-- `?v=19&mod=egim&bolum=naruto`
-- `?v=19&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=19&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=20&mod=basili&bolum=barcelona`
+- `?v=20&mod=egim&bolum=naruto`
+- `?v=20&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=20&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -147,11 +147,13 @@ Hissiyat sekmesindeki seçenekler: **1x, 1.25x, 1.5x, 1.75x, 2x, 3x, 4x**. Varsa
 
 Bitişte eseri örten modal yoktur. Poster üç boyutlu koyu çerçeve, ince altın şerit ve açık iç kenarla hafif çapraz bir galeri açısına gelir. Yan tablolar mobilde kenardan görünür, geniş ekranda daha fazla açılır.
 
-- Solda **gerçekten son tamamlanan farklı eser** bulunur; katalogdaki bir önceki bölümün bitmiş olduğu varsayılmaz.
-- Sağda, Yeni bölüm düğmesiyle aynı kayıttan alınan sonraki açık bölüm bulanık gösterilir.
-- Bulanıklık, 75×100 önizlemeye bir defa CPU’da uygulanır; her kare çalışan blur post-process’i yoktur.
-- Son altı farklı eser, 480×640 JPEG küçük görseller olarak bu tarayıcıda saklanır. Eski sürümlerde geçmiş yoktu; ilk tamamlamada sol çerçeve boştur.
-- `Yeni bölüm` sağdaki bölüme geçer. Tekrar, çalışma kamerasını/araçları geri getirip mevcut bölümü ilk renkten başlatır.
+- Açık altı bölüm tek bir sonlu yatay sıradadır. İlk bölümün solunda sahte/boş çerçeve yoktur. Çerçeve merkezleri 810 birim aralıklı; kamera v18/v19’dan daha uzaktır.
+- Tamamlanan bölümler gerçek kaydedilmiş görüntüyle, diğerleri bulanık önizlemeyle gösterilir. Bulanıklık 75×100 önizlemeye bir defa uygulanır.
+- Sergiye çalışma ekranının sağ üstündeki çerçeve ikonundan girilir. Sürükleme, ok düğmeleri/tuşları ve altı konum düğmesi aynı `ExhibitionRail` modelini yönetir.
+- Çalışma sırasında sergiyi açıp geri dönmek o anki simi/boyayı korur; oyun zamanı durur, görsel parıltı zamanı sürer.
+- `Yeni bölüm` veya `Bu esere gir` bir sayfa navigasyonu yapmaz. `LevelLoader` maskeleri önceden yükler; kamera hedefe kayıp yaklaşır, kaplayan poster altında sahne verisi yenilenir ve yeni kâğıda açılır. Aynı renderer/canvas/ses bağlamı korunur. URL `history.pushState` ile güncellenir; geri düğmesi history çoğaltmadan çalışır.
+- Giriş kamerası oyun hızından bağımsız gerçek zaman kullanır. `onCovered` sıfırlamasının kamera konumunu bir kare için bile değiştirmemesi regresyon testindedir.
+- Son altı farklı bitmiş eser 480×640 JPEG olarak aynı tarayıcıda saklanır. Yarım ilerleme disk üzerinde kaydedilmez.
 - Paylaş/Kaydet/New bölüm eylemleri posterin üstüne gelmez; önceki düğme animasyonları ve hareket azaltma tercihi korunur.
 - Paylaş, desteklenirse Web Share API ile **1200×1600 PNG dosyasını** açar. Alıcı otomatik seçilmez. Destek yoksa PNG indirilir; iptal hata sayılmaz.
 - Export temiz boyalı kâğıttır. Çerçeveler, masa, UI ve VFX export’a eklenmez.
@@ -164,6 +166,15 @@ Depolama anahtarları:
 | `sim-atolyesi-gallery-v1` | Son tamamlanan eserlerin küçük görselleri |
 
 Cache sürümünü artırırken bu anahtarları otomatik değiştirme; kullanıcı ayarları/geçmişi silinir. Yerel sunucu ile GitHub Pages farklı origin olduğundan ayrı kayıtlara sahiptir. Aktif rengin sim parçacıkları ve yarım bölüm ilerlemesi otomatik kaydedilmez.
+
+### v20 çizim ve bellek düzeni
+
+- Kalıcı kap rafı/marka kaldırıldı. Tek kap ve tutan el döküş sırasında ekran dışından girer, geri çıkar. Kâğıt daha yukarıda; dış çizgi bükülmeyle birlikte şekil değiştirir. Kamera güvenli üst alanı hesaba katar.
+- `updateCoat(false)` sadece küçük temas ızgarasını günceller. Aktif maske/glitter/çizgi dokularıyla canlı kaplama shader içinde çizilir. CPU canvas bake’i renk bitişi/export için korunur; bunu yanlışlıkla her kare tekrar açma.
+- Hareketli simin aynı bükülme dönüşümü GPU’da merkez koordinatına uygulanır. Üçgen/normal/renk/parıltı korunur. Dökülen parçaların dünya fiziği ayrı kalır.
+- Örnek matrisi GPU’ya sadece dolu aralıkta gönderilir. Renk ve seed, sıra değişmedikçe yeniden gönderilmez. Yoğunluk ızgarası alt adım başına değil, görüntü karesi başına hesaplanır.
+- `LevelLoader` en fazla üç bölümün maskelerini/resimlerini tutar; devam eden istekler paylaşılır. Sergi altı küçük önizleme tutar. Bölüm değişiminde kullanılmayan galeri dokuları dispose edilir.
+- `exhibition.js` sonlu gezinme/gerçek zamanlı giriş eğrisi; `level-loader.js` bundle önbelleği; `scripts/benchmark-hold.mjs` v19 etiketiyle CPU mikro karşılaştırmasıdır. Bu ölçüm fiziksel telefon FPS ölçümü değildir.
 
 ## 9. Dosya haritası
 
@@ -208,7 +219,7 @@ Ham videolar/sohbet ekleri ve `/tmp` içindeki çıkarım scriptleri clone için
 
 ## 11. Test ve görsel QA
 
-Son oynanış commit’inde `npm run build` başarılı ve **113 test başarılı**. Bu devir dokümantasyonu runtime’ı değiştirmediği için testleri yeniden genişletmek gerekmedi.
+`npm run build` başarılı ve **119 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
 
 Özellikle dikkat edilecek regresyon testleri:
 
@@ -227,7 +238,13 @@ Klavye testi: `hold-control` görünürken **Enter**, basılı tutmayı açıp k
 
 ### Görsel referanslar (bu repo içinde)
 
-Galeri ekran görüntüleri v18’de alındı; v19 aynı görsel düzeni oyun hızıyla kullanıyor. Ayar ekranı v19’dur. Ekran görüntülerindeki yoğunluk/tane boyutu seçimleri her cihazın varsayılanı değildir.
+Güncel v20 mobil çalışma ve galeri örnekleri aşağıdadır. Daha alttaki v18/v19 ekranları tarihsel karşılaştırmadır.
+
+![v20 stüdyo](handoff/v20-studio-mobile.png)
+
+![v20 sergi](handoff/v20-gallery-mobile.png)
+
+Eski galeri ekran görüntüleri v18’de alındı; eski ayar ekranı v19’dur. Ekran görüntülerindeki yoğunluk/tane boyutu seçimleri her cihazın varsayılanı değildir.
 
 ![Geniş galeri](handoff/gallery-desktop.png)
 
@@ -250,9 +267,9 @@ git status --short
 git push origin main
 ```
 
-`.github/workflows/pages.yml` → **Publish game**. İş akışı sadece `index.html`, `style.css`, `game.js`, `.nojekyll`, `assets/`, `audio/` dosyalarını paketler. Sunucuda npm build çalışmaz; kaynak değişip bundle eski kalırsa canlı oyun değişmez.
+`.github/workflows/pages.yml` → **Publish game**. İş akışı `index.html`, `style.css`, `game.js`, `.nojekyll`, `assets/`, `audio/` ve v20 referans panosu/ölçüm belgelerini paketler. Sunucuda npm build çalışmaz; kaynak değişip bundle eski kalırsa canlı oyun değişmez.
 
-Son yayın doğrulaması: v19 çalışma dosyaları yerel SHA-256 değerleriyle eşleşti; Actions koşusu `42092281500` başarılıydı. Dokümantasyon-only devir commit’i aynı oyun dosyalarını korur.
+v19 tarihsel yayın doğrulaması: yerel SHA-256 eşleşmesi, Actions `42092281500`. v20 için son `main` SHA’sını Actions ve canlı dosya hash’leriyle doğrula.
 
 Bir sonraki uygulama sürümünde cache numarasını tutarlı artır: `index.html` JS/CSS query’leri; `src/main.js` `openLevel`, dataset version, galeri önizlemesi ve maske URL’leri; README canlı bağlantısı. Sonra build et. Depolama anahtarlarını bundan dolayı değiştirme.
 

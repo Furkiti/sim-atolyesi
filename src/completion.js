@@ -1,8 +1,8 @@
-export const GALLERY={width:660,height:860,spacing:676,yaw:.075};
+export const GALLERY={width:660,height:860,spacing:810,yaw:.075};
 // Fit the complete frame between the header/actions, leaving room for adjacent artworks.
 export function completionLayout(width,height,safeTop=0,safeBottom=0){
  const top=safeTop+(height<520?68:112),bottom=safeBottom+(height<520?92:132),ratio=GALLERY.width/GALLERY.height;
- const availableHeight=Math.max(100,height-top-bottom),posterHeight=Math.min(availableHeight,width*.78/ratio)*.96,posterWidth=posterHeight*ratio;
+ const availableHeight=Math.max(100,height-top-bottom),posterHeight=Math.min(availableHeight,width*.65/ratio)*.96,posterWidth=posterHeight*ratio;
  return{x:(width-posterWidth)/2,y:top+(availableHeight-posterHeight)/2,width:posterWidth,height:posterHeight};
 }
 export function galleryCamera(frame,height,fov=35){

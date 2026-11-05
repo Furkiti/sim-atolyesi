@@ -10,15 +10,20 @@ import {completionStatus,resumeIndex} from './progress.js';
 const $=s=>document.querySelector(s),canvas=$('#art'),dialog=$('#settings');
 import {levels,selectLevel} from './levels.js';
 import {FEELS,feelSettings,brushRadius,pourFraction} from './feel.js';
-const level=selectLevel(location.search),stages=level.stages;
+let level=selectLevel(location.search),stages=level.stages;
 import {drawGlitter} from './coating.js';
 import {piecesByStage} from './peel-pieces.js';
 import {peelAt,peelDuration,revealPolygon} from './peel.js';
 import {posterBlob,downloadPoster} from './completion.js';
 import {installButtonMotion} from './ui-motion.js';
 import {GalleryHistory,galleryThumbnail,loadGalleryImage,galleryPicture} from './gallery.js';
+import {ExhibitionRail} from './exhibition.js';
+import {LevelLoader} from './level-loader.js';
 import {gameSteps} from './game-clock.js';
 installButtonMotion();
+const loader=new LevelLoader(),rail=new ExhibitionRail(levels.length,levels.indexOf(level)),previewCache=new Map();
+let exhibition=false,transitioning=false,galleryArt=[],following=levels[(levels.indexOf(level)+1)%levels.length];
+const sessionId=String(Date.now());
 let gallery;try{gallery=new GalleryHistory(localStorage,levels.map(entry=>entry.id))}catch{gallery=new GalleryHistory(null,levels.map(entry=>entry.id))}
 let settings;try{settings=loadSettings(localStorage)}catch{settings=loadSettings({getItem:()=>null})}
 if(new URLSearchParams(location.search).get('mod')==='egim')settings={...settings,controlMode:'tilt'};
@@ -33,7 +38,7 @@ let refillAfterShake=false;
 let shakeRuns=0,nextRuns=0,partLayers=[],activePart=0,revealedParts=0;
 let view,sand,index=0,finished=false,pour=null,peeled=false,peel=0,readySince=0,autoKick=0;
 let pointer={x:300,y:282,visible:false},previous={x:300,y:282},down=false,lastRender=0,statClock=0,fpsClock=0,frames=0,fps=0,frameMs=16.7,simMs=0,renderMs=0,moved=0;
-let pointerTime=0,gameTime=0,holding=false;
+let pointerTime=0,gameTime=0,exhibitTime=0,holding=false;
 let brushMotion={dx:0,dy:0,speed:0,load:0};
 let initialWidth=innerWidth;
 // iOS browser bars may change innerHeight mid-stroke. Keep the game viewport
@@ -61,10 +66,14 @@ const coat=document.createElement('canvas');coat.width=W;coat.height=H;const cc=
 const paintMask=document.createElement('canvas');paintMask.width=W;paintMask.height=H;const mc=paintMask.getContext('2d');
 const glitter=document.createElement('canvas');glitter.width=W;glitter.height=H;const tc=glitter.getContext('2d');
 let lastCoated=-1;
-function makeGlitter(color){drawGlitter(tc,color,W,H,settings.controlMode==='hold'?settings.holdGrainSize:1)}
+function makeGlitter(color){drawGlitter(tc,color,W,H,settings.controlMode==='hold'?settings.holdGrainSize:1);view?.setActiveCoat(assets[stages[index].id],glitter,assets.lines)}
 function updateCoat(force=false,finish=false){
  if(!sand||(!force&&lastCoated===sand.coveredWeight))return;
- lastCoated=sand.coveredWeight;cc.clearRect(0,0,W,H);cc.fillStyle='#fff';
+ lastCoated=sand.coveredWeight;
+ // Moving coverage is composed in the paper shader from the existing small
+ // contact grid. Bake the full-resolution canvas only for phase changes/export.
+ if(!force){view?.markContacts(sand.bound);return;}
+ cc.clearRect(0,0,W,H);cc.fillStyle='#fff';
  // Seal only the tiny raster seams of an already completed coat when baking it.
  if(finish&&ready())cc.fillRect(0,0,W,H);
  else for(let k=0;k<sand.bound.length;k++)if(sand.bound[k])cc.fillRect((k%120)*5,Math.floor(k/120)*5,5,5);
@@ -106,7 +115,7 @@ function sound(amount=0){
 }
 $('#sound').textContent='Ses: açık';$('#sound').setAttribute('aria-label','Sesi kapat');
 $('#sound').onclick=async()=>{soundOn=!soundOn;await audio();sound(0);$('#sound').textContent=soundOn?'Ses: açık':'Ses: kapalı';$('#sound').setAttribute('aria-label',soundOn?'Sesi kapat':'Sesi aç')};
-function releaseAll(){holdLatched=false;paperMotion.end();down=false;gate.cancel();strokes.length=0;sound(0)}
+function releaseAll(){if(rail.drag)rail.end();holdLatched=false;paperMotion.end();down=false;gate.cancel();strokes.length=0;sound(0)}
 function settingsTab(name){
  document.querySelectorAll('[data-settings-tab]').forEach(e=>e.hidden=e.dataset.settingsTab!==name);
  document.querySelectorAll('[data-tab]').forEach(e=>e.setAttribute('aria-selected',String(e.dataset.tab===name)));
@@ -171,14 +180,61 @@ function recenterTilt(){deviceTilt.calibrate();tiltFrame={x:0,y:0,active:false};
 $('#tilt-center').onclick=recenterTilt;$('#tilt-recenter').onclick=recenterTilt;
 $('#tilt-demo-start').onclick=()=>{deviceTilt.demo();deviceTilt.setDemo(Number($('#tilt-demo-x').value),Number($('#tilt-demo-y').value));tiltAutoStart=false;if(dialog.open)closeSettings();if(flow.phase==='peel')beginRoll();updateTiltUI();};
 for(const id of ['tilt-demo-x','tilt-demo-y'])$('#'+id).oninput=()=>{deviceTilt.setDemo(Number($('#tilt-demo-x').value),Number($('#tilt-demo-y').value));updateTiltUI();};
-function openLevel(id){const url=new URL(location.href);url.search='';url.searchParams.set('v','19');if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');url.searchParams.set('bolum',id);location.assign(url)}
-for(const entry of levels){
- const button=document.createElement('button');button.className='level-card'+(entry.id===level.id?' current':'');button.innerHTML=`<img src="assets/${entry.preview}.png" alt=""><span><strong>${entry.name}</strong><small>${entry.subtitle}</small></span><b>${entry.id===level.id?'Oynuyorsun':'Başla →'}</b>`;button.onclick=()=>{if(entry.id!==level.id)openLevel(entry.id)};$('#levels').append(button);
+function installBundle(bundle){for(const key of Object.keys(assets))delete assets[key];for(const key of Object.keys(masks))delete masks[key];Object.assign(assets,bundle.assets);Object.assign(masks,bundle.masks);}
+function levelLabels(){
+ following=levels[(levels.indexOf(level)+1)%levels.length];$('#level-name').textContent=level.name;
+ document.querySelectorAll('.level-card').forEach((button,i)=>{button.classList.toggle('current',levels[i]===level);button.querySelector('b').textContent=levels[i]===level?'Oynuyorsun':'Başla →';});
+ loader.load(following).catch(console.warn);
 }
-const following=levels[(levels.indexOf(level)+1)%levels.length];$('#next-level-name').textContent=following.name;$('#complete-level').textContent=level.name+' · TAMAMLANDI';$('#next-level').onclick=()=>openLevel(following.id);
-$('#level-name').textContent=level.name;
-const previousGalleryEntry=gallery.previous(level.id);
-const galleryImages=Promise.all([previousGalleryEntry?loadGalleryImage(previousGalleryEntry.image).then(image=>galleryPicture(image)).catch(()=>null):null,loadGalleryImage(`assets/${following.preview}.png?v=19`).then(image=>galleryPicture(image,true)).catch(()=>null)]);
+async function galleryPictures(){
+ const entries=await Promise.all(levels.map(async entry=>{
+  const record=gallery.entries.find(item=>item.id===entry.id),key=entry.id+':'+(record?.completedAt||'preview');
+  for(const cached of previewCache.keys())if(cached.startsWith(entry.id+':')&&cached!==key)previewCache.delete(cached);
+  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage(record?.image||`assets/${entry.preview}.png?v=20`).then(image=>({id:entry.id,name:entry.name,completed:!!record,image:galleryPicture(image,!record),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
+  return previewCache.get(key);
+ }));galleryArt=entries;view.setGalleryEntries(entries,levels.indexOf(level));return entries;
+}
+function galleryLabels(){
+ const selected=levels[rail.target],current=rail.target===levels.indexOf(level),record=gallery.entries.find(e=>e.id===selected.id);
+ $('#complete-level').textContent=finished&&current?level.name+' · TAMAMLANDI':'KOLEKSİYONUN';
+ $('#complete-title').textContent=finished&&current?'Biraz ışık, biraz sabır.':selected.name;
+ $('#gallery-caption').textContent=`${String(rail.target+1).padStart(2,'0')} / ${String(levels.length).padStart(2,'0')}  ·  ${selected.name}`;
+ $('#gallery-prev').disabled=rail.target===0;$('#gallery-next').disabled=rail.target===levels.length-1;
+ $('#next-level-name').textContent=finished&&current?following.name:selected.name;
+ $('#enter-label').textContent=current?(finished?'Yeni bölüm':'Devam et'):record?'Yeniden yap':'Bu esere gir';
+ $('#share').hidden=$('#save').hidden=!(finished&&current);$('#again').hidden=!(finished&&record);$('#again').setAttribute('aria-label',selected.name+' bölümünü yeniden oyna');$('#exhibition-close').hidden=finished;
+ document.querySelectorAll('#gallery-dots button').forEach((button,i)=>button.setAttribute('aria-current',String(i===rail.target)));
+}
+function selectArtwork(index){rail.select(index);galleryLabels();loader.load(levels[rail.target]).catch(console.warn);}
+function showExhibition(){
+ if(!view||transitioning)return;releaseAll();pointer.visible=false;exhibition=true;rail.focus=rail.target=levels.indexOf(level);view.galleryActive=true;view.galleryFocus=rail.focus;document.body.dataset.exhibition='true';$('#complete').hidden=false;galleryLabels();galleryPictures().catch(console.warn);
+}
+function closeExhibition(){if(transitioning||finished)return;releaseAll();exhibition=false;view.galleryActive=false;rail.focus=rail.target=levels.indexOf(level);delete document.body.dataset.exhibition;$('#complete').hidden=true;updateUI();}
+async function openLevel(id,replace=false){
+ const target=levels.find(entry=>entry.id===id);if(!target||!view||transitioning)return;
+ if(target===level&&!finished){closeExhibition();return;}
+ if(dialog.open)closeSettings();showExhibition();selectArtwork(levels.indexOf(target));transitioning=true;document.body.dataset.transition='loading';releaseAll();
+ try{
+  const [bundle]=await Promise.all([loader.load(target),galleryArt.length?Promise.resolve():galleryPictures()]);
+  const image=galleryArt[levels.indexOf(target)].sharp;document.body.dataset.transition='entering';
+  view.beginEntry(levels.indexOf(target),image,()=>{
+   level=target;stages=level.stages;installBundle(bundle);view.colors=stages.map(stage=>stage.color);exhibition=false;view.galleryCurrent=levels.indexOf(level);rail.focus=rail.target=levels.indexOf(level);
+   reset();levelLabels();document.body.dataset.transition='arriving';delete document.body.dataset.exhibition;
+   // Same renderer, same document. Only the local level bundle is replaced.
+   const url=new URL(location.href);url.search='';url.searchParams.set('v','20');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
+   view.setGalleryEntries(galleryArt,levels.indexOf(level));
+  },()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
+ }catch(error){transitioning=false;delete document.body.dataset.transition;$('#share-status').textContent='Eser yüklenemedi. Yeniden deneyebilirsin.';console.error(error);}
+}
+for(const entry of levels){
+ const button=document.createElement('button');button.className='level-card';button.innerHTML=`<img src="assets/${entry.preview}.png" alt=""><span><strong>${entry.name}</strong><small>${entry.subtitle}</small></span><b>Başla →</b>`;button.onclick=()=>{if(entry!==level)openLevel(entry.id)};$('#levels').append(button);
+ const dot=document.createElement('button');dot.setAttribute('aria-label',entry.name+' tablosuna git');dot.onclick=()=>selectArtwork(levels.indexOf(entry));$('#gallery-dots').append(dot);
+}
+$('#next-level').onclick=()=>{if(rail.target===levels.indexOf(level)&&!finished)closeExhibition();else openLevel(rail.target===levels.indexOf(level)?following.id:levels[rail.target].id);};
+$('#exhibition-open').onclick=showExhibition;$('#exhibition-close').onclick=closeExhibition;$('#gallery-prev').onclick=()=>selectArtwork(rail.target-1);$('#gallery-next').onclick=()=>selectArtwork(rail.target+1);
+window.addEventListener('keydown',event=>{if(!(exhibition||finished)||transitioning||dialog.open)return;if(event.key==='ArrowRight'){event.preventDefault();selectArtwork(rail.target+1)}if(event.key==='ArrowLeft'){event.preventDefault();selectArtwork(rail.target-1)}if(event.key==='Escape')closeExhibition();});
+window.addEventListener('popstate',()=>{const selected=selectLevel(location.search);if(selected!==level)openLevel(selected.id,true);});
+levelLabels();
 
 function ready(){return sand&&completionStatus(sand.coverage,settings.pace,sand.targetCount*25).ready}
 function updateUI(){
@@ -260,12 +316,12 @@ function startShake(advance=false){if(finished||!flow.shake(advance))return;shak
 function nextStage(){
  refillAfterShake=false;nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
  if(index<stages.length-1){index++;activate();autoKick=(settings.autoAdvance||settings.controlMode==='hold')?.22:0;}
- else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;document.body.dataset.complete='true';try{gallery.remember({id:level.id,image:galleryThumbnail(paperCanvas),completedAt:Date.now()})}catch{}$('#gallery-caption').textContent=gallery.entries.length<2?'Galerinin ilk eseri':`Galerinde ${gallery.entries.length} eser`;deviceTilt.stop();completedPoster=posterBlob(paperCanvas).catch(()=>null);releaseAll();$('#complete-title').focus({preventScroll:true});updateUI();}
+ else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;document.body.dataset.complete='true';try{gallery.remember({id:level.id,image:galleryThumbnail(paperCanvas),completedAt:Date.now()})}catch{}$('#gallery-caption').textContent=gallery.entries.length<2?'Galerinin ilk eseri':`Galerinde ${gallery.entries.length} eser`;showExhibition();galleryPictures().catch(console.warn);deviceTilt.stop();completedPoster=posterBlob(paperCanvas).catch(()=>null);releaseAll();$('#complete-title').focus({preventScroll:true});updateUI();}
 }
 for(const button of document.querySelectorAll('[data-tool]'))button.onclick=()=>{const t=button.dataset.tool;if(t==='peel')beginRoll();else if(t==='pour')addSand();else if(t==='clean')startShake(false);else if(t==='brush'&&settings.controlMode==='tilt'&&!tiltFrame.active)enableTilt();else updateUI()};
 $('#add-sand').onclick=addSand;$('#shake').onclick=()=>startShake(false);$('#next').onclick=()=>{if(ready())startShake(true)};
-function reset(){if(!view)return;releaseAll();refillAfterShake=false;finished=false;index=0;autoKick=0;bakedContext.clearRect(0,0,W,H);cc.clearRect(0,0,W,H);view.reset();$('#complete').hidden=true;delete document.body.dataset.complete;completedPoster=null;sharing=false;$('#share').disabled=false;$('#save').disabled=false;$('#share-status').textContent='';activate()}
-$('#reset').onclick=()=>{reset();closeSettings()};$('#again').onclick=reset;
+function reset(){if(!view)return;releaseAll();exhibition=false;view.galleryActive=false;delete document.body.dataset.exhibition;refillAfterShake=false;finished=false;index=0;autoKick=0;bakedContext.clearRect(0,0,W,H);cc.clearRect(0,0,W,H);view.reset();$('#complete').hidden=true;delete document.body.dataset.complete;completedPoster=null;sharing=false;$('#share').disabled=false;$('#save').disabled=false;$('#share-status').textContent='';activate()}
+$('#reset').onclick=()=>{reset();closeSettings()};$('#again').onclick=()=>openLevel(levels[rail.target].id);
 let sharing=false,completedPoster=null;
 async function exportPoster(share=false){
  if(sharing||!finished)return;sharing=true;const button=$(share?'#share':'#save');button.disabled=true;$('#share-status').textContent='Poster hazırlanıyor…';
@@ -278,7 +334,7 @@ async function exportPoster(share=false){
 }
 $('#save').onclick=()=>exportPoster();$('#share').onclick=()=>exportPoster(true);
 function beginPointer(e){
- e.preventDefault();if(!view||finished||(flow.busy&&flow.phase!=='rolling')||!gate.begin(e.pointerId,e.isPrimary!==false))return;
+ e.preventDefault();if(view&&(exhibition||finished)&&!transitioning){if(!gate.begin(e.pointerId,e.isPrimary!==false))return;e.currentTarget.setPointerCapture(e.pointerId);rail.begin(e.clientX);return;}if(transitioning)return;if(!view||finished||(flow.busy&&flow.phase!=='rolling')||!gate.begin(e.pointerId,e.isPrimary!==false))return;
  e.currentTarget.setPointerCapture(e.pointerId);pointer={...view.mapPointer(e),visible:true};previous={...pointer};pointerTime=e.timeStamp;
  if(soundOn)audio();
  if(flow.phase==='peel'){beginRoll();down=flow.phase==='rolling';pointer.visible=false;updateUI();return;}
@@ -291,7 +347,8 @@ function beginPointer(e){
 canvas.addEventListener('pointerdown',beginPointer);$('#hold-control').addEventListener('pointerdown',beginPointer);
 $('#hold-control').onclick=e=>{if(e.detail!==0||!(flow.phase==='rolling'||settings.controlMode==='hold'&&flow.phase==='brush'))return;holdLatched=!holdLatched;if(soundOn)audio();updateUI();};
 canvas.addEventListener('pointermove',e=>{
- if(!view||finished||e.isPrimary===false)return;
+ if((exhibition||finished)&&!transitioning){if(gate.owns(e.pointerId)){rail.move(e.clientX,view.heroFrame.width*810/660);galleryLabels();}return;}
+ if(transitioning||!view||finished||e.isPrimary===false)return;
  if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons){pointer={...view.mapPointer(e),visible:true};return;}
  if(!gate.owns(e.pointerId)||flow.phase!=='brush'||settings.controlMode!=='brush')return;
  if(paperMotion.grip){pointer={...view.mapPointer(e),visible:true};paperMotion.move(pointer);return;}
@@ -299,15 +356,15 @@ canvas.addEventListener('pointermove',e=>{
  const p=view.mapPointer(e);pointer={...p,visible:true};
  if(Math.hypot(p.x-previous.x,p.y-previous.y)>.1){appendStroke(strokes,{from:{...previous},to:{...p},seconds:Math.max(.001,Math.min(.1,(e.timeStamp-pointerTime)/1000))})}previous=p;pointerTime=e.timeStamp;
 });
-function pointerEnd(e){if(!gate.end(e.pointerId))return;paperMotion.end();down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
+function pointerEnd(e){if(!gate.end(e.pointerId))return;if(exhibition||finished){rail.end();galleryLabels();return;}paperMotion.end();down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
 for(const target of [canvas,$('#hold-control')])for(const type of ['pointerup','pointercancel','lostpointercapture'])target.addEventListener(type,pointerEnd);
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',()=>{releaseAll();if(deviceTilt.status==='active'){deviceTilt.model.zero=null;deviceTilt.model.x=deviceTilt.model.y=0;}});
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
  $('#gallery-caption').style.top=(view.heroFrame.y+view.heroFrame.height+16)+'px';
- Object.assign(canvas.dataset,{version:'19',gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:previousGalleryEntry?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:(flow.phase==='rolling'&&(down||holdLatched)&&!dialog.open?4:1)*settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'20',session:sessionId,transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:(flow.phase==='rolling'&&(down||holdLatched)&&!dialog.open?4:1)*settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
- for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
+ for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-transfer':((m.visible?view.grainUploadBytes||0:0)/1024).toFixed(0),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
 }
 function advanceGame(dt){
@@ -321,7 +378,7 @@ function advanceGame(dt){
  }
  const tiltPlaying=settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'&&!finished;
  holding=settings.controlMode==='hold'&&(down||holdLatched)&&!dialog.open&&flow.phase==='brush'&&!finished;
- if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.step(dt,holding);
+ if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.step(dt,holding,false);
  paperPose=settings.controlMode==='hold'?(cascade?.pose||{x:0,y:0,cup:0,pitch:0}):settings.controlMode==='tilt'?{x:tiltPlaying?tiltFrame.x*.25:0,y:tiltPlaying?tiltFrame.y*.25:0,cup:0}:paperMotion.step(dt,settings.paperMotion,brushMotion,down);
  const drainage=flow.phase==='shake'?drainPose(flow.progress):{bend:paperPose.cup,pitch:paperPose.pitch||0};view.setCardPose(paperPose,flow.phase,drainage);
  if(!finished&&!(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase)))sand.step(dt,{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying,granular:settings.controlMode==='tilt'&&flow.phase!=='shake'});
@@ -346,23 +403,23 @@ function frame(t){
  const speed=Math.hypot(dx,dy)/Math.max(dt,.001),decay=Math.exp(-dt*18);brushMotion={dx:dx||brushMotion.dx,dy:dy||brushMotion.dy,speed:brushMotion.speed*decay+Math.min(1200,speed)*(1-decay),load:brushMotion.load*decay+Math.min(1,moved/350)*(1-decay)};
  tiltFrame=deviceTilt.tick(Math.min(dt,.04),settings.tiltSensitivity);
 
- const steps=gameSteps(dt,settings.gameSpeed);gameTime+=steps.total;
- for(let i=0;i<steps.count;i++)advanceGame(steps.dt);
- if(flow.phase==='rolling')animatePeel();
+ const steps=gameSteps(dt,settings.gameSpeed);if(!exhibition&&!transitioning&&!finished)gameTime+=steps.total;else exhibitTime+=dt;
+ if(!exhibition&&!transitioning&&!finished){for(let i=0;i<steps.count;i++)advanceGame(steps.dt);
+ if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.refresh();}
+ rail.step(dt);view.galleryFocus=rail.focus;
+ if(flow.phase==='rolling'&&!exhibition&&!transitioning)animatePeel();
  // Commit new coverage before bound grains leave the moving mesh, avoiding a blank frame.
  updateCoat();simMs=simMs*.85+(performance.now()-simStart)*.15;
- sound(flow.phase==='pour'?.14:flow.phase==='shake'?.15:flow.phase==='rolling'?.06:holding?.035:moved?Math.min(.16,.015+moved*.00003):0);
- const drawStart=performance.now();view.render(sand,{time:gameTime*1000,dt:steps.total,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip||(settings.controlMode==='hold'&&(cascade?.press||0)>.02),peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
+ sound(exhibition||transitioning?0:flow.phase==='pour'?.14:flow.phase==='shake'?.15:flow.phase==='rolling'?.06:holding?.035:moved?Math.min(.16,.015+moved*.00003):0);
+ const drawStart=performance.now();view.render(sand,{time:(gameTime+exhibitTime)*1000,dt:steps.total,realDt:dt,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip||(settings.controlMode==='hold'&&(cascade?.press||0)>.02),peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
  if((statClock+=dt)>.2){statClock=0;updateUI();updateStats();}
 }
 applySettings(settings);
 try{
- await Promise.all([level.lines,...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=19`})));
- assets.lines=assets[level.lines];
- for(const stage of stages){gc.clearRect(0,0,W,H);gc.drawImage(assets[stage.id],0,0);const data=gc.getImageData(0,0,W,H).data,mask=new Uint8Array(W*H);for(let i=0;i<mask.length;i++)mask[i]=data[i*4+3]>80?1:0;masks[stage.id]=mask;}
+ installBundle(await loader.load(level));
  index=resumeIndex(location.search,stages.length);
  for(let i=0;i<index;i++){
   makeGlitter(stages[i].color);cc.clearRect(0,0,W,H);cc.drawImage(glitter,0,0);cc.globalCompositeOperation='destination-in';cc.drawImage(assets[stages[i].id],0,0);cc.globalCompositeOperation='source-over';bakedContext.drawImage(coat,0,0);
  }
- cc.clearRect(0,0,W,H);repaintPaper();view=new AtelierScene(canvas,paperCanvas,stages.map(s=>s.color),settings);galleryImages.then(([previous,next])=>view.setGalleryNeighbors(previous,next));activate();requestAnimationFrame(frame);
+ cc.clearRect(0,0,W,H);repaintPaper();view=new AtelierScene(canvas,paperCanvas,stages.map(s=>s.color),settings);galleryPictures().catch(console.warn);activate();requestAnimationFrame(frame);
 }catch(error){$('#instruction-title').textContent='Atölye açılamadı.';$('#instruction-text').textContent='Sayfayı güncel bir tarayıcıda yenileyerek tekrar dene.';console.error(error);}

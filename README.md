@@ -1,6 +1,8 @@
+> v20: Sade stüdyo, ekran dışından gelen tek kap, kaydırılabilir altı eserlik sergi ve aynı WebGL sahnesinde tabloya girerek bölüm geçişi. [Araştırma ve teknik notlar](docs/v20-ui-references.md) · [Üç UI yönü](docs/v20-reference-board.html).
+
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=19&mod=basili)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=20&mod=basili)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 

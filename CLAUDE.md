@@ -4,12 +4,12 @@ Bu repo mevcut, çalışan oyundur. Devam etmeden önce **[docs/CLAUDE_HANDOFF.m
 
 ## Mevcut checkpoint
 
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=19&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=20&mod=basili
 - Repo: https://github.com/Furkiti/sim-atolyesi
-- Oyun kodunun son commit’i: `bec29b5043b9d8807f9d1507df896126f66459a1`.
-- Devir notlarıyla birlikte sabit nokta: `v19-handoff` Git etiketi.
+- Güncel geliştirme: v20 — sade stüdyo, tek dışarıdan gelen kap, kaydırılabilir sergi, aynı sahnede bölüm girişi ve GPU kaplama. Ayrıntı: [docs/v20-ui-references.md](docs/v20-ui-references.md).
+- Önceki sabit nokta: `v19-handoff` Git etiketi. Bu etiket tarihsel v19 sürümüdür.
 - Kaynak proje bu klasördür; derlenmiş giriş `game.js`, asıl uygulama `src/main.js`.
-- Son doğrulama: `npm run build` başarılı, 113 test başarılı; 4x bitiş ve ayar kalıcılığı tarayıcıdan denendi.
+- Son doğrulama: `npm run build` başarılı, 119 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
 
 ## Çalıştırma
 
@@ -32,11 +32,11 @@ npm test
 - Basılı tut modu bilinçli olarak yönlendirilmiş bir akıştır; tam serbest fizik gibi yeniden yazılması istenmiş değil.
 - Görünür eksikleri otomatik boyama. Son rötuş toleransı çok düşüktür.
 - Altı bölüm açık; kapatılan dört eski bölümü kendiliğinden açma.
-- Oyun kamerası sabittir; hareketli kamera yalnızca bitiş galerisinde kullanılır. İlk parmak kontrol eder; ikinci parmak devralmaz.
+- Çalışma kamerası sabittir; sergi, geri dönüş ve tablonun içine girerek bölüm geçişinde hareket eder. İlk parmak kontrol eder; ikinci parmak devralmaz.
 - Oyun hızı 1x–4x’tir. Hızı çarptıktan sonra fiziği küçük adımlara böl; FPS ve fırça hareketlerini tekrar tekrar hızlandırma.
-- Bitişte ortadaki posteri kapatan modal ekleme. Çerçeveli galeri, gerçek önceki eser, bulanık sonraki eser ve kenardaki eylemler korunmalı.
+- Bitişte ortadaki posteri kapatan modal ekleme. Altı açık bölüm tek sergi sırasında bulunur. Bitmiş eserler gerçek kayıttan, bitmemişler bulanık önizlemeden gelir; ilk eserin soluna sahte çerçeve koyma. Yeni bölümü sayfa yükleyerek açma.
 - Kaynak değiştiyse derlenmiş `game.js` ve üretilen dosyaları da commit et. Pages iş akışı sunucuda derleme yapmaz.
 - `game.js`, `src/reference-levels.js`, `src/peel-pieces.js` üretilir; bunları ana düzenleme noktası yapma.
 - `docs/v*.md` tarihsel notlardır. Güncel davranış için devir belgesi ve kod önceliklidir.
 
-Bu devir görevi kapsamında oynanış değişikliği yapılmadı. Yeni geliştirme için kullanıcının sonraki isteğini esas al.
+Görsel araştırma ve kararlar: [docs/v20-ui-references.md](docs/v20-ui-references.md). Üç özgün yön: [docs/v20-reference-board.html](docs/v20-reference-board.html). Mikro CPU ölçümü: `node scripts/benchmark-hold.mjs`.

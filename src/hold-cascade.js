@@ -5,7 +5,7 @@ export function holdLooseCount(settings={}){return Math.round(10500*(settings.ho
 // consumes an actual packet that travels from the top reservoir to that cell.
 export class HoldCascade {
  constructor(sand,settings={}){
-  this.rows=settings.holdRows===2?2:1;sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+holdLooseCount(settings))));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.retainedIndices=[];this.dustAssigned=0;this.dustChance=Math.min(.055,650/holdLooseCount(settings));
+  this.rows=settings.holdRows===2?2:1;sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+holdLooseCount(settings))));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.activeRoutes=[];this.retainedIndices=[];this.dustAssigned=0;this.dustChance=Math.min(.055,650/holdLooseCount(settings));
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
@@ -37,14 +37,14 @@ export class HoldCascade {
     const yMin=top+48;route.rest={x:route.x,y:yMin+s.random()*(H-42-yMin),z:2+s.random()*.5};s.dust[i]=1;this.dustAssigned++;
    }
    route.delay=(seed*97%1)*1.1;route.speed=105+(seed*197%1)*43;route.distance=0;
-   s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.byParticle.set(i,route);
+   s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.byParticle.set(i,route);this.activeRoutes.push(route);
   }
  }
- step(dt,held=false){
+ step(dt,held=false,refresh=true){
   const s=this.sand;this.press+=(Number(held)-this.press)*(1-Math.exp(-dt*(held?8:11)));
   const previousTime=this.elapsed;if(held)this.elapsed+=dt;
-  for(const route of this.byParticle.values()){
-   const i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST)continue;
+  let active=0;for(let at=0;at<this.activeRoutes.length;at++){
+   const route=this.activeRoutes[at],i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST)continue;this.activeRoutes[active++]=route;
    if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+(s.seed[i]*127%1)*25*this.depth/1.25;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;}continue;}
    s.previousX[i]=s.x[i];s.previousY[i]=s.y[i];s.vx[i]=s.vy[i]=0;if(!held)continue;
    if(route.parked){s.z[i]+=(route.rest.z-s.z[i])*Math.min(1,dt*14);continue;}
@@ -63,10 +63,12 @@ export class HoldCascade {
    if(route.rest&&next>=route.rest.y){s.x[i]=route.rest.x;s.y[i]=route.rest.y;s.vy[i]=0;route.parked=true;this.retainedIndices.push(i);continue;}
    if(route.target&&old<=route.y&&next>=route.y){s.x[i]=route.x;s.y[i]=route.y;s.vy[i]=0;route.contactZ=s.z[i];s.z[i]=route.contactZ;route.landing=0;}
   }
+  this.activeRoutes.length=active;
   // Reuse the existing density/height representation without advancing its
   // independent physics solver. Painting is exclusively the travelling packets.
-  s.step(0,{granular:true,refreshOnly:true});
+  if(refresh)this.refresh();
  }
+ refresh(){this.sand.step(0,{granular:true,refreshOnly:true});}
  get retainedCount(){let count=0;for(const i of this.retainedIndices)if(this.sand.state[i]===FREE)count++;return count;}
  get pose(){return {x:0,y:0,cup:this.press*.38,pitch:this.press*.34};}
  get front(){return Math.min(H,this.elapsed*125);}

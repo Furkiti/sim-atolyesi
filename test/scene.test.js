@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import * as
 import {piecesByStage} from '../src/peel-pieces.js';
 import {AtelierScene} from '../src/scene.js';import {bentPoint,bendAmount} from '../src/interaction.js';import {Sand,FREE,BOUND,COLS,ROWS} from '../src/sand.js';
 const mesh=()=>new T.Mesh(new T.PlaneGeometry(600,800,2,2),new T.MeshBasicMaterial());
-function card(){const paper=mesh(),edge=mesh();return {paper,edge,paperBase:paper.geometry.attributes.position.array.slice(),edgeBase:edge.geometry.attributes.position.array.slice(),bend:0};}
+function card(){const paper=mesh(),edge=mesh(),paperOutline=new T.LineLoop(new T.BufferGeometry().setFromPoints([new T.Vector3(-300,-400,4.8),new T.Vector3(300,-400,4.8),new T.Vector3(300,400,4.8),new T.Vector3(-300,400,4.8)]));return {paper,edge,paperOutline,outlineBase:paperOutline.geometry.attributes.position.array.slice(),paperBase:paper.geometry.attributes.position.array.slice(),edgeBase:edge.geometry.attributes.position.array.slice(),bend:0};}
 
 test('tiny final-frame bends preserve paper height instead of collapsing it into a line',()=>{
  for(const amount of [0,1e-20,1e-12,1e-7,1e-6,1e-5,.00009,.0001]){
