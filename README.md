@@ -1,8 +1,10 @@
+> v21: Sırayla açılan sergi, kısa swipe, üç döküş yerleşimi, otomatik/küçük parçalarda hızlı soyma, huni–kavanoz ve isteğe bağlı son dokunuş. [Güncel notlar](docs/v21-feel-and-gallery.md).
+
 > v20: Sade stüdyo, ekran dışından gelen tek kap, kaydırılabilir altı eserlik sergi ve aynı WebGL sahnesinde tabloya girerek bölüm geçişi. [Araştırma ve teknik notlar](docs/v20-ui-references.md) · [Üç UI yönü](docs/v20-reference-board.html).
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=20&mod=basili)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=21&mod=basili)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 

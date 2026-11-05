@@ -22,8 +22,8 @@ export function blurPixels(input,width,height,radius=3,passes=3){
  }
  return data;
 }
-export function galleryPicture(image,blur=false){
- const canvas=document.createElement('canvas');canvas.width=blur?75:480;canvas.height=blur?100:640;const context=canvas.getContext('2d');context.drawImage(image,0,0,canvas.width,canvas.height);
- if(blur){const pixels=context.getImageData(0,0,75,100);pixels.data.set(blurPixels(pixels.data,75,100));context.putImageData(pixels,0,0);}
+export function galleryPicture(image,blur=false,locked=false){
+ const canvas=document.createElement('canvas');canvas.width=blur?(locked?45:75):480;canvas.height=blur?(locked?60:100):640;const context=canvas.getContext('2d');context.drawImage(image,0,0,canvas.width,canvas.height);
+ if(blur){const pixels=context.getImageData(0,0,canvas.width,canvas.height);pixels.data.set(blurPixels(pixels.data,canvas.width,canvas.height,locked?5:3,locked?4:3));context.putImageData(pixels,0,0);}
  return canvas;
 }

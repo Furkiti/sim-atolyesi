@@ -96,7 +96,7 @@ export class Sand {
     }
     this.lastMoved=moved;return moved;
   }
-  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false,granular=contactAdhesion,refreshOnly=false}={}){
+  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false,granular=contactAdhesion,refreshOnly=false,pinned=null}={}){
     this.time+=dt;this.granular=granular;this.ground.fill(-1);this.top.fill(0);this.surfaceCount=0;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
     for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){if(granular&&(this.ground[k]<0||this.z[i]<this.z[this.ground[k]]))this.ground[k]=i;this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundDensity[k]+=.95;this.freshCount++;}else if(this.z[i]>6){this.moundDensity[k]+=.65;}this.top[k]=Math.max(this.top[k],this.z[i]);this.surfaceCount++;}}
     for(let k=0;k<this.height.length;k++){
@@ -126,7 +126,7 @@ export class Sand {
     }
     const friction=Math.exp(-this.behavior.drag*(granular?.58:1)*dt);
     for(let i=0;i<this.count;i++){
-      const s=this.state[i];if(s===BOUND||s===LOST)continue;
+      const s=this.state[i];if(s===BOUND||s===LOST||pinned?.[i])continue;
       let k=this.cell(this.x[i],this.y[i]);
       if(shaking&&k<0){this.vz[i]-=900*dt;this.z[i]+=this.vz[i]*dt;}
       if(shaking&&k>=0){

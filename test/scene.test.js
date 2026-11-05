@@ -58,7 +58,7 @@ test('growing an instanced grain pool retains its material, transforms, colors a
 });
 
 
-test('fine residue keeps its small size even when the main glitter size is set to four times normal',()=>{
+test('retained residue follows the selected glitter size instead of becoming forced fine dust',()=>{
  const geometry=new T.BufferGeometry();geometry.setAttribute('flakeSeed',new T.InstancedBufferAttribute(new Float32Array(1),1));const current=new T.InstancedMesh(geometry,new T.MeshBasicMaterial(),1);current.instanceColor=new T.InstancedBufferAttribute(new Float32Array(3),3);
- const scene={current,colors:['#006633'],activeColor:0,bend:0,settings:{controlMode:'hold',holdGrainSize:1}},s=new Sand({capacity:1});s.emit(150,200,1);s.state[0]=FREE;s.dust[0]=1;AtelierScene.prototype.updateGrains.call(scene,s);const before=current.instanceMatrix.array.slice();scene.settings.holdGrainSize=4;AtelierScene.prototype.updateGrains.call(scene,s);assert.deepEqual(current.instanceMatrix.array,before);
+ const scene={current,colors:['#006633'],activeColor:0,bend:0,settings:{controlMode:'hold',holdGrainSize:1}},s=new Sand({capacity:1});s.emit(150,200,1);s.state[0]=FREE;s.dust[0]=1;AtelierScene.prototype.updateGrains.call(scene,s);const before=current.instanceMatrix.array.slice();scene.settings.holdGrainSize=4;AtelierScene.prototype.updateGrains.call(scene,s);assert.ok(Math.abs(current.instanceMatrix.array[0]-before[0]*4)<1e-5);assert.equal(current.instanceMatrix.array[12],before[12]);assert.equal(current.instanceMatrix.array[13],before[13]);
 });

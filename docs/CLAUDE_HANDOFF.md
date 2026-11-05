@@ -1,17 +1,17 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 5 Kasım 2026. Ürün/cache sürümü **v20**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 6 Kasım 2026. Ürün/cache sürümü **v21**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=20&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=21&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Güncel geliştirme: **v20**, sade stüdyo ve kesintisiz sergi. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Güncel geliştirme: **v21**, sıralı sergi, hedefli döküş ve huni/son dokunuş. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
 - Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
-- v20 ürün/teknik kararları: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
+- v20 araştırma/önceki teknik kararlar: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
 Önemli yakın geçmiş:
 
@@ -23,6 +23,8 @@ Tarih: 5 Kasım 2026. Ürün/cache sürümü **v20**. Bu belge mevcut oyunu devr
 | `da7fc70` | Yeni bitiş sunumu, paylaş/kaydet ve düğme animasyonları |
 
 `package.json` içindeki `1.0.0`, v20 cache sürümünden ayrıdır.
+
+Güncel mekanik ve v21 doğrulamaları: [v21-feel-and-gallery.md](v21-feel-and-gallery.md).
 
 ## 2. Ürünün amacı ve kullanıcının öncelikleri
 
@@ -68,7 +70,7 @@ Bağımlılıklar: Three.js `^0.187.0`, esbuild `^0.28.2`, pngjs `^7.0.0`; kilit
 
 ## 4. Açık ve kapalı bölümler
 
-Sıra ve Yeni bölüm döngüsü `src/levels.js` içindeki açık `levels` listesinden gelir:
+Katalog sırası ve Yeni bölüm ilerleyişi `src/levels.js` içindeki açık `levels` listesinden gelir:
 
 | Ad | URL kimliği | Renk |
 | --- | --- | --- |
@@ -79,14 +81,14 @@ Sıra ve Yeni bölüm döngüsü `src/levels.js` içindeki açık `levels` liste
 | Şapkalı Portre | `sapkali-portre` | 9 |
 | Afro Çocuk | `afro-cocuk` | 8 |
 
-Toplam **51 açık renk aşaması**. Şu dört bölüm kullanıcının isteğiyle kapalıdır: `ay-bahcesi`, `cilekli-kedi`, `boba-molasi`, `kurbaga-pastanesi`. Kaynakları ve asset’leri korunur. `levelCatalog` hepsini içerir; `enabledIds`/`levels` açık olanları süzer. Kapalı/bilinmeyen bölüm URL’si Gotham’a düşer.
+Toplam **51 renk aşaması**. Oyuncu ilk bölümden başlar; önceki tamamlanınca bir sonraki açılır. Altı katalog bölümünün hepsi baştan oynanamaz. Şu dört bölüm kullanıcının isteğiyle kapalıdır: `ay-bahcesi`, `cilekli-kedi`, `boba-molasi`, `kurbaga-pastanesi`. Kaynakları ve asset’leri korunur. `levelCatalog` hepsini içerir; `enabledIds`/`levels` açık olanları süzer. Kapalı/bilinmeyen bölüm URL’si Gotham’a düşer.
 
 URL örnekleri:
 
-- `?v=20&mod=basili&bolum=barcelona`
-- `?v=20&mod=egim&bolum=naruto`
-- `?v=20&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=20&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=21&mod=basili&bolum=barcelona`
+- `?v=21&mod=egim&bolum=naruto`
+- `?v=21&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=21&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -102,7 +104,7 @@ Son kullanıcı çalışmalarının ağırlığı bu moddadır. Cımbız şablon
 - Tane boyutu: 0,7–4 kat; yoğunluktan bağımsızdır.
 - Tek sıra / iki sıra: toplam malzeme seçilen şeritlere bölünür; normal hızda döküş 4 / 6 oyun saniyesidir.
 - Fazla gevşek paket miktarı yoğunluğa göre yaklaşık 5.250–84.000’dir; hedef paketleri buna eklenir.
-- Her döküşte rastgele yerlerde ufak tozlar kalır. Sabit, büyük birikinti adaları yoktur. İnce artıklar ana tane boyutundan bağımsızdır; son bükmede boşalırlar.
+- Her döküşte rastgele yerlerde ufak tozlar kalır. Sabit, büyük birikinti adaları yoktur. Artık miktarı/yerleri değişkendir; seçili tane boyutunu izler. İsteğe bağlı son dokunuş, bükmede kalan gerçek taneleri hafif vuruşlarla döker.
 - `Bu rengi yeniden dene`, tamamlanmış önceki renkleri koruyarak mevcut rengi yeni ayarlarla döker.
 
 ### Fırça (`brush`)
@@ -119,12 +121,12 @@ Modlara ait ayarlar kısmen farklıdır. Basılı tut modunda fırçaya özgü h
 
 `Flow` fazları: `peel → rolling → pour → brush → shake → sonraki renk / complete`.
 
-- Tek dokunuş cımbızla soyma başlatır. Aynı rengin bağlantısız parçaları sırayla açılır.
+- İlk soyma otomatik başlar. Aynı rengin bağlantısız parçaları sırayla açılır.
 - Soyarken basılı tutmak soyma saatini ayrıca 4 kat hızlandırır. Genel hızla çarpılır; örneğin 4x + basılı soyma toplam 16x olabilir.
 - Açılmadan hemen önce beyaz bir yapışkan parlaması eklenmez. Açılan alan kontrastlı taralı yüzeydir.
 - Son rötuş sınırı `min(8 piksel, alanın %0,02’si)`; Titiz modda `min(2 piksel, alanın %0,02’si)`.
 - Basılı akışta renk hazır olunca **bırakmak** temizlemeyi/ilerlemeyi tetikler.
-- Temizleme iki yandan oluk oluşturup ortadaki simi aşağıdaki kutuya boşaltır. Drenajın bitmesi kontrol edilmeden renk değiştirilmez.
+- Temizleme iki yandan oluk oluşturup ortadaki simi aşağıdaki huni ve küçük cam kavanoza boşaltır. `extraFinish` açıksa `CleanupCycle` fold → unfold → tap → settle → done alt sekansını yönetir. Drenajın bitmesi kontrol edilmeden renk değiştirilmez.
 - Temizleme sonrasında kâğıt tam düzleşir; küçük bükülme değerlerinde kararlı geometri önemlidir.
 
 Kâğıt **600×800**, fizik hücresi **5×5** (120×160 hücre). Hücre kapsaması kaynak maskenin gerçek pikselleriyle kesişir. `AIR`, `FREE`, `BOUND`, `LOST` parçacık durumları kullanılır. Başlangıç kapasitesi 48.000; basılı akış kapasitesi en fazla 112.000; çizim havuzları en fazla 128.000. Yığın yüksekliği sınırlandırılmıştır. Kapasite dolunca malzeme klonlanmamalı.
@@ -164,6 +166,7 @@ Depolama anahtarları:
 | --- | --- |
 | `sim-atelier-v4` | Ayarlar, mod, oyun hızı, kalite vb. |
 | `sim-atolyesi-gallery-v1` | Son tamamlanan eserlerin küçük görselleri |
+| `sim-atolyesi-progress-v1` | Küçük tamamlanma kaydı; ardışık bölüm kilitleri |
 
 Cache sürümünü artırırken bu anahtarları otomatik değiştirme; kullanıcı ayarları/geçmişi silinir. Yerel sunucu ile GitHub Pages farklı origin olduğundan ayrı kayıtlara sahiptir. Aktif rengin sim parçacıkları ve yarım bölüm ilerlemesi otomatik kaydedilmez.
 
@@ -175,6 +178,14 @@ Cache sürümünü artırırken bu anahtarları otomatik değiştirme; kullanıc
 - Örnek matrisi GPU’ya sadece dolu aralıkta gönderilir. Renk ve seed, sıra değişmedikçe yeniden gönderilmez. Yoğunluk ızgarası alt adım başına değil, görüntü karesi başına hesaplanır.
 - `LevelLoader` en fazla üç bölümün maskelerini/resimlerini tutar; devam eden istekler paylaşılır. Sergi altı küçük önizleme tutar. Bölüm değişiminde kullanılmayan galeri dokuları dispose edilir.
 - `exhibition.js` sonlu gezinme/gerçek zamanlı giriş eğrisi; `level-loader.js` bundle önbelleği; `scripts/benchmark-hold.mjs` v19 etiketiyle CPU mikro karşılaştırmasıdır. Bu ölçüm fiziksel telefon FPS ölçümü değildir.
+
+### v21 farkları
+
+Çerçeve tek opak dudaktır; krem ara boşluk yoktur. Kamera near=80, MSAA mobilde de istenir; sinüs hash yerine filtrelenen sabit parıltı alanı vardır. Kısa swipe 36 px veya yeterli hızla tek tablo atlar. Kilitli eserler gezilir ama oynanamaz; ayarlar/URL de `LevelProgress` kontrolündedir.
+
+`hold-layout.js` üç yerleşimi, parçaya göre şeritleri ve doz oranını üretir. `peelSeconds`/`peelGap` küçük parçaları hızlandırır, büyük ruloyu korur. Oyun yüzeyindeki touchstart/touchend varsayılanları iOS büyütecine karşı engellenir; pointer ve form kontrolleri korunur.
+
+`funnel.js` eğimli koni/boğaz/kavanoz fiziğidir. `cleanup.js` değişken artık planı ve gerçek gevşek paketlerin ikinci temizlik geçişini yönetir. `Sand.step(...,{pinned})` bu paketleri ilk bükmede yerinde tutar. Sonra aynı paketler hareket eder; yapışmış sim ve kaplama korunur. Kavanozun hacim gösterimi bütün yakalanan miktardan, üst taneler en fazla 2.200 örnekten gelir. Masa önce çizilir; alttaki kavanoz dolumu örtülmez.
 
 ## 9. Dosya haritası
 
@@ -219,7 +230,7 @@ Ham videolar/sohbet ekleri ve `/tmp` içindeki çıkarım scriptleri clone için
 
 ## 11. Test ve görsel QA
 
-`npm run build` başarılı ve **119 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
+`npm run build` başarılı ve **129 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
 
 Özellikle dikkat edilecek regresyon testleri:
 
@@ -287,4 +298,4 @@ Kimlik bilgisi/token depoya yazma veya loga basma. Bu makinenin mevcut Git crede
 
 Başlangıç için Claude’a verilebilecek metin:
 
-> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff mevcut çalışan checkpoint; oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
+> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v21 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.

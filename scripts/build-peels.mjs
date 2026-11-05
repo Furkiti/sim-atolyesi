@@ -1,4 +1,5 @@
 import {readFileSync,writeFileSync} from 'node:fs';import {PNG} from 'pngjs';import {levelCatalog} from '../src/levels.js';
+import {peelSeconds} from '../src/peel.js';
 const stages=levelCatalog.flatMap(l=>l.stages);
 const W=600,H=800,result={};
 for(const stage of stages){
@@ -20,7 +21,7 @@ for(const stage of stages){
   for(const p of c.pixels){const projection=p%W*axis.x+((p/W)|0)*axis.y;if(projection<min){min=projection;gripPixel=p;}max=Math.max(max,projection);}
   const grip={x:gripPixel%W+.5,y:((gripPixel/W)|0)+.5},runs=[];
   for(let i=0;i<c.pixels.length;){const start=c.pixels[i],y=(start/W)|0,x=start%W;let length=1;while(i+length<c.pixels.length&&c.pixels[i+length]===start+length&&((start+length)/W|0)===y)length++;runs.push([y-y0,x-x0,length]);i+=length;}
-  return {id:`${stage.id}-${index}`,area:c.pixels.length,bounds:{x:x0,y:y0,w,h},grip,axis,length:Math.ceil(max-min+1),duration:+(2.05+Math.min(.95,Math.sqrt(c.pixels.length)/310)).toFixed(2),runs};
+  return {id:`${stage.id}-${index}`,area:c.pixels.length,bounds:{x:x0,y:y0,w,h},grip,axis,length:Math.ceil(max-min+1),duration:+peelSeconds(c.pixels.length).toFixed(2),runs};
  });
 }
 writeFileSync(new URL('../src/peel-pieces.js',import.meta.url),'// Generated from the exact colour masks by scripts/build-peels.mjs.\nexport const piecesByStage='+JSON.stringify(result)+';\n');

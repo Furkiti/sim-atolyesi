@@ -1,8 +1,15 @@
 import {smooth} from './interaction.js';
 export const PEEL_GAP=.24;
-export function peelDuration(pieces){return pieces.reduce((sum,p)=>sum+p.duration,0)+Math.max(0,pieces.length-1)*PEEL_GAP}
+export function peelSeconds(area){
+ if(area<600)return .35+.25*Math.sqrt(Math.max(0,area)/600);
+ if(area<2400)return .6+(area-600)/1800*.5;
+ if(area<6000)return 1.1+(area-2400)/3600*1.2;
+ return 2.05+Math.min(.95,Math.sqrt(area)/310);
+}
+export const peelGap=piece=>piece.area<1800?.07:piece.area<5000?.12:PEEL_GAP;
+export function peelDuration(pieces){return pieces.reduce((sum,p,i)=>sum+p.duration+(i<pieces.length-1?peelGap(p):0),0)}
 export function peelAt(pieces,elapsed){
- let cursor=0;for(let i=0;i<pieces.length;i++){const end=cursor+pieces[i].duration;if(elapsed<=end||i===pieces.length-1)return{index:i,progress:Math.max(0,Math.min(1,(elapsed-cursor)/pieces[i].duration)),count:pieces.length};if(elapsed<end+PEEL_GAP)return{index:i,progress:1,count:pieces.length};cursor=end+PEEL_GAP;}
+ let cursor=0;for(let i=0;i<pieces.length;i++){const end=cursor+pieces[i].duration;if(elapsed<=end||i===pieces.length-1)return{index:i,progress:Math.max(0,Math.min(1,((elapsed-cursor)/pieces[i].duration)+1e-12)),count:pieces.length};if(elapsed<end+peelGap(pieces[i]))return{index:i,progress:1,count:pieces.length};cursor=end+peelGap(pieces[i]);}
  return{index:0,progress:0,count:0};
 }
 export function peelFront(piece,progress){return -2+smooth((progress-.20)/.65)*(piece.length+78)}

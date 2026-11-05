@@ -3,6 +3,8 @@ import {AtelierScene} from './scene.js';
 import {Flow,PointerGate,FramePacer,drainPose,appendStroke} from './interaction.js';
 import {loadSettings,saveSettings,profileSettings,doseFor} from './settings.js';
 import {supplyPlan,supplyPose,supplyQuota} from './supply.js';
+import {CleanupCycle} from './cleanup.js';
+import {LevelProgress} from './level-progress.js';
 import {HoldCascade} from './hold-cascade.js';
 import {DeviceTilt} from './tilt.js';
 import {PaperMotion} from './paper-motion.js';
@@ -21,10 +23,14 @@ import {ExhibitionRail} from './exhibition.js';
 import {LevelLoader} from './level-loader.js';
 import {gameSteps} from './game-clock.js';
 installButtonMotion();
-const loader=new LevelLoader(),rail=new ExhibitionRail(levels.length,levels.indexOf(level)),previewCache=new Map();
-let exhibition=false,transitioning=false,galleryArt=[],following=levels[(levels.indexOf(level)+1)%levels.length];
 const sessionId=String(Date.now());
 let gallery;try{gallery=new GalleryHistory(localStorage,levels.map(entry=>entry.id))}catch{gallery=new GalleryHistory(null,levels.map(entry=>entry.id))}
+let progression;try{progression=new LevelProgress(localStorage,levels.map(e=>e.id),gallery.entries)}catch{progression=new LevelProgress(null,levels.map(e=>e.id),gallery.entries)}
+if(!progression.canPlay(level.id)){
+ level=levels[Math.min(progression.frontier,levels.length-1)];stages=level.stages;const url=new URL(location.href);url.searchParams.set('bolum',level.id);url.searchParams.delete('devam');history.replaceState({},'',url);
+}
+const loader=new LevelLoader(),rail=new ExhibitionRail(levels.length,levels.indexOf(level)),previewCache=new Map();
+let exhibition=false,transitioning=false,galleryArt=[],following=levels[Math.min(levels.indexOf(level)+1,levels.length-1)],cleanup=null;
 let settings;try{settings=loadSettings(localStorage)}catch{settings=loadSettings({getItem:()=>null})}
 if(new URLSearchParams(location.search).get('mod')==='egim')settings={...settings,controlMode:'tilt'};
 if(new URLSearchParams(location.search).get('mod')==='basili')settings={...settings,controlMode:'hold'};
@@ -35,6 +41,7 @@ const paperMotion=new PaperMotion();
 let paperPose={x:0,y:0,cup:0};
 const flow=new Flow(),gate=new PointerGate(),pacer=new FramePacer(settings.frameLimit),assets={},masks={},strokes=[];
 let refillAfterShake=false;
+let lastCleanupHeld=0,lastCleanupReleased=0;
 let shakeRuns=0,nextRuns=0,partLayers=[],activePart=0,revealedParts=0;
 let view,sand,index=0,finished=false,pour=null,peeled=false,peel=0,readySince=0,autoKick=0;
 let pointer={x:300,y:282,visible:false},previous={x:300,y:282},down=false,lastRender=0,statClock=0,fpsClock=0,frames=0,fps=0,frameMs=16.7,simMs=0,renderMs=0,moved=0;
@@ -46,7 +53,13 @@ let initialWidth=innerWidth;
 function stableViewport(force=false){if(force||Math.abs(innerWidth-initialWidth)>60){initialWidth=innerWidth;document.documentElement.style.setProperty('--app-height',innerHeight+'px')}}
 stableViewport(true);window.addEventListener('resize',()=>stableViewport());window.addEventListener('orientationchange',()=>setTimeout(()=>stableViewport(true),150));
 for(const event of ['gesturestart','gesturechange','gestureend'])document.addEventListener(event,e=>e.preventDefault(),{passive:false});
-canvas.addEventListener('dblclick',e=>e.preventDefault());
+// iOS's loupe is driven by native touch handling, before dblclick/selection.
+// Keep pointer input; suppress only touch defaults on the two gameplay surfaces.
+for(const target of [canvas,$('#hold-control')]){
+ target.setAttribute('draggable','false');
+ for(const event of ['touchstart','touchend','dblclick'])target.addEventListener(event,e=>e.preventDefault(),{passive:false});
+}
+
 document.addEventListener('wheel',e=>{if(e.ctrlKey||e.target===canvas)e.preventDefault()},{passive:false});
 document.addEventListener('selectstart',e=>e.preventDefault());document.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('selectionchange',()=>{const selection=document.getSelection();if(selection&&!selection.isCollapsed)selection.removeAllRanges();});
@@ -115,7 +128,7 @@ function sound(amount=0){
 }
 $('#sound').textContent='Ses: açık';$('#sound').setAttribute('aria-label','Sesi kapat');
 $('#sound').onclick=async()=>{soundOn=!soundOn;await audio();sound(0);$('#sound').textContent=soundOn?'Ses: açık':'Ses: kapalı';$('#sound').setAttribute('aria-label',soundOn?'Sesi kapat':'Sesi aç')};
-function releaseAll(){if(rail.drag)rail.end();holdLatched=false;paperMotion.end();down=false;gate.cancel();strokes.length=0;sound(0)}
+function releaseAll(){if(rail.drag)rail.end(true);holdLatched=false;paperMotion.end();down=false;gate.cancel();strokes.length=0;sound(0)}
 function settingsTab(name){
  document.querySelectorAll('[data-settings-tab]').forEach(e=>e.hidden=e.dataset.settingsTab!==name);
  document.querySelectorAll('[data-tab]').forEach(e=>e.setAttribute('aria-selected',String(e.dataset.tab===name)));
@@ -137,8 +150,8 @@ function applySettings(next){
 }
 function syncSettings(){
  document.querySelectorAll('input[name="layout"]').forEach(e=>e.checked=e.value===settings.layout);
- for(const [id,key] of Object.entries({'auto-advance':'autoAdvance','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'}))$('#'+id).checked=settings[key];
- for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','control-mode':'controlMode','tilt-sensitivity':'tiltSensitivity','heap-depth':'heapDepth','surface-style':'surface','hold-density':'holdDensity','hold-grain-size':'holdGrainSize','hold-rows':'holdRows','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
+ for(const [id,key] of Object.entries({'auto-advance':'autoAdvance','extra-finish':'extraFinish','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'}))$('#'+id).checked=settings[key];
+ for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','control-mode':'controlMode','tilt-sensitivity':'tiltSensitivity','heap-depth':'heapDepth','surface-style':'surface','hold-density':'holdDensity','hold-grain-size':'holdGrainSize','hold-rows':'holdRows','hold-placement':'holdPlacement','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
  document.querySelectorAll('input[name=feel]').forEach(e=>e.checked=e.value===settings.feel);
  document.querySelectorAll('input[name=game-speed]').forEach(e=>e.checked=Number(e.value)===settings.gameSpeed);$('#speed-readout').textContent=settings.gameSpeed+'x';
  for(const [id,key] of [['mobility','mobility'],['response','response'],['brush-width','brushWidth'],['grain-size','grainSize'],['heap-depth','heapDepth'],['tilt-sensitivity','tiltSensitivity'],['hold-density','holdDensity'],['hold-grain-size','holdGrainSize']])$('#'+id+'-readout').textContent='%'+Math.round(settings[key]*100);
@@ -147,21 +160,21 @@ function syncSettings(){
 }
 document.querySelectorAll('input[name="layout"]').forEach(e=>e.onchange=()=>applySettings({...settings,layout:e.value,autoAdvance:e.value==='flow'}));
 $('#quality-profile').onchange=e=>{if(e.target.value!=='custom')applySettings(profileSettings(settings,e.target.value))};
-const checks={'auto-advance':'autoAdvance','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'};
-for(const [id,key] of Object.entries(checks))$('#'+id).onchange=e=>applySettings({...settings,[key]:e.target.checked,profile:['autoAdvance','showStats'].includes(key)?settings.profile:'custom'});
+const checks={'auto-advance':'autoAdvance','extra-finish':'extraFinish','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'};
+for(const [id,key] of Object.entries(checks))$('#'+id).onchange=e=>applySettings({...settings,[key]:e.target.checked,profile:['autoAdvance','extraFinish','showStats'].includes(key)?settings.profile:'custom'});
 for(const [id,key,numeric] of [['render-scale','renderScale',true],['pour-amount','pourAmount',true],['shadow-quality','shadow',false],['frame-limit','frameLimit',true],['pace','pace',false]]){
  $('#'+id).addEventListener(id.includes('scale')||id.includes('amount')?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,profile:['renderScale','shadow','frameLimit'].includes(key)?'custom':settings.profile}));
 }
 document.querySelectorAll('input[name=game-speed]').forEach(e=>e.onchange=()=>applySettings({...settings,gameSpeed:Number(e.value)}));
 document.querySelectorAll('input[name=feel]').forEach(e=>e.onchange=()=>applySettings(feelSettings(settings,e.value)));
-for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['control-mode','controlMode',false],['tilt-sensitivity','tiltSensitivity',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true],['hold-density','holdDensity',true],['hold-grain-size','holdGrainSize',true],['hold-rows','holdRows',true]]){
- $('#'+id).addEventListener(numeric&&id!=='hold-rows'?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface','supply','paperMotion','heapDepth','controlMode','tiltSensitivity','holdDensity','holdGrainSize','holdRows'].includes(key)?settings.feel:'custom'}));
+for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['control-mode','controlMode',false],['tilt-sensitivity','tiltSensitivity',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true],['hold-density','holdDensity',true],['hold-grain-size','holdGrainSize',true],['hold-rows','holdRows',true],['hold-placement','holdPlacement',false]]){
+ $('#'+id).addEventListener(numeric&&id!=='hold-rows'?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface','supply','paperMotion','heapDepth','controlMode','tiltSensitivity','holdDensity','holdGrainSize','holdRows','holdPlacement'].includes(key)?settings.feel:'custom'}));
 }
 const tiltMessages={off:'Telefonu rahat tut, sonra hareketi aç.',requesting:'Hareket izni bekleniyor…',waiting:'Sensör bekleniyor; telefonu hafifçe eğ.',active:'Hareket açık · bu konumu düz sayabilirsin.',demo:'Ekran eğimi açık · sensör kullanılmıyor.',denied:'Hareket izni verilmedi. Yeniden dene veya tarayıcı izinlerini kontrol et.',unsupported:'Bu cihazda hareket sensörü yok. Ekrandaki eğimle deneyebilirsin.',insecure:'Hareket sensörü için oyunu HTTPS bağlantısından aç.',empty:'Hareket verisi gelmedi. Telefonda Safari veya Chrome ile açabilir ya da ekranda deneyebilirsin.',stale:'Hareket verisi durdu; akış güvenli biçimde duraklatıldı.'};
 function updateTiltUI(){
  const enabled=settings.controlMode==='tilt',hold=settings.controlMode==='hold',live=['active','demo'].includes(deviceTilt.status);
  for(const id of ['response','brush-shape','brush-width','paper-motion'])$('#'+id).closest('label').hidden=enabled||hold;
- $('#feel-name').textContent=hold?'Basılı akış':FEELS[settings.feel]?.name||'Özel karışım';$('#hold-detail').hidden=!hold;$('#hold-detail').textContent=`Sim üst kenara ${settings.holdRows===2?'iki yatay sıra':'bir yatay sıra'} halinde dökülür. Ekrana basılı tut: kâğıt bükülsün, sim aşağı aksın. Bırakınca durur. Biraz sim kâğıtta kalır; son bükmede kutuya dökülür. Renkler otomatik ilerler.`;$('#hold-options').hidden=!hold;for(const id of ['pour-amount','grain-size'])$('#'+id).closest('label').hidden=hold;for(const id of ['supply-style','mobility','pour-style'])$('#'+id).closest('label').hidden=hold;document.querySelector('.feel-options').hidden=hold;
+ $('#feel-name').textContent=hold?'Basılı akış':FEELS[settings.feel]?.name||'Özel karışım';$('#hold-detail').hidden=!hold;$('#hold-detail').textContent=`${settings.holdPlacement==='local'?'Her ayrı parçanın biraz üstüne kendi şeridi dökülür.':settings.holdPlacement==='width'?'Üstte yalnızca hedef genişliği kadar bir şerit dökülür.':`Sim üst kenara ${settings.holdRows===2?'iki yatay sıra':'bir yatay sıra'} halinde dökülür.`} Basılı tut: kâğıt bükülsün, sim aksın. Bırakınca durur. Kalan taneler huniye dökülür. Son dokunuş açıksa küçük vuruşlar temizliği tamamlar.`;$('#hold-options').hidden=!hold;for(const id of ['pour-amount','grain-size'])$('#'+id).closest('label').hidden=hold;for(const id of ['supply-style','mobility','pour-style'])$('#'+id).closest('label').hidden=hold;document.querySelector('.feel-options').hidden=hold;
  $('#pour-hint').textContent=hold?'Sonraki yatay şeritteki fazla sim miktarını değiştirir.':enabled?'Sim hedefin biraz üstüne dökülür. Telefonu eğerek yapışkana taşı.':'Sim hedefin biraz üstüne dökülür. Fırçayla taşıman gerekir.';
  $('#tilt-panel').hidden=!enabled;$('#tilt-detail').textContent=tiltMessages[deviceTilt.status]||tiltMessages.off;
  $('#tilt-status').textContent=live?(deviceTilt.status==='demo'?'Ekran eğimi':'Telefonu eğ'):({requesting:'İzin bekleniyor',waiting:'Sensör bekleniyor',denied:'İzin verilmedi',unsupported:'Sensör yok',insecure:'HTTPS gerekli',empty:'Veri gelmedi',stale:'Hareket durdu'}[deviceTilt.status]||'Hareket kapalı');
@@ -182,36 +195,36 @@ $('#tilt-demo-start').onclick=()=>{deviceTilt.demo();deviceTilt.setDemo(Number($
 for(const id of ['tilt-demo-x','tilt-demo-y'])$('#'+id).oninput=()=>{deviceTilt.setDemo(Number($('#tilt-demo-x').value),Number($('#tilt-demo-y').value));updateTiltUI();};
 function installBundle(bundle){for(const key of Object.keys(assets))delete assets[key];for(const key of Object.keys(masks))delete masks[key];Object.assign(assets,bundle.assets);Object.assign(masks,bundle.masks);}
 function levelLabels(){
- following=levels[(levels.indexOf(level)+1)%levels.length];$('#level-name').textContent=level.name;
- document.querySelectorAll('.level-card').forEach((button,i)=>{button.classList.toggle('current',levels[i]===level);button.querySelector('b').textContent=levels[i]===level?'Oynuyorsun':'Başla →';});
- loader.load(following).catch(console.warn);
+ following=levels[Math.min(levels.indexOf(level)+1,levels.length-1)];$('#level-name').textContent=level.name;
+ document.querySelectorAll('.level-card').forEach((button,i)=>{button.classList.toggle('current',levels[i]===level);const locked=!progression.canPlay(levels[i].id);button.disabled=locked;button.classList.toggle('locked',locked);button.setAttribute('aria-label',levels[i].name+(locked?' · Önce '+levels[i-1]?.name+' bölümünü tamamla':''));button.querySelector('b').textContent=locked?'Kilitli':levels[i]===level?'Oynuyorsun':progression.isComplete(levels[i].id)?'Yeniden yap':'Başla →';});
+ if(progression.canPlay(following.id))loader.load(following).catch(console.warn);
 }
 async function galleryPictures(){
  const entries=await Promise.all(levels.map(async entry=>{
-  const record=gallery.entries.find(item=>item.id===entry.id),key=entry.id+':'+(record?.completedAt||'preview');
+  const record=gallery.entries.find(item=>item.id===entry.id),locked=!progression.canPlay(entry.id),completed=progression.isComplete(entry.id)&&!locked,key=entry.id+':'+(record?.completedAt||'preview')+':'+locked+':'+completed;
   for(const cached of previewCache.keys())if(cached.startsWith(entry.id+':')&&cached!==key)previewCache.delete(cached);
-  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage(record?.image||`assets/${entry.preview}.png?v=20`).then(image=>({id:entry.id,name:entry.name,completed:!!record,image:galleryPicture(image,!record),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
+  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=21`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
   return previewCache.get(key);
  }));galleryArt=entries;view.setGalleryEntries(entries,levels.indexOf(level));return entries;
 }
 function galleryLabels(){
- const selected=levels[rail.target],current=rail.target===levels.indexOf(level),record=gallery.entries.find(e=>e.id===selected.id);
- $('#complete-level').textContent=finished&&current?level.name+' · TAMAMLANDI':'KOLEKSİYONUN';
+ const selected=levels[rail.target],current=rail.target===levels.indexOf(level),record=gallery.entries.find(e=>e.id===selected.id),locked=!progression.canPlay(selected.id),last=current&&finished&&levels.indexOf(level)===levels.length-1;
+ $('#complete-level').textContent=finished&&current?level.name+' · TAMAMLANDI':locked?'KİLİTLİ ESER':'KOLEKSİYONUN';
  $('#complete-title').textContent=finished&&current?'Biraz ışık, biraz sabır.':selected.name;
  $('#gallery-caption').textContent=`${String(rail.target+1).padStart(2,'0')} / ${String(levels.length).padStart(2,'0')}  ·  ${selected.name}`;
  $('#gallery-prev').disabled=rail.target===0;$('#gallery-next').disabled=rail.target===levels.length-1;
- $('#next-level-name').textContent=finished&&current?following.name:selected.name;
- $('#enter-label').textContent=current?(finished?'Yeni bölüm':'Devam et'):record?'Yeniden yap':'Bu esere gir';
- $('#share').hidden=$('#save').hidden=!(finished&&current);$('#again').hidden=!(finished&&record);$('#again').setAttribute('aria-label',selected.name+' bölümünü yeniden oyna');$('#exhibition-close').hidden=finished;
+ $('#next-level-name').textContent=locked?'Önce '+levels[rail.target-1].name:last?'Koleksiyonun':finished&&current?following.name:selected.name;$('#next-level').disabled=locked;
+ $('#enter-label').textContent=locked?'Kilitli':last?'Sergiyi gez':current?(finished?'Yeni bölüm':'Devam et'):progression.isComplete(selected.id)?'Yeniden yap':'Bu esere gir';
+ $('#share').hidden=$('#save').hidden=!(finished&&current);$('#again').hidden=!(finished&&record&&!locked);$('#again').setAttribute('aria-label',selected.name+' bölümünü yeniden oyna');$('#exhibition-close').hidden=finished;
  document.querySelectorAll('#gallery-dots button').forEach((button,i)=>button.setAttribute('aria-current',String(i===rail.target)));
 }
-function selectArtwork(index){rail.select(index);galleryLabels();loader.load(levels[rail.target]).catch(console.warn);}
+function selectArtwork(index){rail.select(index);galleryLabels();if(progression.canPlay(levels[rail.target].id))loader.load(levels[rail.target]).catch(console.warn);}
 function showExhibition(){
  if(!view||transitioning)return;releaseAll();pointer.visible=false;exhibition=true;rail.focus=rail.target=levels.indexOf(level);view.galleryActive=true;view.galleryFocus=rail.focus;document.body.dataset.exhibition='true';$('#complete').hidden=false;galleryLabels();galleryPictures().catch(console.warn);
 }
 function closeExhibition(){if(transitioning||finished)return;releaseAll();exhibition=false;view.galleryActive=false;rail.focus=rail.target=levels.indexOf(level);delete document.body.dataset.exhibition;$('#complete').hidden=true;updateUI();}
 async function openLevel(id,replace=false){
- const target=levels.find(entry=>entry.id===id);if(!target||!view||transitioning)return;
+ const target=levels.find(entry=>entry.id===id);if(!target||!view||transitioning||!progression.canPlay(target.id))return;
  if(target===level&&!finished){closeExhibition();return;}
  if(dialog.open)closeSettings();showExhibition();selectArtwork(levels.indexOf(target));transitioning=true;document.body.dataset.transition='loading';releaseAll();
  try{
@@ -221,7 +234,7 @@ async function openLevel(id,replace=false){
    level=target;stages=level.stages;installBundle(bundle);view.colors=stages.map(stage=>stage.color);exhibition=false;view.galleryCurrent=levels.indexOf(level);rail.focus=rail.target=levels.indexOf(level);
    reset();levelLabels();document.body.dataset.transition='arriving';delete document.body.dataset.exhibition;
    // Same renderer, same document. Only the local level bundle is replaced.
-   const url=new URL(location.href);url.search='';url.searchParams.set('v','20');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
+   const url=new URL(location.href);url.search='';url.searchParams.set('v','21');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
    view.setGalleryEntries(galleryArt,levels.indexOf(level));
   },()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
  }catch(error){transitioning=false;delete document.body.dataset.transition;$('#share-status').textContent='Eser yüklenemedi. Yeniden deneyebilirsin.';console.error(error);}
@@ -230,7 +243,7 @@ for(const entry of levels){
  const button=document.createElement('button');button.className='level-card';button.innerHTML=`<img src="assets/${entry.preview}.png" alt=""><span><strong>${entry.name}</strong><small>${entry.subtitle}</small></span><b>Başla →</b>`;button.onclick=()=>{if(entry!==level)openLevel(entry.id)};$('#levels').append(button);
  const dot=document.createElement('button');dot.setAttribute('aria-label',entry.name+' tablosuna git');dot.onclick=()=>selectArtwork(levels.indexOf(entry));$('#gallery-dots').append(dot);
 }
-$('#next-level').onclick=()=>{if(rail.target===levels.indexOf(level)&&!finished)closeExhibition();else openLevel(rail.target===levels.indexOf(level)?following.id:levels[rail.target].id);};
+$('#next-level').onclick=()=>{if(finished&&rail.target===levels.length-1&&level===levels.at(-1)){selectArtwork(0);return;}if(rail.target===levels.indexOf(level)&&!finished)closeExhibition();else openLevel(rail.target===levels.indexOf(level)?following.id:levels[rail.target].id);};
 $('#exhibition-open').onclick=showExhibition;$('#exhibition-close').onclick=closeExhibition;$('#gallery-prev').onclick=()=>selectArtwork(rail.target-1);$('#gallery-next').onclick=()=>selectArtwork(rail.target+1);
 window.addEventListener('keydown',event=>{if(!(exhibition||finished)||transitioning||dialog.open)return;if(event.key==='ArrowRight'){event.preventDefault();selectArtwork(rail.target+1)}if(event.key==='ArrowLeft'){event.preventDefault();selectArtwork(rail.target-1)}if(event.key==='Escape')closeExhibition();});
 window.addEventListener('popstate',()=>{const selected=selectLevel(location.search);if(selected!==level)openLevel(selected.id,true);});
@@ -243,11 +256,12 @@ function updateUI(){
  const phase=flow.phase,percent=completionStatus(sand.coverage,settings.pace,sand.targetCount*25).percent;
  $('#stage-label').textContent=`${String(index+1).padStart(2,'0')} / ${stages.length}`;$('#stage-label').title=stages[index].name;$('#color-dot').style.background=stages[index].color;
  $('#coverage').textContent=percent+'%';$('#progress-fill').style.width=percent+'%';
- const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan taralı alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['∪','İki yandan bük, ortaya topla.','Fazla sim ortadaki oluktan kutuya akıyor.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
+ const messages={peel:['↗','Kâğıt hazırlanıyor.','Cımbız sıradaki parçayı alıyor.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan taralı alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['∪','İki yandan bük, ortaya topla.','Simler huniden küçük kavanoza akıyor.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
  if(phase==='rolling')messages.rolling=['↗',`Parça ${activePart+1} / ${partLayers.length} · ${(down||holdLatched)?'hızlı':settings.gameSpeed>1?settings.gameSpeed+'x hızla':'yavaşça'} soyuluyor`,(down||holdLatched)?'Hızlı soyuluyor · bırakınca yavaşlar.':'Basılı tutarak daha hızlı soyabilirsin.','SOY'];
  if(settings.controlMode==='tilt'){messages.brush=['◉','Telefonu eğ, simi akıt.','Yapışkana değen taneler kendiliğinden tutunur.','EĞ'];messages.pour=['⠿','Sim dökülüyor.','Birazdan telefonu eğerek simleri taşı.','DÖK'];}
  if(settings.controlMode==='brush'&&phase==='brush'&&settings.paperMotion==='hands')messages.brush[2]='Simleri yay; kâğıdı eğmek için yan kenarını tut.';
- if(settings.controlMode==='hold'){messages.peel=['↗','Bir kez dokun.','Kâğıt açılsın, üst kenara sim şeridi dökülsün.','HAZIRLA'];messages.pour=['⠿',settings.holdRows===2?'Üst kenara iki sıra sim.':'Üst kenara bir şerit sim.','Şerit hazırlanınca ekrana basılı tut.','DÖK'];messages.brush=['∪',(down||holdLatched)?'Bükülüyor, simler akıyor.':'Basılı tut, simi akıt.','Bırakınca durur. Yapışkana ulaşan simler tutunur.','BASILI TUT'];}
+ if(settings.controlMode==='hold'){messages.peel=['↗','Kâğıt hazırlanıyor.','Parçalar açılınca üst kenara sim dökülecek.','HAZIRLA'];messages.pour=['⠿',settings.holdPlacement==='local'?'Her parçanın üstüne ayrı döküş.':settings.holdPlacement==='width'?'Hedef genişliğinde bir şerit.':settings.holdRows===2?'Üst kenara iki sıra sim.':'Üst kenara bir şerit sim.','Şerit hazırlanınca ekrana basılı tut.','DÖK'];messages.brush=['∪',(down||holdLatched)?'Bükülüyor, simler akıyor.':'Basılı tut, simi akıt.','Bırakınca durur. Yapışkana ulaşan simler tutunur.','BASILI TUT'];}
+ if(phase==='shake'&&cleanup?.tapping)messages.shake=['⋰','Son tanelere hafif bir vuruş.','Kâğıtta kalan simler de huniye dökülüyor.','SON DOKUNUŞ'];
  const m=messages[phase]||messages.brush;$('#phase-icon').textContent=m[0];$('#instruction-title').textContent=m[1];$('#instruction-text').textContent=phase==='brush'&&settings.layout!=='flow'&&settings.controlMode==='brush'?'Sim ekle ile açık alanın üstüne yeni bir yığın dökebilirsin.':m[2];$('#phase-label').textContent=m[3];
  const canNext=phase==='brush'&&ready()&&!finished;
  $('#next').hidden=!canNext||settings.controlMode==='hold';$('#next').disabled=!canNext;$('#next').innerHTML=index===stages.length-1?'Eserini tamamla <span>✧</span>':'Sonraki renk <span>→</span>';
@@ -284,14 +298,14 @@ function animatePeel(){
  peel=pose.progress;view.peelProgress(peel);repaintPaper();
 }
 function activate(){
- cascade=null;holdLatched=false;holdSupplyPending=false;paperMotion.reset();sand=new Sand();sand.setBehavior(settings);sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
+ cascade=null;cleanup=null;holdLatched=false;holdSupplyPending=false;autoKick=.38;paperMotion.reset();sand=new Sand();sand.setBehavior(settings);sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
  gc.globalCompositeOperation='source-over';gc.clearRect(0,0,W,H);partLayers=makePartLayers();flow.setRollDuration(peelDuration(partLayers.map(p=>p.piece)));
  makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);updateUI();
 }
 function beginRoll(){if(soundOn)audio();if(finished||!flow.roll())return;down=false;strokes.length=0;peel=0;updateUI()}
 function prepareDose(){
  if(settings.controlMode==='hold'){
-  holdSupplyPending=false;cascade=new HoldCascade(sand,settings);flow.setPourDuration(cascade.duration);playedPour=-1;pour={...cascade.sourcePose(0),kind:'hold',spots:[{x:0,y:22},{x:600,y:22}],duration:cascade.duration,dose:cascade.routes.length,emitted:0,elapsed:0};return;
+  holdSupplyPending=false;cascade=new HoldCascade(sand,{...settings,pieces:partLayers.map(layer=>layer.piece)});flow.setPourDuration(cascade.duration);playedPour=-1;pour={...cascade.sourcePose(0),kind:'hold',spots:cascade.bands.map(b=>({x:(b.x0+b.x1)/2,y:b.y})),duration:cascade.duration,dose:cascade.routes.length,emitted:0,elapsed:0};return;
  }
  const amount=doseFor(sand.targetCount,settings,sand.capacity);
  if(sand.capacity-sand.count<amount){sand.compact();view.currentInitialized=0;}
@@ -312,11 +326,11 @@ $('#hold-repour').onclick=()=>{
  if(settings.controlMode!=='hold'||finished)return;releaseAll();view.reset();activate();flow.phase='pour';peeled=true;peel=1;revealUntil(partLayers.length);view.peelProgress(1);prepareDose();repaintPaper();closeSettings();updateUI();
 };
 function addSand(){if(finished||flow.busy)return;sand.compact();view.currentInitialized=0;if(sand.capacity-sand.count<200&&sand.hasLoose()){refillAfterShake=true;startShake(false);return;}if(!flow.pour())return;releaseAll();prepareDose();readySince=0;updateUI()}
-function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();view.beginCleanup();if(advance)updateCoat(true,true);pour=null;view.posePour(null);readySince=0;updateUI()}
+function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();cleanup=settings.extraFinish?new CleanupCycle(sand,cascade?.retainedIndices):null;flow.returnDuration=cleanup?.28:1;view.beginCleanup();if(advance)updateCoat(true,true);pour=null;view.posePour(null);readySince=0;updateUI()}
 function nextStage(){
  refillAfterShake=false;nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
  if(index<stages.length-1){index++;activate();autoKick=(settings.autoAdvance||settings.controlMode==='hold')?.22:0;}
- else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;document.body.dataset.complete='true';try{gallery.remember({id:level.id,image:galleryThumbnail(paperCanvas),completedAt:Date.now()})}catch{}$('#gallery-caption').textContent=gallery.entries.length<2?'Galerinin ilk eseri':`Galerinde ${gallery.entries.length} eser`;showExhibition();galleryPictures().catch(console.warn);deviceTilt.stop();completedPoster=posterBlob(paperCanvas).catch(()=>null);releaseAll();$('#complete-title').focus({preventScroll:true});updateUI();}
+ else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;document.body.dataset.complete='true';progression.complete(level.id);levelLabels();try{gallery.remember({id:level.id,image:galleryThumbnail(paperCanvas),completedAt:Date.now()})}catch{}$('#gallery-caption').textContent=gallery.entries.length<2?'Galerinin ilk eseri':`Galerinde ${gallery.entries.length} eser`;showExhibition();galleryPictures().catch(console.warn);deviceTilt.stop();completedPoster=posterBlob(paperCanvas).catch(()=>null);releaseAll();$('#complete-title').focus({preventScroll:true});updateUI();}
 }
 for(const button of document.querySelectorAll('[data-tool]'))button.onclick=()=>{const t=button.dataset.tool;if(t==='peel')beginRoll();else if(t==='pour')addSand();else if(t==='clean')startShake(false);else if(t==='brush'&&settings.controlMode==='tilt'&&!tiltFrame.active)enableTilt();else updateUI()};
 $('#add-sand').onclick=addSand;$('#shake').onclick=()=>startShake(false);$('#next').onclick=()=>{if(ready())startShake(true)};
@@ -334,7 +348,7 @@ async function exportPoster(share=false){
 }
 $('#save').onclick=()=>exportPoster();$('#share').onclick=()=>exportPoster(true);
 function beginPointer(e){
- e.preventDefault();if(view&&(exhibition||finished)&&!transitioning){if(!gate.begin(e.pointerId,e.isPrimary!==false))return;e.currentTarget.setPointerCapture(e.pointerId);rail.begin(e.clientX);return;}if(transitioning)return;if(!view||finished||(flow.busy&&flow.phase!=='rolling')||!gate.begin(e.pointerId,e.isPrimary!==false))return;
+ e.preventDefault();if(view&&(exhibition||finished)&&!transitioning){if(!gate.begin(e.pointerId,e.isPrimary!==false))return;e.currentTarget.setPointerCapture(e.pointerId);rail.begin(e.clientX,e.timeStamp);return;}if(transitioning)return;if(!view||finished||(flow.busy&&flow.phase!=='rolling')||!gate.begin(e.pointerId,e.isPrimary!==false))return;
  e.currentTarget.setPointerCapture(e.pointerId);pointer={...view.mapPointer(e),visible:true};previous={...pointer};pointerTime=e.timeStamp;
  if(soundOn)audio();
  if(flow.phase==='peel'){beginRoll();down=flow.phase==='rolling';pointer.visible=false;updateUI();return;}
@@ -347,7 +361,7 @@ function beginPointer(e){
 canvas.addEventListener('pointerdown',beginPointer);$('#hold-control').addEventListener('pointerdown',beginPointer);
 $('#hold-control').onclick=e=>{if(e.detail!==0||!(flow.phase==='rolling'||settings.controlMode==='hold'&&flow.phase==='brush'))return;holdLatched=!holdLatched;if(soundOn)audio();updateUI();};
 canvas.addEventListener('pointermove',e=>{
- if((exhibition||finished)&&!transitioning){if(gate.owns(e.pointerId)){rail.move(e.clientX,view.heroFrame.width*810/660);galleryLabels();}return;}
+ if((exhibition||finished)&&!transitioning){if(gate.owns(e.pointerId)){rail.move(e.clientX,view.heroFrame.width*810/660,e.timeStamp);galleryLabels();}return;}
  if(transitioning||!view||finished||e.isPrimary===false)return;
  if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons){pointer={...view.mapPointer(e),visible:true};return;}
  if(!gate.owns(e.pointerId)||flow.phase!=='brush'||settings.controlMode!=='brush')return;
@@ -356,13 +370,13 @@ canvas.addEventListener('pointermove',e=>{
  const p=view.mapPointer(e);pointer={...p,visible:true};
  if(Math.hypot(p.x-previous.x,p.y-previous.y)>.1){appendStroke(strokes,{from:{...previous},to:{...p},seconds:Math.max(.001,Math.min(.1,(e.timeStamp-pointerTime)/1000))})}previous=p;pointerTime=e.timeStamp;
 });
-function pointerEnd(e){if(!gate.end(e.pointerId))return;if(exhibition||finished){rail.end();galleryLabels();return;}paperMotion.end();down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
+function pointerEnd(e){if(!gate.end(e.pointerId))return;if(exhibition||finished){rail.end(e.type==='pointercancel');galleryLabels();return;}paperMotion.end();down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
 for(const target of [canvas,$('#hold-control')])for(const type of ['pointerup','pointercancel','lostpointercapture'])target.addEventListener(type,pointerEnd);
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',()=>{releaseAll();if(deviceTilt.status==='active'){deviceTilt.model.zero=null;deviceTilt.model.x=deviceTilt.model.y=0;}});
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
  $('#gallery-caption').style.top=(view.heroFrame.y+view.heroFrame.height+16)+'px';
- Object.assign(canvas.dataset,{version:'20',session:sessionId,transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:(flow.phase==='rolling'&&(down||holdLatched)&&!dialog.open?4:1)*settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'21',antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:(flow.phase==='rolling'&&(down||holdLatched)&&!dialog.open?4:1)*settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-transfer':((m.visible?view.grainUploadBytes||0:0)/1024).toFixed(0),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -371,7 +385,7 @@ function advanceGame(dt){
  if(autoKick>0&&!dialog.open){autoKick-=dt;if(autoKick<=0)beginRoll()}
  if(flow.phase==='pour'&&pour){
   pour.elapsed=flow.elapsed;const progress=Math.max(0,Math.min(1,(flow.elapsed-.5)/(pour.duration-1))),pose=pour.kind==='hold'?cascade.sourcePose(progress):supplyPose(pour,progress);Object.assign(pour,pose);view.posePour(pour);
-  if(pour.kind==='hold'){const source=view.pourOrigin();cascade.pour(progress,Math.max(12,source.z));pour.emitted=cascade.emitted;}else{
+  if(pour.kind==='hold'){const source=view.pourOrigin();Object.assign(canvas.dataset,{emitterX:source.x.toFixed(2),emitterY:source.y.toFixed(2),emitterZ:source.z.toFixed(2)});cascade.pour(progress,Math.max(12,source.z));pour.emitted=cascade.emitted;}else{
   const fraction=pourFraction(supplyQuota(pour,progress),settings.pourStyle),desired=Math.floor(pour.dose*fraction),n=desired-pour.emitted;
   if(n>0&&pose.flow){const source=view.pourOrigin();pour.emitted+=sand.emit(source.x,source.y,n,{spread:4,fan:pour.fan,height:Math.max(12,source.z)});Object.assign(canvas.dataset,{emitterX:source.x.toFixed(2),emitterY:source.y.toFixed(2),emitterZ:source.z.toFixed(2)});}
   }
@@ -380,15 +394,16 @@ function advanceGame(dt){
  holding=settings.controlMode==='hold'&&(down||holdLatched)&&!dialog.open&&flow.phase==='brush'&&!finished;
  if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.step(dt,holding,false);
  paperPose=settings.controlMode==='hold'?(cascade?.pose||{x:0,y:0,cup:0,pitch:0}):settings.controlMode==='tilt'?{x:tiltPlaying?tiltFrame.x*.25:0,y:tiltPlaying?tiltFrame.y*.25:0,cup:0}:paperMotion.step(dt,settings.paperMotion,brushMotion,down);
- const drainage=flow.phase==='shake'?drainPose(flow.progress):{bend:paperPose.cup,pitch:paperPose.pitch||0};view.setCardPose(paperPose,flow.phase,drainage);
- if(!finished&&!(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase)))sand.step(dt,{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying,granular:settings.controlMode==='tilt'&&flow.phase!=='shake'});
+ const drainage=flow.phase==='shake'?(cleanup?.pose||drainPose(flow.progress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};view.setCardPose(paperPose,flow.phase,drainage);
+ if(!finished&&!(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase)))sand.step(dt,{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying,granular:settings.controlMode==='tilt'&&flow.phase!=='shake',pinned:flow.phase==='shake'?cleanup?.pinned:null});
+ if(flow.phase==='shake'&&cleanup)cleanup.advance(dt,view.spills.length);
  if(!finished)view.collectSpill(sand,true);
  view.updateCollector(flow.phase,dt);view.updateSpill(dt);
- const event=flow.tick(dt,{peelHeld:(down||holdLatched)&&!dialog.open,drainComplete:flow.phase!=='shake'||(!sand.hasLoose()&&view.spills.length===0)});
+ const event=flow.tick(dt,{peelHeld:(down||holdLatched)&&!dialog.open,drainComplete:flow.phase!=='shake'||(cleanup?cleanup.done:!sand.hasLoose()&&view.spills.length===0)});
  if(event==='rolled'){releaseAll();revealUntil(partLayers.length);peeled=true;peel=1;repaintPaper();view.peelProgress(1);prepareDose();updateUI()}
  if(event==='poured'){pour=null;view.posePour(null);updateUI()}
  if(event==='shaken'||event==='advance'){
-  view.collectSpill(sand);sand.removeLoose();sand.compact();view.currentInitialized=0;
+  view.collectSpill(sand);sand.removeLoose();sand.compact();view.currentInitialized=0;lastCleanupHeld=cleanup?.heldCount||0;lastCleanupReleased=cleanup?.releasedCount||0;cleanup=null;
   if(event==='advance')nextStage();else if(refillAfterShake){refillAfterShake=false;addSand();}else updateUI();
  }
  if((settings.autoAdvance||settings.controlMode==='hold')&&flow.phase==='brush'&&ready()&&gate.active===null&&!holdLatched&&!dialog.open&&!finished){readySince+=dt;if(readySince>.55)startShake(true)}else readySince=0;
@@ -411,7 +426,7 @@ function frame(t){
  // Commit new coverage before bound grains leave the moving mesh, avoiding a blank frame.
  updateCoat();simMs=simMs*.85+(performance.now()-simStart)*.15;
  sound(exhibition||transitioning?0:flow.phase==='pour'?.14:flow.phase==='shake'?.15:flow.phase==='rolling'?.06:holding?.035:moved?Math.min(.16,.015+moved*.00003):0);
- const drawStart=performance.now();view.render(sand,{time:(gameTime+exhibitTime)*1000,dt:steps.total,realDt:dt,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip||(settings.controlMode==='hold'&&(cascade?.press||0)>.02),peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
+ const drawStart=performance.now();view.render(sand,{time:(gameTime+exhibitTime)*1000,dt:steps.total,realDt:dt,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip||(settings.controlMode==='hold'&&(cascade?.press||0)>.02),peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,cleanupPose:flow.phase==='shake'?cleanup?.pose:null,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
  if((statClock+=dt)>.2){statClock=0;updateUI();updateStats();}
 }
 applySettings(settings);
