@@ -2,6 +2,7 @@ import * as T from 'three';
 import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
 import {peelPoint} from './peel.js';
 import {TRAY,stepFalling} from './collector.js';
+import {paperLift} from './paper-motion.js';
 import {BRUSHES} from './feel.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS,MAX_HEAP_HEIGHT,MAX_GRAIN_HEIGHT} from './sand.js';
@@ -309,7 +310,7 @@ export class AtelierScene {
   p.needsUpdate=true;this.peelGeo.computeVertexNormals();
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
- render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,shakeProgress=0,finished=false}){
+ render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,finished=false}){
   this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:0};this.updateBend(pose.bend,pose.pitch);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
   const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
   this.heap.visible=showHeap;this.heapShadow.visible=showHeap;if(showHeap)this.updateHeap(sand,dt);
@@ -318,10 +319,10 @@ export class AtelierScene {
    this.key.position.y+=((340-(pointer.y-400)*.25)-this.key.position.y)*.045;
   }
   this.sparkLight.set(this.key.position.x*.0015,this.key.position.y*.0015,1).normalize();
-  this.paperGroup.rotation.x=phase==='shake'?0:paperPose.y;this.paperGroup.rotation.y=phase==='shake'?0:paperPose.x;this.paperGroup.position.z=0;
+  this.paperGroup.rotation.x=phase==='shake'?0:paperPose.y;this.paperGroup.rotation.y=phase==='shake'?0:paperPose.x;this.paperGroup.position.z=phase==='shake'?0:paperLift(paperPose);
   this.paperGroup.updateMatrixWorld(true);
   if(paperHeld&&phase==='brush')for(let i=0;i<2;i++){const q=bentPoint(i?300:-300,0,5,this.bend,this.pitch),hand=this.hands[i];hand.visible=true;hand.position.copy(this.paperGroup.localToWorld(new T.Vector3(q.x+(i?8:-8),q.y,q.z)));hand.rotation.y=(i?-1:1)*this.bend*.7;}
-  this.brush.visible=phase==='brush'&&pointer.visible&&!finished;this.tweezers.visible=phase==='rolling';this.hint.visible=phase==='peel';
+  this.brush.visible=showBrush&&phase==='brush'&&pointer.visible&&!finished;this.tweezers.visible=phase==='rolling';this.hint.visible=phase==='peel';
   if(phase==='peel'){this.hint.position.set(this.peelAnchor.x-300,400-this.peelAnchor.y,12);this.hint.material.opacity=.65+.25*Math.sin(time*.004);}
   if(phase==='rolling'&&this.peelPiece){
    const progress=this.peelValue||0,q=peelPoint(this.peelPiece,this.peelAnchor.x,this.peelAnchor.y,progress),approach=1-smooth(progress/.17);

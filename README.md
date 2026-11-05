@@ -1,16 +1,22 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=7)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=8)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
-Kâğıda bir kez dokun: cımbız bir kenarı tutar ve sarı parçayı yavaşça kıvırarak soyar. Aynı rengin ayrı parçaları sırayla açılır; örneğin mavi, üç ayrı parçadır. Kontrastlı, taralı yapışkan tek tek ortaya çıkar. Raftaki şişe boyanacak alanın biraz üstüne sim bırakır. Dudak gibi küçük ayrıntılara daha küçük bir doz dökülür. Parmağını yığından başlatıp simi eksik alanlara taşı. Sadece dökmek alanı boyamaz; simin yapışması için fırçanın tanelere temas etmesi gerekir. Boş fırça boya oluşturmaz. Fırçalanan sim incelip yanlara yayılır; parmak kalkınca yeniden dolu bir yığın gibi şişmez. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
+Kâğıda bir kez dokun: cımbız bir kenarı tutar ve sarı parçayı yavaşça kıvırarak soyar. Aynı rengin ayrı parçaları sırayla açılır; örneğin mavi, üç ayrı parçadır. Kontrastlı, taralı yapışkan tek tek ortaya çıkar. Raftaki şişe boyanacak alanın biraz üstüne sim bırakır. Dudak gibi küçük ayrıntılara daha küçük bir doz dökülür. Parmağını yığından başlatıp simi eksik alanlara taşı. Fırça modunda sadece dökmek alanı boyamaz; simin yapışması için fırçanın tanelere temas etmesi gerekir. Boş fırça boya oluşturmaz. Fırçalanan sim incelip yanlara yayılır; parmak kalkınca yeniden dolu bir yığın gibi şişmez. Gerekirse **+ Sim** ile açık kalan bölgeye ekle.
 
 Kaplanan alan, aralıksız ve doygun bir sim yüzeyi olur. On bir renkle Batman/Joker çiziminin tamamı ve kırmızı arka plan boyanabilir. Renk tamamlanınca **Akış** düzeni kâğıdın iki yanını tutup oluk gibi büker. Fazlalıklar ortada toplanır ve aşağıdaki kutuya yerçekimiyle düşer; son tane boşalmadan kâğıt geri açılmaz. Ardından sıradaki rengi açar. **Kenar** ve **Şerit** düzenlerinde geçişi sen yönetebilirsin. Düşen parçalar ekran dışına çıkana kadar çizilir.
 
 Referans videodan alınan gerçek fırça ve döküş sesleri ilk dokunuşla açılır; ayarlardan kapatılabilir. İlk parmak hareketi yönetir; ikinci parmak devralmaz. Oyun alanında zoom ve sayfa kaydırma kapalıdır.
 
 Otomatik rötuş yalnızca kaynak resimde en fazla 8 piksel (Titiz ayarda 2 piksel) ve toplam alanın %0,02’si kaldığında uygulanır. Küçük ayrıntılarda tam kaplama gerekir; görünür boşluklar boyanmaz. Parmak kalkınca renk ilerler. **Sonraki renk** düğmesi de kullanılabilir. Tamamlanmış renkleri tekrar yapmadan dönmek için `?devam=4` gibi bir bağlantı dördüncü renkten başlatır ve önceki üç rengi tamamlanmış olarak çizer.
+
+## Telefonu eğerek oyna
+
+**[Eğim modunu aç](https://furkiti.github.io/sim-atolyesi/?v=8&mod=egim)**. Hareketi aç düğmesine dokun, tarayıcı isterse hareket iznini ver. İlk tuttuğun duruş düz kabul edilir. Telefonu sağa/sola, ileri/geri eğerek simi taşı; yapışkana değen yüzey taneleri fırça gerektirmeden tutunur. Düz say ile konumu yeniden sıfırlayabilirsin. Hassasiyet ayarlardan değişir.
+
+Bu deney Hissiyat sekmesindeki Nasıl oynayalım? alanından seçilir. Sensörsüz ekran denemesi de bulunur ve ayrı etiketlenir. Fırça moduna dönünce fırçasız yapışma kapanır. [v8 izin, fizik ve doğrulama notları](docs/v8-phone-tilt.md).
 
 ## v7 · Cömert malzeme
 
@@ -36,7 +42,7 @@ Hissiyat / Bölümler / Görüntü & FPS sekmeleri bulunur. Görüntü ve hissiy
 
 ## Beş bölüm
 
-**Gotham**: mevcut 11 renkli poster. **[Ay Bahçesi](https://furkiti.github.io/sim-atolyesi/?v=7&bolum=ay-bahcesi)**: bu oyun için kodla çizilmiş, ay ve çiçeklerin arasında bir tilki; 8 renk. Ayarlardan bölüm seçilir; eser bitince diğer bölüme geçilebilir. `?bolum=ay-bahcesi&devam=6` o bölümün altıncı renginden başlar. Bölüm değiştirmek mevcut çalışmayı yeniden başlatır.
+**Gotham**: mevcut 11 renkli poster. **[Ay Bahçesi](https://furkiti.github.io/sim-atolyesi/?v=8&bolum=ay-bahcesi)**: bu oyun için kodla çizilmiş, ay ve çiçeklerin arasında bir tilki; 8 renk. Ayarlardan bölüm seçilir; eser bitince diğer bölüme geçilebilir. `?bolum=ay-bahcesi&devam=6` o bölümün altıncı renginden başlar. Bölüm değiştirmek mevcut çalışmayı yeniden başlatır.
 
 Yeni: **Çilekli Kedi**, **Boba Molası** ve **Kurbağa Pastanesi**. Üçü de bu oyun için çizilmiş sekiz renkli yeni eserlerdir. Ayarlardaki Bölümler sekmesinden açılır.
 

@@ -14,3 +14,5 @@ export class PaperMotion{
  }
  reset(){this.x=this.y=this.cup=this.vx=this.vy=this.vc=0;this.end();}
 }
+// Rotate a held card above the table, rather than letting its low edge intersect it.
+export function paperLift({x=0,y=0}={}){return 310*Math.abs(Math.sin(x))+410*Math.abs(Math.sin(y))}

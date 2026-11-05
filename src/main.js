@@ -3,6 +3,7 @@ import {AtelierScene} from './scene.js';
 import {Flow,PointerGate,FramePacer,drainPose,appendStroke} from './interaction.js';
 import {loadSettings,saveSettings,profileSettings,doseFor} from './settings.js';
 import {supplyPlan,supplyPose,supplyQuota} from './supply.js';
+import {DeviceTilt} from './tilt.js';
 import {PaperMotion} from './paper-motion.js';
 import {completionStatus,resumeIndex} from './progress.js';
 const $=s=>document.querySelector(s),canvas=$('#art'),dialog=$('#settings');
@@ -13,6 +14,9 @@ import {drawGlitter} from './coating.js';
 import {piecesByStage} from './peel-pieces.js';
 import {peelAt,peelDuration,revealPolygon} from './peel.js';
 let settings;try{settings=loadSettings(localStorage)}catch{settings=loadSettings({getItem:()=>null})}
+if(new URLSearchParams(location.search).get('mod')==='egim')settings={...settings,controlMode:'tilt'};
+let tiltAutoStart=false,tiltFrame={x:0,y:0,active:false};
+const deviceTilt=new DeviceTilt({onChange:()=>{updateTiltUI();if(deviceTilt.status==='active'&&tiltAutoStart&&!dialog.open&&view&&flow.phase==='peel'){tiltAutoStart=false;beginRoll();}}});
 const paperMotion=new PaperMotion();
 let paperPose={x:0,y:0,cup:0};
 const flow=new Flow(),gate=new PointerGate(),pacer=new FramePacer(settings.frameLimit),assets={},masks={},strokes=[];
@@ -102,17 +106,18 @@ function closeSettings(){dialog.close();pointer.visible=false;readySince=0;}
 $('#settings-open').onclick=()=>{releaseAll();pointer.visible=false;syncSettings();dialog.showModal()};
 $('#settings-close').onclick=closeSettings;$('#settings-done').onclick=closeSettings;dialog.addEventListener('cancel',()=>{releaseAll();readySince=0});
 function applySettings(next){
- const previousSurface=settings?.surface;settings=next;document.body.dataset.layout=settings.layout;$('#perf-hud').hidden=!settings.showStats;
+ const previousSurface=settings?.surface,previousControl=settings?.controlMode;settings=next;document.body.dataset.layout=settings.layout;$('#perf-hud').hidden=!settings.showStats;
  try{saveSettings(localStorage,settings)}catch{}
+ if(previousControl!==settings.controlMode){releaseAll();paperMotion.reset();if(settings.controlMode==='brush'){deviceTilt.stop();tiltAutoStart=false;}}
  sand?.setBehavior(settings);view?.applySettings(settings);
- if(partLayers.length&&previousSurface!==settings.surface){for(const layer of partLayers)paintGlue(layer);gc.clearRect(0,0,W,H);const count=revealedParts;revealedParts=0;revealUntil(count);repaintPaper();}pacer.setLimit(settings.frameLimit);if(!settings.autoAdvance)autoKick=0;syncSettings();readySince=0;updateUI();
+ if(partLayers.length&&previousSurface!==settings.surface){for(const layer of partLayers)paintGlue(layer);gc.clearRect(0,0,W,H);const count=revealedParts;revealedParts=0;revealUntil(count);repaintPaper();}pacer.setLimit(settings.frameLimit);if(!settings.autoAdvance)autoKick=0;syncSettings();readySince=0;updateUI();updateTiltUI();
 }
 function syncSettings(){
  document.querySelectorAll('input[name="layout"]').forEach(e=>e.checked=e.value===settings.layout);
  for(const [id,key] of Object.entries({'auto-advance':'autoAdvance','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'}))$('#'+id).checked=settings[key];
- for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','heap-depth':'heapDepth','surface-style':'surface','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
+ for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','control-mode':'controlMode','tilt-sensitivity':'tiltSensitivity','heap-depth':'heapDepth','surface-style':'surface','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
  document.querySelectorAll('input[name=feel]').forEach(e=>e.checked=e.value===settings.feel);
- for(const [id,key] of [['mobility','mobility'],['response','response'],['brush-width','brushWidth'],['grain-size','grainSize'],['heap-depth','heapDepth']])$('#'+id+'-readout').textContent='%'+Math.round(settings[key]*100);
+ for(const [id,key] of [['mobility','mobility'],['response','response'],['brush-width','brushWidth'],['grain-size','grainSize'],['heap-depth','heapDepth'],['tilt-sensitivity','tiltSensitivity']])$('#'+id+'-readout').textContent='%'+Math.round(settings[key]*100);
  $('#feel-name').textContent=FEELS[settings.feel]?.name||'Özel karışım';
  $('#resolution-readout').textContent='%'+Math.round(settings.renderScale*100);$('#pour-readout').textContent='%'+Math.round(settings.pourAmount*100);
 }
@@ -124,10 +129,32 @@ for(const [id,key,numeric] of [['render-scale','renderScale',true],['pour-amount
  $('#'+id).addEventListener(id.includes('scale')||id.includes('amount')?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,profile:['renderScale','shadow','frameLimit'].includes(key)?'custom':settings.profile}));
 }
 document.querySelectorAll('input[name=feel]').forEach(e=>e.onchange=()=>applySettings(feelSettings(settings,e.value)));
-for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true]]){
- $('#'+id).addEventListener(numeric?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface','supply','paperMotion','heapDepth'].includes(key)?settings.feel:'custom'}));
+for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['control-mode','controlMode',false],['tilt-sensitivity','tiltSensitivity',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true]]){
+ $('#'+id).addEventListener(numeric?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface','supply','paperMotion','heapDepth','controlMode','tiltSensitivity'].includes(key)?settings.feel:'custom'}));
 }
-function openLevel(id){const url=new URL(location.href);url.search='';url.searchParams.set('v','7');url.searchParams.set('bolum',id);location.assign(url)}
+const tiltMessages={off:'Telefonu rahat tut, sonra hareketi aç.',requesting:'Hareket izni bekleniyor…',waiting:'Sensör bekleniyor; telefonu hafifçe eğ.',active:'Hareket açık · bu konumu düz sayabilirsin.',demo:'Ekran eğimi açık · sensör kullanılmıyor.',denied:'Hareket izni verilmedi. Yeniden dene veya tarayıcı izinlerini kontrol et.',unsupported:'Bu cihazda hareket sensörü yok. Ekrandaki eğimle deneyebilirsin.',insecure:'Hareket sensörü için oyunu HTTPS bağlantısından aç.',empty:'Hareket verisi gelmedi. Telefonda Safari veya Chrome ile açabilir ya da ekranda deneyebilirsin.',stale:'Hareket verisi durdu; akış güvenli biçimde duraklatıldı.'};
+function updateTiltUI(){
+ const enabled=settings.controlMode==='tilt',live=['active','demo'].includes(deviceTilt.status);
+ for(const id of ['response','brush-shape','brush-width','paper-motion'])$('#'+id).closest('label').hidden=enabled;
+ $('#pour-hint').textContent=enabled?'Sim hedefin biraz üstüne dökülür. Telefonu eğerek yapışkana taşı.':'Sim hedefin biraz üstüne dökülür. Fırçayla taşıman gerekir.';
+ $('#tilt-panel').hidden=!enabled;$('#tilt-detail').textContent=tiltMessages[deviceTilt.status]||tiltMessages.off;
+ $('#tilt-status').textContent=live?(deviceTilt.status==='demo'?'Ekran eğimi':'Telefonu eğ'):({requesting:'İzin bekleniyor',waiting:'Sensör bekleniyor',denied:'İzin verilmedi',unsupported:'Sensör yok',insecure:'HTTPS gerekli',empty:'Veri gelmedi',stale:'Hareket durdu'}[deviceTilt.status]||'Hareket kapalı');
+ $('#tilt-enable').disabled=deviceTilt.status==='requesting';$('#tilt-enable').textContent=live?'Hareketi yeniden aç':'Hareketi aç';
+ $('#tilt-start').hidden=live;$('#tilt-center').disabled=!live;$('#tilt-recenter').disabled=!live;
+ $('#tilt-toolbar').hidden=!enabled||finished||(flow.phase==='brush'&&ready());
+}
+async function enableTilt(){
+ if(settings.controlMode!=='tilt')applySettings({...settings,controlMode:'tilt'});
+ tiltAutoStart=true;const pending=deviceTilt.start();if(soundOn)audio();
+ if(dialog.open)closeSettings();await pending;updateTiltUI();
+ if(deviceTilt.status==='active'&&flow.phase==='peel'){tiltAutoStart=false;beginRoll();}
+}
+$('#tilt-enable').onclick=enableTilt;$('#tilt-start').onclick=enableTilt;
+function recenterTilt(){deviceTilt.calibrate();tiltFrame={x:0,y:0,active:false};paperMotion.reset();updateTiltUI();}
+$('#tilt-center').onclick=recenterTilt;$('#tilt-recenter').onclick=recenterTilt;
+$('#tilt-demo-start').onclick=()=>{deviceTilt.demo();deviceTilt.setDemo(Number($('#tilt-demo-x').value),Number($('#tilt-demo-y').value));tiltAutoStart=false;if(dialog.open)closeSettings();if(flow.phase==='peel')beginRoll();updateTiltUI();};
+for(const id of ['tilt-demo-x','tilt-demo-y'])$('#'+id).oninput=()=>{deviceTilt.setDemo(Number($('#tilt-demo-x').value),Number($('#tilt-demo-y').value));updateTiltUI();};
+function openLevel(id){const url=new URL(location.href);url.search='';url.searchParams.set('v','8');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');url.searchParams.set('bolum',id);location.assign(url)}
 for(const entry of levels){
  const button=document.createElement('button');button.className='level-card'+(entry.id===level.id?' current':'');button.innerHTML=`<img src="assets/${entry.preview}.png" alt=""><span><strong>${entry.name}</strong><small>${entry.subtitle}</small></span><b>${entry.id===level.id?'Oynuyorsun':'Başla →'}</b>`;button.onclick=()=>{if(entry.id!==level.id)openLevel(entry.id)};$('#levels').append(button);
 }
@@ -141,16 +168,18 @@ function updateUI(){
  $('#coverage').textContent=percent+'%';$('#progress-fill').style.width=percent+'%';
  const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan taralı alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['∪','İki yandan bük, ortaya topla.','Fazla sim ortadaki oluktan kutuya akıyor.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
  if(phase==='rolling')messages.rolling=['↗',`Parça ${activePart+1} / ${partLayers.length} · yavaşça soyuluyor`,peel<.2?'Cımbız kenardan tutuyor.':'Sarı kâğıt ayrılıyor, yapışkan açılıyor.','SOY'];
- if(phase==='brush'&&settings.paperMotion==='hands')messages.brush[2]='Simleri yay; kâğıdı eğmek için yan kenarını tut.';
- const m=messages[phase]||messages.brush;$('#phase-icon').textContent=m[0];$('#instruction-title').textContent=m[1];$('#instruction-text').textContent=phase==='brush'&&settings.layout!=='flow'?'Sim ekle ile açık alanın üstüne yeni bir yığın dökebilirsin.':m[2];$('#phase-label').textContent=m[3];
+ if(settings.controlMode==='tilt'){messages.brush=['◉','Telefonu eğ, simi akıt.','Yapışkana değen taneler kendiliğinden tutunur.','EĞ'];messages.pour=['⠿','Sim dökülüyor.','Birazdan telefonu eğerek simleri taşı.','DÖK'];}
+ if(settings.controlMode!=='tilt'&&phase==='brush'&&settings.paperMotion==='hands')messages.brush[2]='Simleri yay; kâğıdı eğmek için yan kenarını tut.';
+ const m=messages[phase]||messages.brush;$('#phase-icon').textContent=m[0];$('#instruction-title').textContent=m[1];$('#instruction-text').textContent=phase==='brush'&&settings.layout!=='flow'&&settings.controlMode!=='tilt'?'Sim ekle ile açık alanın üstüne yeni bir yığın dökebilirsin.':m[2];$('#phase-label').textContent=m[3];
  const canNext=phase==='brush'&&ready()&&!finished;
  $('#next').hidden=!canNext;$('#next').disabled=!canNext;$('#next').innerHTML=index===stages.length-1?'Eserini tamamla <span>✧</span>':'Sonraki renk <span>→</span>';
  $('#auto-status').hidden=true;
  if(paperMotion.grip){$('#instruction-title').textContent='Kâğıdı hafifçe yönlendir.';$('#instruction-text').textContent='Taneler eğime doğru akıyor; bırakınca masa düzleşir.';}
  if(canNext){$('#instruction-title').textContent='Renk tamamlandı.';$('#instruction-text').textContent=settings.autoAdvance?'Parmağını kaldır; sıradaki renge geçelim.':'Sonraki renk ile devam et.';}
+ updateTiltUI();
  $('#quick-actions').hidden=phase!=='brush'||finished||canNext;
  for(const button of document.querySelectorAll('[data-tool]')){
-  const t=button.dataset.tool,selected=t===(phase==='shake'?'clean':phase==='rolling'?'peel':phase);
+  const t=button.dataset.tool;if(t==='brush'){button.querySelector('b').textContent=settings.controlMode==='tilt'?'Telefonu eğ':'Fırça';button.querySelector('span').textContent=settings.controlMode==='tilt'?'◉':'▰';button.setAttribute('aria-label',settings.controlMode==='tilt'?'Telefon eğimini etkinleştir':'Fırçayı seç');}const selected=t===(phase==='shake'?'clean':phase==='rolling'?'peel':phase);
   button.classList.toggle('selected',selected);button.disabled=finished||flow.busy||(t==='peel'?phase!=='peel':phase==='peel');
  }
 }
@@ -204,7 +233,7 @@ function nextStage(){
  if(index<stages.length-1){index++;activate();autoKick=settings.autoAdvance?.22:0;}
  else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;updateUI();}
 }
-for(const button of document.querySelectorAll('[data-tool]'))button.onclick=()=>{const t=button.dataset.tool;if(t==='peel')beginRoll();else if(t==='pour')addSand();else if(t==='clean')startShake(false);else updateUI()};
+for(const button of document.querySelectorAll('[data-tool]'))button.onclick=()=>{const t=button.dataset.tool;if(t==='peel')beginRoll();else if(t==='pour')addSand();else if(t==='clean')startShake(false);else if(t==='brush'&&settings.controlMode==='tilt'&&!tiltFrame.active)enableTilt();else updateUI()};
 $('#add-sand').onclick=addSand;$('#shake').onclick=()=>startShake(false);$('#next').onclick=()=>{if(ready())startShake(true)};
 function reset(){if(!view)return;releaseAll();refillAfterShake=false;finished=false;index=0;autoKick=0;bakedContext.clearRect(0,0,W,H);cc.clearRect(0,0,W,H);view.reset();$('#complete').hidden=true;activate()}
 $('#reset').onclick=()=>{reset();closeSettings()};$('#again').onclick=reset;
@@ -214,13 +243,14 @@ canvas.addEventListener('pointerdown',e=>{
  canvas.setPointerCapture(e.pointerId);pointer={...view.mapPointer(e),visible:true};previous={...pointer};pointerTime=e.timeStamp;
  if(soundOn)audio();
  if(flow.phase==='peel'){beginRoll();return;}
+ if(settings.controlMode==='tilt'&&flow.phase==='brush'){pointer.visible=false;return;}
  if(settings.paperMotion==='hands'&&flow.phase==='brush'&&(pointer.x<24||pointer.x>576)){paperMotion.begin(pointer);updateUI();return;}
  down=true;
 });
 canvas.addEventListener('pointermove',e=>{
  if(!view||finished||e.isPrimary===false)return;
  if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons){pointer={...view.mapPointer(e),visible:true};return;}
- if(!gate.owns(e.pointerId)||flow.phase!=='brush')return;
+ if(!gate.owns(e.pointerId)||flow.phase!=='brush'||settings.controlMode==='tilt')return;
  if(paperMotion.grip){pointer={...view.mapPointer(e),visible:true};paperMotion.move(pointer);return;}
  if(!down)return;
  const p=view.mapPointer(e);pointer={...p,visible:true};
@@ -228,10 +258,10 @@ canvas.addEventListener('pointermove',e=>{
 });
 function pointerEnd(e){if(!gate.end(e.pointerId))return;paperMotion.end();down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
 for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,pointerEnd);
-canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',releaseAll);
+canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',()=>{releaseAll();if(deviceTilt.status==='active'){deviceTilt.model.zero=null;deviceTilt.model.x=deviceTilt.model.y=0;}});
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
- Object.assign(canvas.dataset,{version:'7',supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'8',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -252,9 +282,11 @@ function frame(t){
  }
  let dx=0,dy=0;for(const stroke of strokes){dx+=stroke.to.x-stroke.from.x;dy+=stroke.to.y-stroke.from.y;moved+=sand.brush(stroke.from,stroke.to,brushRadius(settings),stroke.seconds);}strokes.length=0;
  const speed=Math.hypot(dx,dy)/Math.max(dt,.001),decay=Math.exp(-dt*18);brushMotion={dx:dx||brushMotion.dx,dy:dy||brushMotion.dy,speed:brushMotion.speed*decay+Math.min(1200,speed)*(1-decay),load:brushMotion.load*decay+Math.min(1,moved/350)*(1-decay)};
- paperPose=paperMotion.step(Math.min(dt,.04),settings.paperMotion,brushMotion,down);
+ tiltFrame=deviceTilt.tick(Math.min(dt,.04),settings.tiltSensitivity);
+ const tiltPlaying=settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'&&!finished;
+ paperPose=settings.controlMode==='tilt'?{x:tiltPlaying?tiltFrame.x*.25:0,y:tiltPlaying?tiltFrame.y*.25:0,cup:0}:paperMotion.step(Math.min(dt,.04),settings.paperMotion,brushMotion,down);
  const drainage=flow.phase==='shake'?drainPose(flow.progress):{bend:paperPose.cup,pitch:0};view.updateBend(drainage.bend,drainage.pitch);
- sand.step(Math.min(dt,.04),{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:paperPose.x,tiltY:paperPose.y,cup:paperPose.cup});
+ sand.step(Math.min(dt,.04),{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying});
  view.collectSpill(sand,true);
  const event=flow.tick(dt,{drainComplete:flow.phase!=='shake'||(!sand.hasLoose()&&view.spills.length===0)});
  if(event==='rolled'){revealUntil(partLayers.length);peeled=true;peel=1;repaintPaper();view.peelProgress(1);prepareDose();updateUI()}
@@ -268,12 +300,12 @@ function frame(t){
  updateCoat();
  simMs=simMs*.85+(performance.now()-simStart)*.15;
  sound(flow.phase==='pour'?.14:flow.phase==='shake'?.15:flow.phase==='rolling'?.06:moved?Math.min(.16,.015+moved*.00003):0);
- const drawStart=performance.now();view.render(sand,{time:t,dt,phase:flow.phase,down,pointer,brushMotion,paperPose,paperHeld:!!paperMotion.grip,peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
+ const drawStart=performance.now();view.render(sand,{time:t,dt,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip,peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
  if((statClock+=dt)>.2){statClock=0;updateUI();updateStats();}
 }
 applySettings(settings);
 try{
- await Promise.all([level.lines,...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=7`})));
+ await Promise.all([level.lines,...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=8`})));
  assets.lines=assets[level.lines];
  for(const stage of stages){gc.clearRect(0,0,W,H);gc.drawImage(assets[stage.id],0,0);const data=gc.getImageData(0,0,W,H).data,mask=new Uint8Array(W*H);for(let i=0;i<mask.length;i++)mask[i]=data[i*4+3]>80?1:0;masks[stage.id]=mask;}
  index=resumeIndex(location.search,stages.length);

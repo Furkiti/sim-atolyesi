@@ -36,10 +36,12 @@ export class Sand {
     }
     this.emitted+=added;return added;
   }
-  bind(i){
-    if(!this.pressed[i]||this.state[i]===BOUND||this.state[i]===LOST)return false;
+  bind(i,contact=false){
+    if((!this.pressed[i]&&!contact)||this.state[i]===BOUND||this.state[i]===LOST)return false;
     const cell=this.cell(this.x[i],this.y[i]);if(cell<0)return false;
     let k=cell;
+    // Tilt mode binds only a real surface packet already over this exact adhesive pixel.
+    if(contact&&(this.state[i]!==FREE||this.z[i]>4.5||!this.target[k]||this.bound[k]||!this.onGlue(this.x[i],this.y[i])))return false;
     if(!this.target[k]||this.bound[k]||!this.onGlue(this.x[i],this.y[i])){
       // Surface grains roll a few millimetres into neighbouring adhesive gaps.
       // This consumes a real packet, including at a one-pixel stencil boundary.
@@ -88,7 +90,7 @@ export class Sand {
     }
     this.lastMoved=moved;return moved;
   }
-  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0}={}){
+  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false}={}){
     this.time+=dt;this.top.fill(0);this.surfaceCount=0;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
     for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundDensity[k]+=.95;this.freshCount++;}else if(this.z[i]>6){this.moundDensity[k]+=.65;}this.top[k]=Math.max(this.top[k],this.z[i]);this.surfaceCount++;}}
     for(let k=0;k<this.height.length;k++){
@@ -109,7 +111,7 @@ export class Sand {
       for(let j=0;j<8;j++){const force=Math.max(0,Math.min((h-this.pressure[this.neighbors[k*8+j]])/(j<4?1:1.414)-repose,45))*55*this.behavior.pressure;this.flowForce[k*8+j]=force;sum+=force;this.flowCDF[k*8+j]=sum;}
       this.flowSum[k]=sum;
     }
-    const friction=Math.exp(-this.behavior.drag*dt);
+    const friction=Math.exp(-this.behavior.drag*(contactAdhesion?.58:1)*dt);
     for(let i=0;i<this.count;i++){
       const s=this.state[i];if(s===BOUND||s===LOST)continue;
       let k=this.cell(this.x[i],this.y[i]);
@@ -129,21 +131,25 @@ export class Sand {
       }else if(k<0&&!shaking){
         this.vz[i]-=900*dt;this.z[i]=Math.max(-9,this.z[i]+this.vz[i]*dt);if(this.z[i]<=-9)this.vz[i]=0;
       }else if(k>=0&&!shaking){
-        const h=this.height[k];let fx=980*Math.sin(tiltX)-220*Math.sin((this.x[i]-300)/300*cup),fy=980*Math.sin(tiltY);
+        const h=this.height[k];let fx=980*(contactAdhesion?2.4:1)*Math.sin(tiltX)-220*Math.sin((this.x[i]-300)/300*cup),fy=980*(contactAdhesion?2.4:1)*Math.sin(tiltY);
         if(this.flowSum[k]>0){
           const choice=((this.seed[i]+this.time*.17)%1)*this.flowSum[k];let j=0;
           while(j<7&&choice>this.flowCDF[k*8+j])j++;
           const force=this.flowForce[k*8+j],skew=(this.seed[i]*97%1-.5)*.75;fx+=(FLOW_X[j]-FLOW_Y[j]*skew)*force;fy+=(FLOW_Y[j]+FLOW_X[j]*skew)*force;
         }
         this.vx[i]+=fx*dt;this.vy[i]+=fy*dt;
-        const resting=1.7+h*(.10+this.seed[i]*.90);
+        const resting=1.7+h*(contactAdhesion?.015+this.seed[i]*.985:.10+this.seed[i]*.90);
         // A swept layer settles downward; releasing the brush cannot puff it up.
         const floor=this.pressed[i]?Math.min(this.z[i],resting):resting;
         this.z[i]+=(floor-this.z[i])*Math.min(1,dt*15);
         if(this.pressed[i]&&this.time-this.contactTime[i]<.16&&this.z[i]<5.5)this.bind(i);
       }
       if(this.state[i]===BOUND)continue;
-      this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
+      const oldX=this.x[i],oldY=this.y[i];this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
+      if(contactAdhesion&&!shaking&&this.state[i]===FREE&&this.z[i]<=4.5){
+        const endX=this.x[i],endY=this.y[i],steps=Math.max(1,Math.ceil(Math.hypot(endX-oldX,endY-oldY)));
+        for(let n=1;n<=steps;n++){this.x[i]=oldX+(endX-oldX)*n/steps;this.y[i]=oldY+(endY-oldY)*n/steps;if(this.bind(i,true))break;}
+      }
       if(shaking&&this.y[i]>H-3&&Math.abs(this.x[i]-W/2)>102){this.y[i]=H-3;this.vy[i]=0;}
       if(!shaking){const drag=s===AIR?Math.exp(-.7*dt):friction;this.vx[i]*=drag;this.vy[i]*=drag;}
       if(this.x[i]<-3000||this.x[i]>W+3000||this.y[i]<-3000||this.y[i]>H+3000){this.state[i]=LOST;this.lost++;}
