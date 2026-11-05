@@ -1,4 +1,4 @@
-<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><meta name="theme-color" content="#c9ccca"><title>Sim Atölyesi · Dokun, yay, parlat.</title><link rel="stylesheet" href="style.css?v=15"></head>
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><meta name="theme-color" content="#c9ccca"><title>Sim Atölyesi · Dokun, yay, parlat.</title><link rel="stylesheet" href="style.css?v=16"></head>
 <body data-layout="flow"><main id="app" aria-label="Sim Atölyesi">
 <canvas id="art" width="600" height="800" aria-label="Sıradaki kâğıdı açmak için bir kez dokun; ardından simi parmağınla yay"></canvas>
 <header class="topbar"><a class="brand" href="./" aria-label="Sim Atölyesi">✳ <span>sim atölyesi<small id="level-name">Gotham</small></span></a><div class="stage-chip"><i id="color-dot"></i><span id="stage-label">01 / 11</span><span id="coverage">0%</span></div><button id="settings-open" class="round-button" aria-label="Ayarları aç">⚙</button></header>
@@ -9,7 +9,13 @@
 <div id="tilt-toolbar" hidden aria-label="Telefon eğim kontrolleri"><button id="tilt-start">◉ Hareketi aç</button><button id="tilt-recenter" disabled>Düz say</button><span id="tilt-status" role="status">Hareket kapalı</span></div><button id="next" hidden>Sonraki renk <span>→</span></button>
 <button id="hold-control" hidden aria-label="Basılı tut, kâğıdı bük ve simi akıt" aria-pressed="false"><span>◉</span><b>Basılı tut · akıt</b><small>Klavye: Enter ile aç / durdur</small></button>
 <div id="auto-status" hidden>Renk hazır · kâğıt bükülecek</div>
-<section id="complete" hidden aria-label="Eser tamamlandı"><div class="complete-card"><span>✧</span><h1>Ellerine sağlık.</h1><p>Binlerce küçük parıltı, senin eserin.</p><button id="save" class="primary">Resmi kaydet ↗</button><button id="next-level" class="primary">Yeni bölüme geç →</button><button id="again" class="secondary">Bir daha yap</button></div></section>
+<section id="complete" hidden aria-labelledby="complete-title">
+<div class="complete-heading"><span class="complete-seal" aria-hidden="true">✦</span><small id="complete-level">GOTHAM · TAMAMLANDI</small><h1 id="complete-title" tabindex="-1">Bırak parlasın.</h1></div>
+<div class="complete-corner complete-left"><button id="again" class="round-button" aria-label="Bu bölümü yeniden oyna">↻</button><span>Tekrar</span></div>
+<div class="complete-corner complete-right"><button id="save" class="round-button" aria-label="Posteri kaydet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5"/></svg></button><span>Kaydet</span></div>
+<nav class="complete-actions" aria-label="Tamamlanan eser için seçenekler"><button id="share" class="share-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M7 10H4v11h16V10h-3"/></svg><span>Paylaş</span></button><button id="next-level" class="next-level-button"><span>Yeni bölüm<small id="next-level-name">Barcelona</small></span><span class="action-arrow" aria-hidden="true">↗</span></button></nav>
+<p id="share-status" role="status" aria-live="polite"></p>
+</section>
 </main>
 <dialog id="settings" aria-labelledby="settings-title"><div class="sheet-header"><div><small>ATÖLYEN SENİN OLSUN</small><h2 id="settings-title">Oyun ve görüntü</h2></div><button id="settings-close" class="round-button" aria-label="Ayarları kapat">✕</button></div>
 <nav class="settings-tabs" role="tablist" aria-label="Atölye ayarları"><button role="tab" data-tab="feel" aria-selected="true">Hissiyat</button><button role="tab" data-tab="levels" aria-selected="false">Bölümler</button><button role="tab" data-tab="display" aria-selected="false">Görüntü & FPS</button></nav><div class="settings-body"><section data-settings-tab="levels" hidden><h3>Bölümler</h3><div id="levels" class="level-options"></div></section>
@@ -60,4 +66,4 @@
 <div class="metrics"><div><span id="stat-fps">—</span><small>FPS</small></div><div><span id="stat-frame">—</span><small>Kare süresi · ms</small></div><div><span id="stat-sim">—</span><small>Simülasyon CPU · ms</small></div><div><span id="stat-render">—</span><small>Çizim CPU · ms</small></div><div><span id="stat-particles">—</span><small>Görünür tane</small></div><div><span id="stat-draws">—</span><small>Çizim çağrısı</small></div><div><span id="stat-triangles">—</span><small>Üçgen</small></div><div><span id="stat-memory">—</span><small>JS belleği · MB</small></div></div><p class="settings-note">CPU süreleri GPU süresini ölçmez. Düşük çözünürlük ve kapalı gölgeler daha akıcı çalışabilir.</p>
 </section><section class="session-actions" data-settings-tab="display" hidden><button id="sound" class="secondary" aria-label="Sesi kapat">Ses: açık</button><button id="reset" class="secondary">↺ Yeniden başlat</button></section></div>
 <div class="sheet-footer">Ayarların bu cihazda saklanır. <button id="settings-done" class="primary">Oyuna dön</button></div></dialog>
-<script type="module" src="game.js?v=15"></script></body></html>
+<script type="module" src="game.js?v=16"></script></body></html>

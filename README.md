@@ -1,6 +1,6 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=15&mod=basili)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=16&mod=basili)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
@@ -45,6 +45,12 @@ Hissiyat / Bölümler / Görüntü & FPS sekmeleri bulunur. Görüntü ve hissiy
 **Gotham (Batman & Joker)**: 11 renk. **Barcelona**: 7 renk. **Mor Portre** ve **Naruto**: 8’er renk. ⚙ → Bölümler ekranından seçilir. Ay Bahçesi, Çilekli Kedi, Boba Molası ve Kurbağa Pastanesi kapalıdır; eski bağlantıları Gotham’a yönelir. Kaynakları yeniden açılabilmeleri için korunur.
 
 Tüm açık bölümler basılı tutma, fırça ve eğim modlarında bulunur. [Referans video kaynakları ve doğrulama](docs/v14-reference-levels.md).
+
+## Eser tamamlanınca
+
+Poster 1,65 saniyelik bir kamera hareketiyle öne gelir; çevresinde parıltılar ve yüzeyinde hafif bir ışık geçişi görünür. Oyun araçları çekilir. Paylaş ve Yeni bölüm alt kenarda, kaydet ve tekrar üst köşelerde durur; posteri kapatan pencere yoktur. Paylaş desteklenen cihazlarda 1200×1600 PNG ile sistem paylaşım ekranını açar. Kaydet ve desteklenmeyen tarayıcılardaki paylaşım aynı temiz PNG’yi indirir; arayüz ve kutlama efektleri görsele eklenmez.
+
+Düğmeler basınca esner, seçimler ve ayar paneli yumuşak geçişler kullanır. Sistem hareket azaltma tercihi açıkken giriş hareketleri, kutlama parçacıkları ve ışık süpürmesi kapanır. [v16 uygulama ve doğrulama](docs/v16-completion.md).
 
 ## Geliştirme
 
