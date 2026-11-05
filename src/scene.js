@@ -323,7 +323,7 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,finished=false}){
-  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:0};this.setCardPose(paperPose,phase,pose);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
+  this.time=time;const pose=phase==='shake'?drainPose(shakeProgress):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCollector(phase,dt);this.coatUniforms.uTime.value=time*.001;this.updateGrains(sand);this.updateSpill(dt);
   const showHeap=this.settings.relief&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
   this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=sand.granular?.10:.23;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
@@ -356,7 +356,7 @@ export class AtelierScene {
    if(j>=sampleCount||sand.state[i]===LOST||sand.state[i]===AIR){sp.visible=false;continue;}
    const flash=Math.pow(Math.max(0,Math.sin(time*.0015+sand.seed[i]*300+this.sparkLight.x*8+this.sparkLight.y*5)),28);
    const k=sand.cell(sand.x[i],sand.y[i]);if(flash<.1||(sand.state[i]===FREE&&k>=0&&sand.z[i]<sand.height[k]*.73)){sp.visible=false;continue;}
-   sp.visible=true;sp.position.set(sand.x[i]-300,400-sand.y[i],sand.z[i]+4);sp.scale.setScalar(8+flash*7);sp.material.opacity=flash*.8;
+   sp.visible=true;const glintPoint=bentPoint(sand.x[i]-300,400-sand.y[i],sand.z[i]+4,this.bend,this.pitch);sp.position.set(glintPoint.x,glintPoint.y,glintPoint.z);sp.scale.setScalar(8+flash*7);sp.material.opacity=flash*.8;
   }
   this.renderer.render(this.scene,this.camera);
  }

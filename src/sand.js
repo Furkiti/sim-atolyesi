@@ -91,7 +91,7 @@ export class Sand {
     }
     this.lastMoved=moved;return moved;
   }
-  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false,granular=contactAdhesion}={}){
+  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false,granular=contactAdhesion,refreshOnly=false}={}){
     this.time+=dt;this.granular=granular;this.ground.fill(-1);this.top.fill(0);this.surfaceCount=0;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
     for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){if(granular&&(this.ground[k]<0||this.z[i]<this.z[this.ground[k]]))this.ground[k]=i;this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundDensity[k]+=.95;this.freshCount++;}else if(this.z[i]>6){this.moundDensity[k]+=.65;}this.top[k]=Math.max(this.top[k],this.z[i]);this.surfaceCount++;}}
     for(let k=0;k<this.height.length;k++){
@@ -104,6 +104,7 @@ export class Sand {
       let top=this.top[k];for(let j=0;j<8;j++)top=Math.max(top,this.top[this.neighbors[k*8+j]]);
       this.moundHeight[k]=fresh>0?Math.min(top,MAX_HEAP_HEIGHT*(1-Math.exp(-fresh*2.15*this.heapDepth/MAX_HEAP_HEIGHT))):0;
     }
+    if(refreshOnly)return;
     // Pressure is a property of a cell, computed once rather than allocating
     // neighbour lists for every flake on every frame.
     for(let k=0;k<this.height.length;k++){
