@@ -17,3 +17,17 @@ test('a peel begins at its own edge and curls while the distant paper stays atta
   for(const progress of [.1,.4,.7,1])for(const p of revealPolygon(piece,progress)){const s=(p.x-grip.x)*piece.axis.x+(p.y-grip.y)*piece.axis.y;assert.ok(s<=peelFront(piece,progress)+1e-7);}
  }
 });
+
+test('holding speeds sequential peeling fourfold; release immediately restores the normal rate',()=>{
+ const pieces=piecesByStage['berry-pink'],total=peelDuration(pieces),flow=new Flow();flow.setRollDuration(total);flow.roll();flow.tick(.25);assert.equal(flow.elapsed,.25);
+ flow.tick(.25,{peelHeld:true});assert.equal(flow.elapsed,1.25);flow.tick(.25,{peelHeld:false});assert.equal(flow.elapsed,1.5);
+ const seen=new Set([peelAt(pieces,flow.elapsed).index]);let rolled=0,acceleratedTicks=0;
+ for(let i=0;i<1000&&flow.phase==='rolling';i++){acceleratedTicks++;if(flow.tick(1/60,{peelHeld:true})==='rolled')rolled++;else seen.add(peelAt(pieces,flow.elapsed).index);}
+ assert.equal(seen.size,pieces.length);assert.equal(rolled,1);assert.equal(flow.phase,'pour');assert.equal(flow.elapsed,0);assert.ok(Math.abs(acceleratedTicks/60-(total-1.5)/4)<1/60+.00001);
+ // Continuing to hold after the transition must not accelerate the bottle.
+ flow.tick(.25,{peelHeld:true});assert.equal(flow.elapsed,.25);assert.equal(flow.phase,'pour');
+});
+
+test('peel speed boost never speeds up a pour or the fold/collection timer',()=>{
+ const f=new Flow();f.pour();f.tick(.2,{peelHeld:true});assert.equal(f.elapsed,.2);f.phase='brush';f.shake();f.tick(.2,{peelHeld:true});assert.equal(f.elapsed,.2);assert.equal(f.progress,.2/4.875);
+});

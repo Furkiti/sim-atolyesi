@@ -39,8 +39,8 @@ export class Flow {
  roll(){if(this.phase!=='peel')return false;this.phase='rolling';this.elapsed=0;this.serial++;return true;}
  pour(){if(!['brush','peel'].includes(this.phase))return false;this.phase='pour';this.elapsed=0;this.serial++;return true;}
  shake(advance=false){if(this.phase!=='brush')return false;this.phase='shake';this.elapsed=0;this.advance=advance;this.drainDoneAt=null;this.serial++;return true;}
- tick(dt,{drainComplete=true}={}){
-  if(!this.busy)return null;this.elapsed+=dt;
+ tick(dt,{drainComplete=true,peelHeld=false}={}){
+  if(!this.busy)return null;this.elapsed+=dt*(this.phase==='rolling'&&peelHeld?4:1);
   if(this.phase==='rolling'&&this.elapsed>=this.rollDuration){this.phase='pour';this.elapsed=0;return'rolled';}
   if(this.phase==='pour'&&this.elapsed>=this.pourDuration){this.phase='brush';this.elapsed=0;return'poured';}
   if(this.phase==='shake'){

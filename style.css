@@ -19,3 +19,5 @@ body[data-control="hold"] #tool-dock{display:none}
 #hold-control span{font-size:23px}#hold-control b{font-size:13px;font-weight:600}#hold-control small{display:none}#hold-control:focus-visible{outline:2px solid #72895a;outline-offset:4px}#hold-control:focus-visible small{display:block;position:absolute;top:-24px;left:8px;font-size:10px}#hold-control[aria-pressed="true"]{background:#dfe9cf;box-shadow:0 0 0 6px #a8bc8620}#hold-control[aria-pressed="true"] span{animation:hold-pulse 1.3s ease-in-out infinite}@keyframes hold-pulse{50%{transform:scale(.78);opacity:.55}}
 
 #art,#hold-control{-webkit-touch-callout:none}
+
+body[data-layout="dock"] #hold-control{bottom:calc(185px + env(safe-area-inset-bottom))}

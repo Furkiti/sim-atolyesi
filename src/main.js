@@ -160,7 +160,7 @@ function recenterTilt(){deviceTilt.calibrate();tiltFrame={x:0,y:0,active:false};
 $('#tilt-center').onclick=recenterTilt;$('#tilt-recenter').onclick=recenterTilt;
 $('#tilt-demo-start').onclick=()=>{deviceTilt.demo();deviceTilt.setDemo(Number($('#tilt-demo-x').value),Number($('#tilt-demo-y').value));tiltAutoStart=false;if(dialog.open)closeSettings();if(flow.phase==='peel')beginRoll();updateTiltUI();};
 for(const id of ['tilt-demo-x','tilt-demo-y'])$('#'+id).oninput=()=>{deviceTilt.setDemo(Number($('#tilt-demo-x').value),Number($('#tilt-demo-y').value));updateTiltUI();};
-function openLevel(id){const url=new URL(location.href);url.search='';url.searchParams.set('v','10');if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');url.searchParams.set('bolum',id);location.assign(url)}
+function openLevel(id){const url=new URL(location.href);url.search='';url.searchParams.set('v','10.2');if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');url.searchParams.set('bolum',id);location.assign(url)}
 for(const entry of levels){
  const button=document.createElement('button');button.className='level-card'+(entry.id===level.id?' current':'');button.innerHTML=`<img src="assets/${entry.preview}.png" alt=""><span><strong>${entry.name}</strong><small>${entry.subtitle}</small></span><b>${entry.id===level.id?'Oynuyorsun':'Başla →'}</b>`;button.onclick=()=>{if(entry.id!==level.id)openLevel(entry.id)};$('#levels').append(button);
 }
@@ -174,7 +174,7 @@ function updateUI(){
  $('#stage-label').textContent=`${String(index+1).padStart(2,'0')} / ${stages.length}`;$('#stage-label').title=stages[index].name;$('#color-dot').style.background=stages[index].color;
  $('#coverage').textContent=percent+'%';$('#progress-fill').style.width=percent+'%';
  const messages={peel:['↗','Bir kez dokun.','Sıradaki kâğıt rulolanarak açılsın.','SOY'],rolling:['↗','Kâğıt açılıyor…','Açılan taralı alan simi tutacak.','SOY'],pour:['⠿','Bir yığın parıltı.','Kap boşalsın; sonra simi parmağınla yay.','DÖK'],brush:['▰','Yığından başla, kenarlara yay.','Sim yetmezse + Sim ile bir yığın daha ekle.','YAY'],shake:['∪','İki yandan bük, ortaya topla.','Fazla sim ortadaki oluktan kutuya akıyor.','BOŞALT'],complete:['✧','Ellerine sağlık.','Biraz sabır, binlerce küçük parıltı.','BİTTİ']};
- if(phase==='rolling')messages.rolling=['↗',`Parça ${activePart+1} / ${partLayers.length} · yavaşça soyuluyor`,peel<.2?'Cımbız kenardan tutuyor.':'Sarı kâğıt ayrılıyor, yapışkan açılıyor.','SOY'];
+ if(phase==='rolling')messages.rolling=['↗',`Parça ${activePart+1} / ${partLayers.length} · ${(down||holdLatched)?'hızlı':'yavaşça'} soyuluyor`,(down||holdLatched)?'Hızlı soyuluyor · bırakınca yavaşlar.':'Basılı tutarak daha hızlı soyabilirsin.','SOY'];
  if(settings.controlMode==='tilt'){messages.brush=['◉','Telefonu eğ, simi akıt.','Yapışkana değen taneler kendiliğinden tutunur.','EĞ'];messages.pour=['⠿','Sim dökülüyor.','Birazdan telefonu eğerek simleri taşı.','DÖK'];}
  if(settings.controlMode==='brush'&&phase==='brush'&&settings.paperMotion==='hands')messages.brush[2]='Simleri yay; kâğıdı eğmek için yan kenarını tut.';
  if(settings.controlMode==='hold'){messages.peel=['↗','Bir kez dokun.','Kâğıt açılsın, üst kenara sim şeridi dökülsün.','HAZIRLA'];messages.pour=['⠿','Üst kenara bir şerit sim.','Şerit hazırlanınca ekrana basılı tut.','DÖK'];messages.brush=['∪',(down||holdLatched)?'Bükülüyor, simler akıyor.':'Basılı tut, simi akıt.','Bırakınca durur. Yapışkana ulaşan simler tutunur.','BASILI TUT'];}
@@ -185,7 +185,7 @@ function updateUI(){
  if(paperMotion.grip){$('#instruction-title').textContent='Kâğıdı hafifçe yönlendir.';$('#instruction-text').textContent='Taneler eğime doğru akıyor; bırakınca masa düzleşir.';}
  if(canNext){$('#instruction-title').textContent='Renk tamamlandı.';$('#instruction-text').textContent=(settings.autoAdvance||settings.controlMode==='hold')?'Parmağını kaldır; sıradaki renge geçelim.':'Sonraki renk ile devam et.';}
  updateTiltUI();
- $('#hold-control').hidden=settings.controlMode!=='hold'||phase!=='brush'||finished;$('#hold-control').setAttribute('aria-pressed',String(down||holdLatched));$('#hold-control b').textContent=canNext?'Bırak · sonraki renk':(down||holdLatched)?'Akıyor · bırakınca durur':'Basılı tut · akıt';
+ $('#hold-control').hidden=finished||!(phase==='rolling'||settings.controlMode==='hold'&&phase==='brush');$('#hold-control').setAttribute('aria-label',phase==='rolling'?'Kâğıdı daha hızlı soymak için basılı tut':'Basılı tut, kâğıdı bük ve simi akıt');$('#hold-control').setAttribute('aria-pressed',String(down||holdLatched));$('#hold-control b').textContent=phase==='rolling'?((down||holdLatched)?'Hızlı soyuluyor':'Basılı tut · hızlı soy'):canNext?'Bırak · sonraki renk':(down||holdLatched)?'Akıyor · bırakınca durur':'Basılı tut · akıt';
  $('#quick-actions').hidden=settings.controlMode==='hold'||phase!=='brush'||finished||canNext;
  for(const button of document.querySelectorAll('[data-tool]')){
   const t=button.dataset.tool;if(t==='brush'){button.querySelector('b').textContent=settings.controlMode==='tilt'?'Telefonu eğ':'Fırça';button.querySelector('span').textContent=settings.controlMode==='tilt'?'◉':'▰';button.setAttribute('aria-label',settings.controlMode==='tilt'?'Telefon eğimini etkinleştir':'Fırçayı seç');}const selected=t===(phase==='shake'?'clean':phase==='rolling'?'peel':phase);
@@ -251,17 +251,18 @@ function reset(){if(!view)return;releaseAll();refillAfterShake=false;finished=fa
 $('#reset').onclick=()=>{reset();closeSettings()};$('#again').onclick=reset;
 $('#save').onclick=()=>{const a=document.createElement('a');a.href=view.capture();a.download='sim-atolyesi-'+level.id+'.png';a.click()};
 function beginPointer(e){
- e.preventDefault();if(!view||finished||flow.busy||!gate.begin(e.pointerId,e.isPrimary!==false))return;
+ e.preventDefault();if(!view||finished||(flow.busy&&flow.phase!=='rolling')||!gate.begin(e.pointerId,e.isPrimary!==false))return;
  e.currentTarget.setPointerCapture(e.pointerId);pointer={...view.mapPointer(e),visible:true};previous={...pointer};pointerTime=e.timeStamp;
  if(soundOn)audio();
- if(flow.phase==='peel'){beginRoll();return;}
+ if(flow.phase==='peel'){beginRoll();down=flow.phase==='rolling';pointer.visible=false;updateUI();return;}
+ if(flow.phase==='rolling'){down=true;pointer.visible=false;updateUI();return;}
  if(settings.controlMode==='hold'&&flow.phase==='brush'){down=true;pointer.visible=false;updateUI();return;}
  if(settings.controlMode==='tilt'&&flow.phase==='brush'){pointer.visible=false;return;}
  if(settings.paperMotion==='hands'&&flow.phase==='brush'&&(pointer.x<24||pointer.x>576)){paperMotion.begin(pointer);updateUI();return;}
  down=true;
 }
 canvas.addEventListener('pointerdown',beginPointer);$('#hold-control').addEventListener('pointerdown',beginPointer);
-$('#hold-control').onclick=e=>{if(e.detail!==0||settings.controlMode!=='hold'||flow.phase!=='brush')return;holdLatched=!holdLatched;if(soundOn)audio();updateUI();};
+$('#hold-control').onclick=e=>{if(e.detail!==0||!(flow.phase==='rolling'||settings.controlMode==='hold'&&flow.phase==='brush'))return;holdLatched=!holdLatched;if(soundOn)audio();updateUI();};
 canvas.addEventListener('pointermove',e=>{
  if(!view||finished||e.isPrimary===false)return;
  if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons){pointer={...view.mapPointer(e),visible:true};return;}
@@ -276,7 +277,7 @@ for(const target of [canvas,$('#hold-control')])for(const type of ['pointerup','
 canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible=false});window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',()=>{releaseAll();if(deviceTilt.status==='active'){deviceTilt.model.zero=null;deviceTilt.model.x=deviceTilt.model.y=0;}});
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
- Object.assign(canvas.dataset,{version:'10',holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'10.2',peelSpeed:flow.phase==='rolling'&&(down||holdLatched)&&!dialog.open?'4':'1',holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -306,8 +307,8 @@ function frame(t){
  const drainage=flow.phase==='shake'?drainPose(flow.progress):{bend:paperPose.cup,pitch:paperPose.pitch||0};view.setCardPose(paperPose,flow.phase,drainage);
  if(!(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase)))sand.step(Math.min(dt,.04),{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying,granular:settings.controlMode==='tilt'&&flow.phase!=='shake'});
  view.collectSpill(sand,true);
- const event=flow.tick(dt,{drainComplete:flow.phase!=='shake'||(!sand.hasLoose()&&view.spills.length===0)});
- if(event==='rolled'){revealUntil(partLayers.length);peeled=true;peel=1;repaintPaper();view.peelProgress(1);prepareDose();updateUI()}
+ const event=flow.tick(dt,{peelHeld:(down||holdLatched)&&!dialog.open,drainComplete:flow.phase!=='shake'||(!sand.hasLoose()&&view.spills.length===0)});
+ if(event==='rolled'){releaseAll();revealUntil(partLayers.length);peeled=true;peel=1;repaintPaper();view.peelProgress(1);prepareDose();updateUI()}
  if(event==='poured'){pour=null;view.posePour(null);updateUI()}
  if(event==='shaken'||event==='advance'){
   view.collectSpill(sand);sand.removeLoose();sand.compact();view.currentInitialized=0;
@@ -323,7 +324,7 @@ function frame(t){
 }
 applySettings(settings);
 try{
- await Promise.all([level.lines,...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=10`})));
+ await Promise.all([level.lines,...stages.map(s=>s.id)].map(id=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{assets[id]=im;resolve()};im.onerror=()=>reject(Error('Şablon yüklenemedi: '+id));im.src=`assets/${id}.png?v=10.2`})));
  assets.lines=assets[level.lines];
  for(const stage of stages){gc.clearRect(0,0,W,H);gc.drawImage(assets[stage.id],0,0);const data=gc.getImageData(0,0,W,H).data,mask=new Uint8Array(W*H);for(let i=0;i<mask.length;i++)mask[i]=data[i*4+3]>80?1:0;masks[stage.id]=mask;}
  index=resumeIndex(location.search,stages.length);
