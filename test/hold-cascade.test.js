@@ -9,9 +9,9 @@ test('the full finite supply forms a horizontal top strip, never paints before h
  for(let i=0;i<160;i++)c.step(1/60,true);assert.ok(s.coverage>.05&&s.coverage<1);const y=s.y.slice(0,s.count),coverage=s.coverage,elapsed=c.elapsed;
  for(let i=0;i<90;i++)c.step(1/60,false);assert.equal(s.coverage,coverage);assert.equal(c.elapsed,elapsed);assert.deepEqual(s.y.slice(0,s.count),y);assert.ok(c.press<.001);assert.equal(s.emitted,total);
 });
-test('every colour in all five levels fills completely from travelling packets, including one-pixel mask edges',()=>{
+test('every colour in every level fills completely from travelling packets, including one-pixel mask edges',()=>{
  for(const level of levels)for(const stage of level.stages){
-  const s=new Sand({random:rng()}),m=mask(stage.id);s.setMask(m);const c=new HoldCascade(s,{...DEFAULTS,pourAmount:.75});c.pour(1,0);for(let f=0;f<30;f++)c.step(1/30,false);const emitted=s.emitted;
+  const s=new Sand({random:rng()}),m=mask(stage.id);s.setMask(m);const c=new HoldCascade(s,{...DEFAULTS,holdDensity:.5});c.pour(1,0);for(let f=0;f<30;f++)c.step(1/30,false);const emitted=s.emitted;
   for(let f=0;f<330;f++){c.step(1/30,true);leave(s);}assert.equal(s.coverage,1,stage.id);const st=s.stats();assert.equal(st.air+st.free+st.bound+st.lost,emitted,stage.id);assert.equal(s.emitted,emitted);assert.equal(st.free,c.retainedCount,stage.id);assert.ok(c.retainedCount>150&&c.retainedCount<=750,stage.id);
   for(let i=0;i<s.count;i++)if(s.state[i]===BOUND){assert.equal(s.onGlue(s.x[i],s.y[i]),true);assert.equal(s.pressed[i],0);}
  }

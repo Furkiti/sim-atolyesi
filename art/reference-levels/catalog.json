@@ -1,0 +1,5 @@
+[
+ {"id":"barcelona","prefix":"barca","name":"Barcelona","description":"Bordo mavi arma","colors":[["ink","Arma çizgileri","#17191c"],["burgundy","Bordo","#b72645"],["blue","Koyu mavi","#294dbb"],["gold","Arma altını","#d0aa32"],["yellow","Sarı şeritler","#f3d833"],["white","Beyaz alanlar","#f3f4fb"],["mint","Turkuaz fon","#43cdbc"]]},
+ {"id":"mor-portre","prefix":"portrait","name":"Mor Portre","description":"Örgüler ve gümüş kolye","colors":[["ink","Saç ve çizgiler","#302536"],["lips","Kiremit dudaklar","#bd624b"],["purple","Mor tişört","#802bb0"],["skin","Sıcak ten","#b17d86"],["gold","Altın küpe","#dcba48"],["silver","Beyaz ve gümüş","#e8e7ef"],["red","Kırmızı fon","#de363a"],["blue","Mavi fon","#3581b7"]]},
+ {"id":"naruto","prefix":"ninja","name":"Naruto","description":"Altın saçlı ninja","colors":[["ink","Siyah çizgiler","#161d20"],["hair","Altın saçlar","#d7ad2a"],["silver","Gümüş alınlık","#c1c6d0"],["orange","Turuncu ceket","#c47831"],["eye","Mavi göz","#3963bd"],["skin","Şeftali ten","#f1c6b4"],["white","Beyaz detaylar","#eeeceb"],["blue","Mavi fon","#416fd8"]]}
+]

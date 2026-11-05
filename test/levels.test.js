@@ -17,5 +17,16 @@ test('level selection and resume remain separate; unknown levels safely open Got
 });
 
 test('all three sweet illustrations exactly partition a complete card and have playable peel pieces',()=>{
- for(const level of levels.slice(2)){assert.equal(level.stages.length,8);const seen=new Uint8Array(480000);for(const stage of level.stages){const data=PNG.sync.read(readFileSync(new URL(`../assets/${stage.id}.png`,import.meta.url))).data;let area=0;for(let i=0;i<seen.length;i++)if(data[i*4+3]>80){seen[i]++;area++;}assert.equal(area,stage.area);assert.ok(piecesByStage[stage.id].length);}assert.ok(seen.every(n=>n===1),level.id);}
+ for(const level of levels.slice(2,5)){assert.equal(level.stages.length,8);const seen=new Uint8Array(480000);for(const stage of level.stages){const data=PNG.sync.read(readFileSync(new URL(`../assets/${stage.id}.png`,import.meta.url))).data;let area=0;for(let i=0;i<seen.length;i++)if(data[i*4+3]>80){seen[i]++;area++;}assert.equal(area,stage.area);assert.ok(piecesByStage[stage.id].length);}assert.ok(seen.every(n=>n===1),level.id);}
+});
+
+
+test('the three video reference levels have their own palettes, full-card masks and valid supply anchors',()=>{
+ const expected=[['barcelona',7],['mor-portre',8],['naruto',8]];
+ for(const [id,count] of expected){const level=selectLevel('?bolum='+id);assert.equal(level.id,id);assert.equal(level.stages.length,count);const seen=new Uint8Array(480000);const unique=new Set();
+  for(const stage of level.stages){assert.ok(!unique.has(stage.id));unique.add(stage.id);const image=PNG.sync.read(readFileSync(new URL(`../assets/${stage.id}.png`,import.meta.url)));assert.equal(image.width,600);assert.equal(image.height,800);let area=0;
+   for(let i=0;i<seen.length;i++)if(image.data[i*4+3]>80){seen[i]++;area++;}assert.equal(area,stage.area);assert.ok(area>0);assert.ok(image.data[(stage.pour.y*600+stage.pour.x)*4+3]>80);assert.ok(piecesByStage[stage.id].length);
+  }
+  assert.ok(seen.every(n=>n===1),id);for(const asset of [level.lines,level.preview]){const image=PNG.sync.read(readFileSync(new URL(`../assets/${asset}.png`,import.meta.url)));assert.equal(image.width,600);assert.equal(image.height,800);}
+ }
 });

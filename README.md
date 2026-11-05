@@ -1,6 +1,6 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=8)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=14&mod=basili)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
@@ -40,11 +40,13 @@ Merkezdeki sim artık uzun fırça hareketinde daha iyi taşınır. Yüksek kala
 
 Hissiyat / Bölümler / Görüntü & FPS sekmeleri bulunur. Görüntü ve hissiyat ayarları oyunu sıfırlamaz ve tarayıcıda saklanır. İlerleme sayfa yenilenince sıfırlanır. CPU ölçümleri GPU süresi değildir. Telefonda gölgeleri kapatmak ve çözünürlüğü azaltmak yükü düşürür.
 
-## Beş bölüm
+## Sekiz bölüm
 
 **Gotham**: mevcut 11 renkli poster. **[Ay Bahçesi](https://furkiti.github.io/sim-atolyesi/?v=8&bolum=ay-bahcesi)**: bu oyun için kodla çizilmiş, ay ve çiçeklerin arasında bir tilki; 8 renk. Ayarlardan bölüm seçilir; eser bitince diğer bölüme geçilebilir. `?bolum=ay-bahcesi&devam=6` o bölümün altıncı renginden başlar. Bölüm değiştirmek mevcut çalışmayı yeniden başlatır.
 
 Yeni: **Çilekli Kedi**, **Boba Molası** ve **Kurbağa Pastanesi**. Üçü de bu oyun için çizilmiş sekiz renkli yeni eserlerdir. Ayarlardaki Bölümler sekmesinden açılır.
+
+Yeni video bölümleri: **Barcelona** (7 renk), **Mor Portre** (8 renk) ve **Naruto** (8 renk). Üçü de ⚙ → Bölümler ekranında ve basılı tutma, fırça, eğim modlarında bulunur. [Kaynaklar ve doğrulama](docs/v14-reference-levels.md).
 
 ## Geliştirme
 
