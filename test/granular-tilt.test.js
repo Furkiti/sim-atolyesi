@@ -36,3 +36,8 @@ test('depth occlusion hides far-edge drops behind the card while side and near-e
  const occluded=p=>{const ray=new T.Raycaster(eye,p.clone().sub(eye).normalize(),0,eye.distanceTo(p));return ray.intersectObject(paper).length>0;};
  assert.equal(occluded(new T.Vector3(0,405,-20)),true);assert.equal(occluded(new T.Vector3(0,-405,-20)),false);assert.equal(occluded(new T.Vector3(310,0,-20)),false);assert.equal(occluded(new T.Vector3(-310,0,-20)),false);
 });
+
+test('a grain leaving the bent bottom lip keeps its raised height and reaches the collector',async()=>{
+ const {TRAY,stepFalling}=await import('../src/collector.js');const sand=new Sand({capacity:1});sand.count=1;sand.x[0]=300;sand.y[0]=802;sand.previousX[0]=300;sand.previousY[0]=798;sand.z[0]=2;sand.vy[0]=500;sand.state[0]=FREE;
+ const scene={paperGroup:new T.Group(),colors:['#ff00aa'],activeColor:0,spills:[],bend:1,pitch:.58,draining:true};AtelierScene.prototype.collectSpill.call(scene,sand,true);const p=scene.spills[0];assert.ok(p.z>110,p.z);assert.ok(p.vz<-200);let caught=false;for(let f=0;f<100&&!caught;f++)caught=stepFalling(p,1/60,TRAY);assert.equal(caught,true);
+});

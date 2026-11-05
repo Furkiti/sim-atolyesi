@@ -260,8 +260,12 @@ export class AtelierScene {
   for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<48000){
    if(outsideOnly&&(sand.state[i]!==FREE||sand.cell(sand.x[i],sand.y[i])>=0))continue;
    const outside=sand.cell(sand.x[i],sand.y[i])<0,exit=outside?paperExit(sand.previousX[i],sand.previousY[i],sand.x[i],sand.y[i]):null;
-   const x=exit?exit.x+exit.nx*2:sand.x[i],y=exit?exit.y+exit.ny*2:sand.y[i];
-   const q=bentPoint(x-300,400-y,3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch),v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
+   const x=exit?exit.x:sand.x[i],y=exit?exit.y:sand.y[i];
+   const q=bentPoint(x-300,400-y,3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]),this.bend,this.pitch);
+   // Offset along the bent surface tangent, rather than sampling past its lip:
+   // bentPoint deliberately treats y < -400 as detached, flat coordinates.
+   if(exit){const offset=surfaceVelocity(x-300,exit.nx*2,exit.ny*2,this.bend,this.pitch);q.x+=offset.x;q.y+=offset.y;q.z+=offset.z;}
+   const v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
    const tangent=exit?exitVelocity(exit,sand.vx[i],sand.vy[i],this.draining):{vx:sand.vx[i],vy:sand.vy[i]};
    const speed=surfaceVelocity(x-300,tangent.vx,tangent.vy,this.bend,this.pitch);speed.z+=Math.min(-15,sand.vz[i]);
    const velocity=new T.Vector3(speed.x,speed.y,speed.z).applyQuaternion(this.paperGroup.quaternion);
