@@ -1,5 +1,242 @@
 [
- {"id":"barcelona","prefix":"barca","name":"Barcelona","description":"Bordo mavi arma","colors":[["ink","Arma çizgileri","#17191c"],["burgundy","Bordo","#b72645"],["blue","Koyu mavi","#294dbb"],["gold","Arma altını","#d0aa32"],["yellow","Sarı şeritler","#f3d833"],["white","Beyaz alanlar","#f3f4fb"],["mint","Turkuaz fon","#43cdbc"]]},
- {"id":"mor-portre","prefix":"portrait","name":"Mor Portre","description":"Örgüler ve gümüş kolye","colors":[["ink","Saç ve çizgiler","#302536"],["lips","Kiremit dudaklar","#bd624b"],["purple","Mor tişört","#802bb0"],["skin","Sıcak ten","#b17d86"],["gold","Altın küpe","#dcba48"],["silver","Beyaz ve gümüş","#e8e7ef"],["red","Kırmızı fon","#de363a"],["blue","Mavi fon","#3581b7"]]},
- {"id":"naruto","prefix":"ninja","name":"Naruto","description":"Altın saçlı ninja","colors":[["ink","Siyah çizgiler","#161d20"],["hair","Altın saçlar","#d7ad2a"],["silver","Gümüş alınlık","#c1c6d0"],["orange","Turuncu ceket","#c47831"],["eye","Mavi göz","#3963bd"],["skin","Şeftali ten","#f1c6b4"],["white","Beyaz detaylar","#eeeceb"],["blue","Mavi fon","#416fd8"]]}
+ {
+  "id": "barcelona",
+  "prefix": "barca",
+  "name": "Barcelona",
+  "description": "Bordo mavi arma",
+  "colors": [
+   [
+    "ink",
+    "Arma çizgileri",
+    "#17191c"
+   ],
+   [
+    "burgundy",
+    "Bordo",
+    "#b72645"
+   ],
+   [
+    "blue",
+    "Koyu mavi",
+    "#294dbb"
+   ],
+   [
+    "gold",
+    "Arma altını",
+    "#d0aa32"
+   ],
+   [
+    "yellow",
+    "Sarı şeritler",
+    "#f3d833"
+   ],
+   [
+    "white",
+    "Beyaz alanlar",
+    "#f3f4fb"
+   ],
+   [
+    "mint",
+    "Turkuaz fon",
+    "#43cdbc"
+   ]
+  ]
+ },
+ {
+  "id": "mor-portre",
+  "prefix": "portrait",
+  "name": "Mor Portre",
+  "description": "Örgüler ve gümüş kolye",
+  "colors": [
+   [
+    "ink",
+    "Saç ve çizgiler",
+    "#302536"
+   ],
+   [
+    "lips",
+    "Kiremit dudaklar",
+    "#bd624b"
+   ],
+   [
+    "purple",
+    "Mor tişört",
+    "#802bb0"
+   ],
+   [
+    "skin",
+    "Sıcak ten",
+    "#b17d86"
+   ],
+   [
+    "gold",
+    "Altın küpe",
+    "#dcba48"
+   ],
+   [
+    "silver",
+    "Beyaz ve gümüş",
+    "#e8e7ef"
+   ],
+   [
+    "red",
+    "Kırmızı fon",
+    "#de363a"
+   ],
+   [
+    "blue",
+    "Mavi fon",
+    "#3581b7"
+   ]
+  ]
+ },
+ {
+  "id": "naruto",
+  "prefix": "ninja",
+  "name": "Naruto",
+  "description": "Altın saçlı ninja",
+  "colors": [
+   [
+    "ink",
+    "Siyah çizgiler",
+    "#161d20"
+   ],
+   [
+    "hair",
+    "Altın saçlar",
+    "#d7ad2a"
+   ],
+   [
+    "silver",
+    "Gümüş alınlık",
+    "#c1c6d0"
+   ],
+   [
+    "orange",
+    "Turuncu ceket",
+    "#c47831"
+   ],
+   [
+    "eye",
+    "Mavi göz",
+    "#3963bd"
+   ],
+   [
+    "skin",
+    "Şeftali ten",
+    "#f1c6b4"
+   ],
+   [
+    "white",
+    "Beyaz detaylar",
+    "#eeeceb"
+   ],
+   [
+    "blue",
+    "Mavi fon",
+    "#416fd8"
+   ]
+  ]
+ },
+ {
+  "id": "sapkali-portre",
+  "prefix": "cap",
+  "name": "Şapkalı Portre",
+  "description": "Mor şapka ve yeşil kapüşon",
+  "colors": [
+   [
+    "ink",
+    "Siyah çizgiler",
+    "#171b20"
+   ],
+   [
+    "purple",
+    "Mor şapka",
+    "#823db8"
+   ],
+   [
+    "lips",
+    "Sıcak gülümseme",
+    "#c06b32"
+   ],
+   [
+    "green",
+    "Yeşil kapüşon",
+    "#879c40"
+   ],
+   [
+    "skin",
+    "Gül kurusu ten",
+    "#a67182"
+   ],
+   [
+    "silver",
+    "Gümüş detaylar",
+    "#cbd1d9"
+   ],
+   [
+    "white",
+    "Beyaz detaylar",
+    "#faf6eb"
+   ],
+   [
+    "blue",
+    "Mavi fon",
+    "#244bd8"
+   ],
+   [
+    "red",
+    "Kırmızı fon",
+    "#e63645"
+   ]
+  ]
+ },
+ {
+  "id": "afro-cocuk",
+  "prefix": "afro",
+  "name": "Afro Çocuk",
+  "description": "Dev saçlar, küçük bir gülümseme",
+  "colors": [
+   [
+    "ink",
+    "Afro saçlar ve çizgiler",
+    "#312735"
+   ],
+   [
+    "red",
+    "Kırmızı tişört",
+    "#f33b46"
+   ],
+   [
+    "yellow",
+    "Sarı şort",
+    "#f3d837"
+   ],
+   [
+    "white",
+    "Beyaz çoraplar",
+    "#f5f3e9"
+   ],
+   [
+    "skin",
+    "Sıcak ten",
+    "#c17a4c"
+   ],
+   [
+    "blue",
+    "Mavi ayakkabılar",
+    "#334fc6"
+   ],
+   [
+    "green",
+    "Yeşil fon",
+    "#43d363"
+   ],
+   [
+    "pink",
+    "Pembe fon",
+    "#ef36ac"
+   ]
+  ]
+ }
 ]

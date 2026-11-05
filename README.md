@@ -1,6 +1,6 @@
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=16&mod=basili)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=17&mod=basili)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
@@ -40,11 +40,11 @@ Merkezdeki sim artık uzun fırça hareketinde daha iyi taşınır. Yüksek kala
 
 Hissiyat / Bölümler / Görüntü & FPS sekmeleri bulunur. Görüntü ve hissiyat ayarları oyunu sıfırlamaz ve tarayıcıda saklanır. İlerleme sayfa yenilenince sıfırlanır. CPU ölçümleri GPU süresi değildir. Telefonda gölgeleri kapatmak ve çözünürlüğü azaltmak yükü düşürür.
 
-## Dört açık bölüm
+## Altı açık bölüm
 
-**Gotham (Batman & Joker)**: 11 renk. **Barcelona**: 7 renk. **Mor Portre** ve **Naruto**: 8’er renk. ⚙ → Bölümler ekranından seçilir. Ay Bahçesi, Çilekli Kedi, Boba Molası ve Kurbağa Pastanesi kapalıdır; eski bağlantıları Gotham’a yönelir. Kaynakları yeniden açılabilmeleri için korunur.
+**Gotham (Batman & Joker)**: 11 renk. **Barcelona**: 7 renk. **Mor Portre** ve **Naruto**: 8’er renk. **Şapkalı Portre**: 9 renk. **Afro Çocuk**: 8 renk. ⚙ → Bölümler ekranından seçilir. Ay Bahçesi, Çilekli Kedi, Boba Molası ve Kurbağa Pastanesi kapalıdır; eski bağlantıları Gotham’a yönelir. Kaynakları yeniden açılabilmeleri için korunur.
 
-Tüm açık bölümler basılı tutma, fırça ve eğim modlarında bulunur. [Referans video kaynakları ve doğrulama](docs/v14-reference-levels.md).
+Tüm açık bölümler basılı tutma, fırça ve eğim modlarında bulunur. [İlk üç referans bölüm](docs/v14-reference-levels.md). [Şapkalı Portre ve Afro Çocuk kaynakları](docs/v17-two-reference-levels.md).
 
 ## Eser tamamlanınca
 

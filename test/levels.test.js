@@ -13,7 +13,7 @@ test('new garden level covers the entire card with eight disjoint, playable colo
  assert.ok(seen.every(n=>n===1));
 });
 test('level selection and resume remain separate; unknown levels safely open Gotham',()=>{
- assert.deepEqual(levels.map(level=>level.id),['gotham','barcelona','mor-portre','naruto']);for(const id of ['ay-bahcesi','cilekli-kedi','boba-molasi','kurbaga-pastanesi'])assert.equal(selectLevel('?bolum='+id+'&devam=6').id,'gotham');assert.equal(selectLevel('?bolum=naruto&devam=6').id,'naruto');assert.equal(selectLevel('?devam=6').id,'gotham');assert.equal(selectLevel('?bolum=unknown').id,'gotham');
+ assert.deepEqual(levels.map(level=>level.id),['gotham','barcelona','mor-portre','naruto','sapkali-portre','afro-cocuk']);for(const id of ['ay-bahcesi','cilekli-kedi','boba-molasi','kurbaga-pastanesi'])assert.equal(selectLevel('?bolum='+id+'&devam=6').id,'gotham');assert.equal(selectLevel('?bolum=naruto&devam=6').id,'naruto');assert.equal(selectLevel('?devam=6').id,'gotham');assert.equal(selectLevel('?bolum=unknown').id,'gotham');
 });
 
 test('all three sweet illustrations exactly partition a complete card and have playable peel pieces',()=>{
@@ -21,8 +21,8 @@ test('all three sweet illustrations exactly partition a complete card and have p
 });
 
 
-test('the three video reference levels have their own palettes, full-card masks and valid supply anchors',()=>{
- const expected=[['barcelona',7],['mor-portre',8],['naruto',8]];
+test('all video reference levels have their own palettes, full-card masks and valid supply anchors',()=>{
+ const expected=[['barcelona',7],['mor-portre',8],['naruto',8],['sapkali-portre',9],['afro-cocuk',8]];
  for(const [id,count] of expected){const level=selectLevel('?bolum='+id);assert.equal(level.id,id);assert.equal(level.stages.length,count);const seen=new Uint8Array(480000);const unique=new Set();
   for(const stage of level.stages){assert.ok(!unique.has(stage.id));unique.add(stage.id);const image=PNG.sync.read(readFileSync(new URL(`../assets/${stage.id}.png`,import.meta.url)));assert.equal(image.width,600);assert.equal(image.height,800);let area=0;
    for(let i=0;i<seen.length;i++)if(image.data[i*4+3]>80){seen[i]++;area++;}assert.equal(area,stage.area);assert.ok(area>0);assert.ok(image.data[(stage.pour.y*600+stage.pour.x)*4+3]>80);assert.ok(piecesByStage[stage.id].length);

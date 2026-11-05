@@ -10,6 +10,6 @@ export const levelCatalog=[
  {id:'kurbaga-pastanesi',name:'Kurbağa Pastanesi',subtitle:'Bir kurbağa, bol krema · 8 renk',lines:'frog-lines',preview:'frog-preview',stages:sweetStages.frog},
  ...referenceLevels
 ];
-const enabledIds=new Set(['gotham','barcelona','naruto','mor-portre']);
+const enabledIds=new Set(['gotham','barcelona','naruto','mor-portre','sapkali-portre','afro-cocuk']);
 export const levels=levelCatalog.filter(level=>enabledIds.has(level.id));
 export function selectLevel(search){const id=new URLSearchParams(search).get('bolum');return levels.find(l=>l.id===id)||levels[0]}

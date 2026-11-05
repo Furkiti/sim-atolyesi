@@ -256,5 +256,193 @@ export const referenceLevels=[
         "area": 219499
       }
     ]
+  },
+  {
+    "id": "sapkali-portre",
+    "name": "Şapkalı Portre",
+    "subtitle": "Mor şapka ve yeşil kapüşon · 9 renk",
+    "lines": "cap-lines",
+    "preview": "cap-preview",
+    "stages": [
+      {
+        "id": "cap-ink",
+        "name": "Siyah çizgiler",
+        "color": "#171b20",
+        "pour": {
+          "x": 309,
+          "y": 394
+        },
+        "area": 52500
+      },
+      {
+        "id": "cap-purple",
+        "name": "Mor şapka",
+        "color": "#823db8",
+        "pour": {
+          "x": 325,
+          "y": 198
+        },
+        "area": 23935
+      },
+      {
+        "id": "cap-lips",
+        "name": "Sıcak gülümseme",
+        "color": "#c06b32",
+        "pour": {
+          "x": 295,
+          "y": 461
+        },
+        "area": 936
+      },
+      {
+        "id": "cap-green",
+        "name": "Yeşil kapüşon",
+        "color": "#879c40",
+        "pour": {
+          "x": 113,
+          "y": 534
+        },
+        "area": 69413
+      },
+      {
+        "id": "cap-skin",
+        "name": "Gül kurusu ten",
+        "color": "#a67182",
+        "pour": {
+          "x": 334,
+          "y": 348
+        },
+        "area": 50049
+      },
+      {
+        "id": "cap-silver",
+        "name": "Gümüş detaylar",
+        "color": "#cbd1d9",
+        "pour": {
+          "x": 326,
+          "y": 575
+        },
+        "area": 3035
+      },
+      {
+        "id": "cap-white",
+        "name": "Beyaz detaylar",
+        "color": "#faf6eb",
+        "pour": {
+          "x": 288,
+          "y": 419
+        },
+        "area": 1205
+      },
+      {
+        "id": "cap-blue",
+        "name": "Mavi fon",
+        "color": "#244bd8",
+        "pour": {
+          "x": 488,
+          "y": 104
+        },
+        "area": 126127
+      },
+      {
+        "id": "cap-red",
+        "name": "Kırmızı fon",
+        "color": "#e63645",
+        "pour": {
+          "x": 149,
+          "y": 111
+        },
+        "area": 152800
+      }
+    ]
+  },
+  {
+    "id": "afro-cocuk",
+    "name": "Afro Çocuk",
+    "subtitle": "Dev saçlar, küçük bir gülümseme · 8 renk",
+    "lines": "afro-lines",
+    "preview": "afro-preview",
+    "stages": [
+      {
+        "id": "afro-ink",
+        "name": "Afro saçlar ve çizgiler",
+        "color": "#312735",
+        "pour": {
+          "x": 300,
+          "y": 348
+        },
+        "area": 182071
+      },
+      {
+        "id": "afro-red",
+        "name": "Kırmızı tişört",
+        "color": "#f33b46",
+        "pour": {
+          "x": 229,
+          "y": 543
+        },
+        "area": 1199
+      },
+      {
+        "id": "afro-yellow",
+        "name": "Sarı şort",
+        "color": "#f3d837",
+        "pour": {
+          "x": 191,
+          "y": 584
+        },
+        "area": 1160
+      },
+      {
+        "id": "afro-white",
+        "name": "Beyaz çoraplar",
+        "color": "#f5f3e9",
+        "pour": {
+          "x": 243,
+          "y": 596
+        },
+        "area": 295
+      },
+      {
+        "id": "afro-skin",
+        "name": "Sıcak ten",
+        "color": "#c17a4c",
+        "pour": {
+          "x": 248,
+          "y": 506
+        },
+        "area": 15093
+      },
+      {
+        "id": "afro-blue",
+        "name": "Mavi ayakkabılar",
+        "color": "#334fc6",
+        "pour": {
+          "x": 146,
+          "y": 600
+        },
+        "area": 1196
+      },
+      {
+        "id": "afro-green",
+        "name": "Yeşil fon",
+        "color": "#43d363",
+        "pour": {
+          "x": 449,
+          "y": 131
+        },
+        "area": 142058
+      },
+      {
+        "id": "afro-pink",
+        "name": "Pembe fon",
+        "color": "#ef36ac",
+        "pour": {
+          "x": 149,
+          "y": 124
+        },
+        "area": 136928
+      }
+    ]
   }
 ];
