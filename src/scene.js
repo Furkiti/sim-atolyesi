@@ -104,7 +104,7 @@ export class AtelierScene {
   const capacity=Math.min(MAX_RENDER_GRAINS,Math.max(required,previous.instanceMatrix.count*2)),parent=previous.parent,replacement=this.makeGrains(capacity);
   replacement.material=previous.material;replacement.count=previous.count;replacement.visible=previous.visible;replacement.castShadow=previous.castShadow;replacement.receiveShadow=previous.receiveShadow;
   replacement.instanceMatrix.array.set(previous.instanceMatrix.array);replacement.instanceColor.array.set(previous.instanceColor.array);replacement.geometry.attributes.flakeSeed.array.set(previous.geometry.attributes.flakeSeed.array);
-  replacement.instanceMatrix.needsUpdate=true;replacement.instanceColor.needsUpdate=true;replacement.geometry.attributes.flakeSeed.needsUpdate=true;parent.add(replacement);parent.remove(previous);previous.dispose();previous.geometry.dispose();this[name]=replacement;return replacement;
+  replacement.instanceMatrix.needsUpdate=true;replacement.instanceColor.needsUpdate=true;replacement.geometry.attributes.flakeSeed.needsUpdate=true;if(name==='collected'){const flags=new Uint8Array(capacity);flags.set(this.collectedDust);this.collectedDust=flags;}parent.add(replacement);parent.remove(previous);previous.dispose();previous.geometry.dispose();this[name]=replacement;return replacement;
  }
  makeBrush(){
   this.brush=new T.Group();this.brush.visible=false;this.paperGroup.add(this.brush);this.brushVariants={};this.brushAngle=.65;
@@ -147,7 +147,7 @@ export class AtelierScene {
   const mat=new T.MeshStandardMaterial({color:'#b8c0c1',roughness:.2,metalness:.95});for(let side of [-1,1]){const arm=new T.Mesh(new T.BoxGeometry(4,130,4),mat);arm.position.set(side*5,-60,25);arm.rotation.z=side*.075;arm.rotation.x=.16;arm.castShadow=true;this.tweezers.add(arm)}
  }
  makeCollector(){
-  this.boxGroup=new T.Group();this.boxGroup.position.set(0,TRAY.centerY,0);this.boxGroup.visible=false;this.scene.add(this.boxGroup);this.boxMotion=0;this.collectorBox={...TRAY};this.collectedCount=0;this.trayBins=new Uint16Array(28*22);
+  this.boxGroup=new T.Group();this.boxGroup.position.set(0,TRAY.centerY,0);this.boxGroup.visible=false;this.scene.add(this.boxGroup);this.boxMotion=0;this.collectorBox={...TRAY};this.collectedCount=0;this.collectedDust=new Uint8Array(48000);this.trayBins=new Uint16Array(28*22);
   const shell=new T.MeshStandardMaterial({color:'#c6cdbf',roughness:.42,metalness:.25}),dark=new T.MeshStandardMaterial({color:'#343e35',roughness:.8});
   const bottom=new T.Mesh(new T.BoxGeometry(240,192,8),shell);bottom.castShadow=true;this.boxGroup.add(bottom);
   const floor=new T.Mesh(new T.PlaneGeometry(224,176),dark);floor.position.z=4.1;this.boxGroup.add(floor);
@@ -173,7 +173,7 @@ export class AtelierScene {
  makeHint(){const map=canvasTexture((c,s)=>{c.strokeStyle='#ffffee';c.lineWidth=5;c.beginPath();c.arc(s/2,s/2,48,0,TAU);c.stroke();c.fillStyle='#fffef0';c.beginPath();c.arc(s/2,s/2,7,0,TAU);c.fill()},256);const sp=new T.Sprite(new T.SpriteMaterial({map,transparent:true,depthTest:false}));sp.scale.set(90,90,1);return sp}
  applySettings(settings){
   const old=this.settings,ratioOfGrains=grainScale(settings)/grainScale(old);this.settings={...settings};
-  if(this.collectedCount&&ratioOfGrains!==1){const matrices=this.collected.instanceMatrix.array;for(let i=0;i<this.collectedCount;i++)for(const axis of [0,1,2,4,5,6,8,9,10])matrices[i*16+axis]*=ratioOfGrains;this.collected.instanceMatrix.needsUpdate=true;}
+  if(this.collectedCount&&ratioOfGrains!==1){const matrices=this.collected.instanceMatrix.array;for(let i=0;i<this.collectedCount;i++)if(!this.collectedDust[i])for(const axis of [0,1,2,4,5,6,8,9,10])matrices[i*16+axis]*=ratioOfGrains;this.collected.instanceMatrix.needsUpdate=true;}
   const ratio=Math.max(.5,Math.min(2.75,this.baseDpr*settings.renderScale));this.renderer.setPixelRatio(ratio);
   const shadowSize={off:0,low:512,medium:1024,high:1536}[settings.shadow];
   this.renderer.shadowMap.enabled=shadowSize>0;this.key.castShadow=shadowSize>0;
@@ -236,7 +236,7 @@ export class AtelierScene {
   const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,seeds=this.current.geometry.attributes.flakeSeed,color=new T.Color(this.colors[this.activeColor]);let out=0;
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
-   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*grainScale(this.settings)*(sand.granular?.86:1);
+   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*(sand.dust?.[i]?.9:grainScale(this.settings))*(sand.granular?.86:1);
    let px=sand.x[i]-300,py=400-sand.y[i],pz=3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]);
    if(this.bend||this.pitch){const point=bentPoint(px,py,pz,this.bend,this.pitch);px=point.x;py=point.y;pz=point.z;}
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
@@ -294,7 +294,7 @@ export class AtelierScene {
    const tangent=exit?exitVelocity(exit,sand.vx[i],sand.vy[i],this.draining):{vx:sand.vx[i],vy:sand.vy[i]};
    const speed=surfaceVelocity(x-300,tangent.vx,tangent.vy,this.bend,this.pitch);speed.z+=Math.min(-15,sand.vz[i]);
    const velocity=new T.Vector3(speed.x,speed.y,speed.z).applyQuaternion(this.paperGroup.quaternion);
-   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],edge:exit?.edge,color});sand.state[i]=LOST;sand.lost++;
+   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],dust:!!sand.dust?.[i],edge:exit?.edge,color});sand.state[i]=LOST;sand.lost++;
   }
  }
  beginCleanup(){this.draining=true;this.collectedCount=0;this.collected.count=0;this.trayBins.fill(0);}
@@ -314,8 +314,8 @@ export class AtelierScene {
   for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=col+dx,y=row+dy;if(x<0||x>=28||y<0||y>=22)continue;const k=y*28+x,cost=this.trayBins[k]*.32+Math.hypot(dx,dy)*1.3;if(cost<score){chosen=k;score=cost;}}
   const lowest=this.trayBins[chosen];
   const x=(chosen%28+.2+(p.seed*31%1)*.6)/28*TRAY.halfWidth*2-TRAY.halfWidth,y=(Math.floor(chosen/28)+.2+(p.seed*47%1)*.6)/22*TRAY.halfDepth*2-TRAY.halfDepth;
-  const object=this.spillObject;object.position.set(x,y,TRAY.bottom+Math.min(42,lowest*.32));object.rotation.set(.05,.03,p.seed*79);const size=grainScale(this.settings);object.scale.set(2.1*size,2.1*size,.65*size);object.updateMatrix();
-  const i=this.collectedCount++;this.collected.setMatrixAt(i,object.matrix);this.collected.setColorAt(i,p.color);this.collected.geometry.attributes.flakeSeed.setX(i,p.seed);this.trayBins[chosen]++;
+  const object=this.spillObject;object.position.set(x,y,TRAY.bottom+Math.min(42,lowest*.32));object.rotation.set(.05,.03,p.seed*79);const size=p.dust?.9:grainScale(this.settings);object.scale.set(2.1*size,2.1*size,.65*size);object.updateMatrix();
+  const i=this.collectedCount++;this.collectedDust[i]=p.dust?1:0;this.collected.setMatrixAt(i,object.matrix);this.collected.setColorAt(i,p.color);this.collected.geometry.attributes.flakeSeed.setX(i,p.seed);this.trayBins[chosen]++;
  }
  updateSpill(dt){
   if(this.spills.length>this.spill.instanceMatrix.count)this.ensureGrainCapacity('spill',this.spills.length);
@@ -325,7 +325,7 @@ export class AtelierScene {
    if(caught){this.catchGrain(p);continue;}
    projected.set(p.x,p.y,p.z).project(this.camera);
    if(projected.y > 1.3 || projected.y < -1.15 || Math.abs(projected.x)>1.3 || projected.z>1)continue;
-   object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar((1.8+p.seed)*grainScale(this.settings));object.updateMatrix();
+   object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar((1.8+p.seed)*(p.dust?.9:grainScale(this.settings)));object.updateMatrix();
    this.spill.setMatrixAt(out,object.matrix);this.spill.setColorAt(out,p.color);this.spills[out++]=p;
   }
   this.spills.length=out;this.spill.count=out;this.spill.instanceMatrix.needsUpdate=true;this.spill.instanceColor.needsUpdate=true;

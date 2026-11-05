@@ -1,12 +1,11 @@
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS} from './sand.js';
 export const HOLD_MAX_CAPACITY=112000;
 export function holdLooseCount(settings={}){return Math.round(10500*(settings.holdDensity??settings.pourAmount??1));}
-const REST_POCKETS=[{x:105,y:205,rx:38,ry:21},{x:470,y:340,rx:34,ry:20},{x:265,y:515,rx:46,ry:24},{x:425,y:675,rx:32,ry:18}];
 // Directed material choreography for the hold interaction. Each coating cell
 // consumes an actual packet that travels from the top reservoir to that cell.
 export class HoldCascade {
  constructor(sand,settings={}){
-  this.rows=settings.holdRows===2?2:1;sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+holdLooseCount(settings))));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.retainedIndices=[];
+  this.rows=settings.holdRows===2?2:1;sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+holdLooseCount(settings))));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.retainedIndices=[];this.dustAssigned=0;this.dustChance=Math.min(.055,650/holdLooseCount(settings));
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
@@ -32,8 +31,10 @@ export class HoldCascade {
   const {desired}=this.pourState(progress),s=this.sand;
   while(this.emitted<desired){const route=this.routes[this.emitted++],i=s.count;if(!s.emit(route.x,22+72*route.row,1,{spread:0,height,fan:0}))break;
    const seed=s.seed[i];route.i=i;const top=72*route.row;route.startY=route.target?Math.max(top+.02,Math.min(route.y-.2,top+2+seed*27)):top+2+seed*28;
-   if(!route.target&&seed*173%1<.65){const pocket=REST_POCKETS.find(p=>Math.abs(route.x-p.x)<p.rx);
-    if(pocket){const nx=(route.x-pocket.x)/pocket.rx,ny=(seed*137%1-.5)*2*Math.sqrt(Math.max(0,1-nx*nx));route.rest={x:route.x,y:pocket.y+ny*pocket.ry,z:3+(1-nx*nx-ny*ny)*13*(.25+seed*.75)};}
+   // A small fine fraction stops independently along its real travel path.
+   // Fresh random samples per pour replace the old fixed mound destinations.
+   if(!route.target&&this.dustAssigned<750&&s.random()<this.dustChance){
+    const yMin=top+48;route.rest={x:route.x,y:yMin+s.random()*(H-42-yMin),z:2+s.random()*.5};s.dust[i]=1;this.dustAssigned++;
    }
    route.delay=(seed*97%1)*1.1;route.speed=105+(seed*197%1)*43;route.distance=0;
    s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.byParticle.set(i,route);
@@ -46,7 +47,7 @@ export class HoldCascade {
    const i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST)continue;
    if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+(s.seed[i]*127%1)*25*this.depth/1.25;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;}continue;}
    s.previousX[i]=s.x[i];s.previousY[i]=s.y[i];s.vx[i]=s.vy[i]=0;if(!held)continue;
-   if(route.parked){s.z[i]+=(route.rest.z*this.depth/1.25-s.z[i])*Math.min(1,dt*14);continue;}
+   if(route.parked){s.z[i]+=(route.rest.z-s.z[i])*Math.min(1,dt*14);continue;}
    if(route.landing!==undefined){
     route.landing+=dt;const progress=Math.min(1,route.landing/.18),ease=progress*progress*(3-2*progress);
     s.z[i]=route.contactZ+(2.2-route.contactZ)*ease;s.roll[i]+=dt*2;

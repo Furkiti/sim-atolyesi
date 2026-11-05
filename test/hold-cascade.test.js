@@ -12,7 +12,7 @@ test('the full finite supply forms a horizontal top strip, never paints before h
 test('every colour in all five levels fills completely from travelling packets, including one-pixel mask edges',()=>{
  for(const level of levels)for(const stage of level.stages){
   const s=new Sand({random:rng()}),m=mask(stage.id);s.setMask(m);const c=new HoldCascade(s,{...DEFAULTS,pourAmount:.75});c.pour(1,0);for(let f=0;f<30;f++)c.step(1/30,false);const emitted=s.emitted;
-  for(let f=0;f<330;f++){c.step(1/30,true);leave(s);}assert.equal(s.coverage,1,stage.id);const st=s.stats();assert.equal(st.air+st.free+st.bound+st.lost,emitted,stage.id);assert.equal(s.emitted,emitted);assert.equal(st.free,c.retainedCount,stage.id);assert.ok(c.retainedCount>1800,stage.id);
+  for(let f=0;f<330;f++){c.step(1/30,true);leave(s);}assert.equal(s.coverage,1,stage.id);const st=s.stats();assert.equal(st.air+st.free+st.bound+st.lost,emitted,stage.id);assert.equal(s.emitted,emitted);assert.equal(st.free,c.retainedCount,stage.id);assert.ok(c.retainedCount>150&&c.retainedCount<=750,stage.id);
   for(let i=0;i<s.count;i++)if(s.state[i]===BOUND){assert.equal(s.onGlue(s.x[i],s.y[i]),true);assert.equal(s.pressed[i],0);}
  }
 });
@@ -25,9 +25,9 @@ test('directed flow stays stable at 30 and 60 FPS and the paper bends only while
 });
 
 
-test('loose pockets stay on the sheet indefinitely, then the normal end fold drains them without changing the coat',()=>{
+test('fine scattered dust stays on the sheet, then the normal end fold drains it without changing the coat',()=>{
  const s=new Sand({random:rng()});s.setMask(mask('berry-pink'));const c=new HoldCascade(s,DEFAULTS);c.pour(1,0);for(let f=0;f<30;f++)c.step(1/30,false);for(let f=0;f<330;f++){c.step(1/30,true);leave(s);}
- assert.equal(s.coverage,1);assert.ok(c.retainedCount>2500);const positions=c.retainedIndices.map(i=>[s.x[i],s.y[i],s.z[i]]),count=s.emitted;
+ assert.equal(s.coverage,1);assert.ok(c.retainedCount>150&&c.retainedCount<=750);const positions=c.retainedIndices.map(i=>[s.x[i],s.y[i],s.z[i]]),count=s.emitted;
  for(let f=0;f<90;f++){c.step(1/30,true);leave(s);}assert.deepEqual(c.retainedIndices.map(i=>[s.x[i],s.y[i],s.z[i]]),positions);
  for(let f=0;f<480;f++){s.step(1/60,{shaking:true,bend:Math.min(1,f/40),tilt:.58*Math.min(1,Math.max(0,(f-40)/40))});leave(s);}
  assert.equal(s.hasLoose(),false);assert.equal(c.retainedCount,0);assert.equal(s.coverage,1);const stats=s.stats();assert.equal(stats.bound+stats.lost,count);
@@ -54,9 +54,17 @@ test('two rows are poured as separate horizontal passes, without emitting during
 
 test('maximum density with two rows still covers the entire paper and conserves over 100000 packets',()=>{
  const s=new Sand({random:rng()}),mask=new Uint8Array(480000).fill(1);s.setMask(mask);const c=new HoldCascade(s,{...DEFAULTS,holdRows:2,holdDensity:8});assert.equal(c.routes.length,103200);assert.ok(s.capacity>=103200);c.pour(1,0);for(let f=0;f<30;f++)c.step(1/30,false);
- for(let f=0;f<330;f++){c.step(1/30,true);leave(s);}assert.equal(s.coverage,1);assert.equal(s.stats().free,c.retainedCount);assert.ok(c.retainedCount>18000);const st=s.stats();assert.equal(st.air+st.free+st.bound+st.lost,s.emitted);assert.equal(s.emitted,103200);
+ for(let f=0;f<330;f++){c.step(1/30,true);leave(s);}assert.equal(s.coverage,1);assert.equal(s.stats().free,c.retainedCount);assert.ok(c.retainedCount>300&&c.retainedCount<=750);const st=s.stats();assert.equal(st.air+st.free+st.bound+st.lost,s.emitted);assert.equal(s.emitted,103200);
 });
 
 test('growing particle storage preserves its finite material, mask and contact state',()=>{
- const s=new Sand({capacity:2,random:rng()});s.emit(100,100,2,{spread:0,height:0});s.state[0]=FREE;s.z[0]=3;s.pressed[0]=1;s.roll[1]=7;s.previousY[1]=97;s.reserve(10);assert.equal(s.capacity,10);assert.equal(s.count,2);assert.equal(s.emitted,2);assert.equal(s.state[0],FREE);assert.equal(s.pressed[0],1);assert.equal(s.roll[1],7);assert.equal(s.previousY[1],97);s.emit(200,200,8);assert.equal(s.emitted,10);assert.equal(s.count,10);
+ const s=new Sand({capacity:2,random:rng()});s.emit(100,100,2,{spread:0,height:0});s.state[0]=FREE;s.z[0]=3;s.pressed[0]=1;s.dust[0]=1;s.roll[1]=7;s.previousY[1]=97;s.reserve(10);assert.equal(s.capacity,10);assert.equal(s.count,2);assert.equal(s.emitted,2);assert.equal(s.state[0],FREE);assert.equal(s.pressed[0],1);assert.equal(s.dust[0],1);assert.equal(s.roll[1],7);assert.equal(s.previousY[1],97);s.emit(200,200,8);assert.equal(s.emitted,10);assert.equal(s.count,10);
+});
+
+
+test('residue changes each pour and spreads across the paper instead of forming fixed heaps',()=>{
+ const random=rng(),sample=()=>{const s=new Sand({random});const c=new HoldCascade(s,DEFAULTS);c.pour(1,0);return c.routes.filter(r=>r.rest).map(r=>r.rest);};
+ const first=sample(),second=sample();assert.notDeepEqual(first,second);assert.ok(first.length>150&&first.length<=750);const bins=new Map();
+ for(const p of first){const key=Math.floor(p.x/20)+':'+Math.floor(p.y/20);bins.set(key,(bins.get(key)||0)+1);assert.ok(p.z>=2&&p.z<=2.5);}
+ assert.ok(Math.max(...first.map(p=>p.x))-Math.min(...first.map(p=>p.x))>550);assert.ok(Math.max(...first.map(p=>p.y))-Math.min(...first.map(p=>p.y))>600);assert.ok(Math.max(...bins.values())<=7);assert.ok(bins.size>first.length*.65);
 });

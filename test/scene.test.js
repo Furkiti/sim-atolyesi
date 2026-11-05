@@ -56,3 +56,9 @@ test('hold piece size scales live grain geometry fourfold without changing its p
 test('growing an instanced grain pool retains its material, transforms, colors and parent',()=>{
  const scene={paperGroup:new T.Group(),grainMaterial:new T.MeshBasicMaterial(),makeGrains:AtelierScene.prototype.makeGrains};scene.current=scene.makeGrains(2);scene.current.count=1;scene.current.setMatrixAt(0,new T.Matrix4().makeTranslation(12,34,56));scene.current.setColorAt(0,new T.Color('#990033'));const old=scene.current,material=old.material,color=old.instanceColor.array.slice();AtelierScene.prototype.ensureGrainCapacity.call(scene,'current',6);assert.equal(scene.current.instanceMatrix.count,6);assert.equal(scene.current.count,1);assert.equal(scene.current.material,material);assert.equal(scene.current.parent,scene.paperGroup);assert.equal(old.parent,null);assert.equal(scene.current.instanceMatrix.array[12],12);assert.deepEqual(scene.current.instanceColor.array.slice(0,3),color.slice(0,3));
 });
+
+
+test('fine residue keeps its small size even when the main glitter size is set to four times normal',()=>{
+ const geometry=new T.BufferGeometry();geometry.setAttribute('flakeSeed',new T.InstancedBufferAttribute(new Float32Array(1),1));const current=new T.InstancedMesh(geometry,new T.MeshBasicMaterial(),1);current.instanceColor=new T.InstancedBufferAttribute(new Float32Array(3),3);
+ const scene={current,colors:['#006633'],activeColor:0,bend:0,settings:{controlMode:'hold',holdGrainSize:1}},s=new Sand({capacity:1});s.emit(150,200,1);s.state[0]=FREE;s.dust[0]=1;AtelierScene.prototype.updateGrains.call(scene,s);const before=current.instanceMatrix.array.slice();scene.settings.holdGrainSize=4;AtelierScene.prototype.updateGrains.call(scene,s);assert.deepEqual(current.instanceMatrix.array,before);
+});
