@@ -40,7 +40,7 @@ test('brush mode still requires brushing, even with the same phone-like forces',
  const s=new Sand({random:rng()});s.setMask(maskRect(260,360,340,440));s.emit(220,400,900,{spread:12,height:0});s.state.fill(FREE);s.z.fill(2);for(let i=0;i<240;i++)s.step(1/60,{tiltX:.45,contactAdhesion:false});assert.equal(s.coverage,0);assert.equal(s.stats().bound,0);
 });
 test('contact adhesion never attracts material from neighbouring pixels or floating above the paper',()=>{
- const s=new Sand();s.setMask(maskRect(100,100,105,105));s.emit(99.5,102,1,{spread:0,height:0});s.state[0]=FREE;s.z[0]=2;assert.equal(s.bind(0,true),false);for(let i=0;i<90;i++)s.step(1/60,{contactAdhesion:true});assert.equal(s.coverage,0);
+ const s=new Sand();s.setMask(maskRect(100,100,105,105));s.emit(99.5,102,1,{spread:0,height:0});s.state[0]=FREE;s.z[0]=2;s.vx[0]=s.vy[0]=s.vz[0]=0;assert.equal(s.bind(0,true),false);for(let i=0;i<90;i++)s.step(1/60,{contactAdhesion:true});assert.equal(s.coverage,0);
  s.x[0]=102;s.z[0]=20;assert.equal(s.bind(0,true),false);s.state[0]=AIR;s.z[0]=2;assert.equal(s.bind(0,true),false);s.state[0]=FREE;assert.equal(s.bind(0,true),true);
 });
 test('a fast-moving surface grain cannot tunnel through a one-pixel adhesive strip',()=>{
