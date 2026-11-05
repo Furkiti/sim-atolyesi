@@ -17,7 +17,9 @@ Altı bölüm açıktır: Gotham, Barcelona, Mor Portre, Naruto, Şapkalı Portr
 
 ## Doğrulama
 
-- `npm run build` ve `npm test`.
+- `npm run build` başarılı; `npm test`: 105 test başarılı.
 - Her yeni maske 600×800; renkler kâğıdı boşluksuz ve çakışmasız kaplar. Alan, döküş noktası, soyma parçaları ve önizlemeler doğrulanır.
 - Basılı tutmanın en düşük sim yoğunluğunda bütün açık bölümlerin her rengi tam kaplamaya ulaşır.
 - 390×844 tarayıcı görünümünde iki yeni bölümün son rengi arayüzden oynanır; %100 kaplama, kutlama ve sonraki bölüm geçişi kontrol edilir. Fiziksel telefon testi değildir.
+
+Yerel arayüz kontrolü tamamlandı: iki bölümün son rengi %100 kaplandı ve kutlama açıldı; Şapkalı Portre → Afro Çocuk geçişi ve bölüm kartından Şapkalı Portre seçimi doğrulandı. Görsel kanıtlar Git dışında `qa/v17-cap-complete.png`, `qa/v17-afro-complete.png` ve `qa/v17-level-selector.png` dosyalarında.
