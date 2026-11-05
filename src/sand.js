@@ -18,6 +18,11 @@ export class Sand {
     this.bound=new Uint8Array(COLS*ROWS);this.target=new Uint8Array(COLS*ROWS);
     this.mask=new Uint8Array(W*H);this.targetCount=0;this.coveredWeight=0;this.lost=0;
   }
+  reserve(capacity){
+    if(capacity<=this.capacity)return;
+    for(const key of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll','pressed','state','bin']){const previous=this[key],next=new previous.constructor(capacity);next.set(previous);this[key]=next;}
+    this.capacity=capacity;
+  }
   setMask(mask) {
     this.mask.set(mask);this.target.fill(0);this.bound.fill(0);this.targetCount=0;this.coveredWeight=0;
     for(let y=0;y<H;y+=CELL)for(let x=0;x<W;x+=CELL){

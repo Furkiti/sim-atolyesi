@@ -1,24 +1,37 @@
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS} from './sand.js';
+export const HOLD_MAX_CAPACITY=112000;
+export function holdLooseCount(settings={}){return Math.round(10500*(settings.holdDensity??settings.pourAmount??1));}
 const REST_POCKETS=[{x:105,y:205,rx:38,ry:21},{x:470,y:340,rx:34,ry:20},{x:265,y:515,rx:46,ry:24},{x:425,y:675,rx:32,ry:18}];
 // Directed material choreography for the hold interaction. Each coating cell
 // consumes an actual packet that travels from the top reservoir to that cell.
 export class HoldCascade {
  constructor(sand,settings={}){
-  this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.retainedIndices=[];
+  this.rows=settings.holdRows===2?2:1;sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+holdLooseCount(settings))));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.retainedIndices=[];
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
-   if(pixel)this.routes.push({...pixel,target:true});
+   if(pixel)this.routes.push({...pixel,target:true,row:this.rows===2&&pixel.y>104?(k*37%101)%2:0});
   }
-  const loose=Math.min(18000,Math.round(10500*(settings.pourAmount||1))),available=sand.capacity-sand.count;
-  for(let j=0;j<loose&&this.routes.length<available;j++)this.routes.push({x:.5+(j+.5)/loose*(W-1),target:false});
-  this.routes.sort((a,b)=>a.x-b.x);this.routes.length=Math.min(available,this.routes.length);this.duration=4;
+  const available=sand.capacity-sand.count,loose=Math.min(holdLooseCount(settings),Math.max(0,available-this.routes.length));
+  for(let j=0;j<loose&&this.routes.length<available;j++)this.routes.push({x:.5+(Math.floor(j/this.rows)+.5)/Math.ceil(loose/this.rows)*(W-1),target:false,row:j%this.rows});
+  this.routes.sort((a,b)=>a.row-b.row||(a.row===1?b.x-a.x:a.x-b.x));this.routes.length=Math.min(available,this.routes.length);this.rowBoundary=this.routes.findIndex(r=>r.row===1);this.duration=this.rows===2?6:4;
  }
- sourcePose(progress){const route=this.routes[Math.min(this.routes.length-1,Math.floor(Math.max(0,Math.min(1,progress))*this.routes.length))];return{x:route?.x||300,y:22,flow:1,spot:0};}
+ pourState(progress){
+  const p=Math.max(0,Math.min(1,progress));let desired=Math.floor(p*this.routes.length),flow=1;
+  if(this.rows===2){
+   if(p<.5)desired=Math.floor(p*2*this.rowBoundary);
+   else if(p<.57){desired=this.rowBoundary;flow=0;}
+   else desired=this.rowBoundary+Math.floor((p-.57)/.43*(this.routes.length-this.rowBoundary));
+  }
+  desired=Math.max(0,Math.min(this.routes.length,desired));
+  const route=this.routes[Math.min(this.routes.length-1,desired)],row=this.rows===2&&p>=.5?1:0;
+  return {desired,x:route?.x||300,y:22+72*(flow?row:((p-.5)/.07)),flow,spot:row};
+ }
+ sourcePose(progress){return this.pourState(progress);}
  pour(progress,height=139){
-  const desired=Math.floor(Math.max(0,Math.min(1,progress))*this.routes.length),s=this.sand;
-  while(this.emitted<desired){const route=this.routes[this.emitted++],i=s.count;if(!s.emit(route.x,22,1,{spread:0,height,fan:0}))break;
-   const seed=s.seed[i];route.i=i;route.startY=route.target?Math.max(.02,Math.min(route.y-.2,2+seed*27)):2+seed*28;
+  const {desired}=this.pourState(progress),s=this.sand;
+  while(this.emitted<desired){const route=this.routes[this.emitted++],i=s.count;if(!s.emit(route.x,22+72*route.row,1,{spread:0,height,fan:0}))break;
+   const seed=s.seed[i];route.i=i;const top=72*route.row;route.startY=route.target?Math.max(top+.02,Math.min(route.y-.2,top+2+seed*27)):top+2+seed*28;
    if(!route.target&&seed*173%1<.65){const pocket=REST_POCKETS.find(p=>Math.abs(route.x-p.x)<p.rx);
     if(pocket){const nx=(route.x-pocket.x)/pocket.rx,ny=(seed*137%1-.5)*2*Math.sqrt(Math.max(0,1-nx*nx));route.rest={x:route.x,y:pocket.y+ny*pocket.ry,z:3+(1-nx*nx-ny*ny)*13*(.25+seed*.75)};}
    }

@@ -39,3 +39,24 @@ test('a target packet settles at the contact point before binding, and release f
  for(let f=0;f<60;f++)c.step(1/60,false);assert.equal(s.coverage,0);assert.equal(s.z[target.i],z);
  for(let f=0;f<20;f++)c.step(1/60,true);assert.equal(s.coverage,1);assert.equal(s.state[target.i],BOUND);assert.ok(s.z[target.i]<3);
 });
+
+
+test('hold density, piece size and row settings persist independently with useful upper bounds',()=>{
+ const settings=normalizeSettings({controlMode:'hold',holdDensity:100,holdGrainSize:20,holdRows:2,grainSize:1});assert.equal(settings.holdDensity,8);assert.equal(settings.holdGrainSize,4);assert.equal(settings.holdRows,2);assert.equal(settings.grainSize,1);assert.equal(normalizeSettings({holdRows:7}).holdRows,1);
+ const roundTrip=normalizeSettings(JSON.parse(JSON.stringify(settings)));assert.deepEqual(roundTrip,settings);
+});
+
+test('two rows are poured as separate horizontal passes, without emitting during the move between them',()=>{
+ const s=new Sand({random:rng()});s.setMask(mask('berry-pink'));const c=new HoldCascade(s,{...DEFAULTS,holdRows:2,holdDensity:2});assert.equal(c.duration,6);c.pour(.5,0);const first=s.emitted;c.pour(.53,0);assert.equal(s.emitted,first);assert.equal(c.sourcePose(.53).flow,0);assert.ok(c.sourcePose(.53).y>22&&c.sourcePose(.53).y<94);c.pour(1,0);
+ for(let f=0;f<30;f++)c.step(1/30,false);assert.equal(s.coverage,0);for(const row of [0,1]){const points=c.routes.filter(r=>!r.target&&r.row===row);assert.ok(points.length>10000);assert.ok(Math.min(...points.map(r=>s.x[r.i]))<1);assert.ok(Math.max(...points.map(r=>s.x[r.i]))>599);for(const r of points)assert.ok(s.y[r.i]>=row*72&&s.y[r.i]<row*72+31);}
+ assert.equal(s.emitted,c.routes.length);
+});
+
+test('maximum density with two rows still covers the entire paper and conserves over 100000 packets',()=>{
+ const s=new Sand({random:rng()}),mask=new Uint8Array(480000).fill(1);s.setMask(mask);const c=new HoldCascade(s,{...DEFAULTS,holdRows:2,holdDensity:8});assert.equal(c.routes.length,103200);assert.ok(s.capacity>=103200);c.pour(1,0);for(let f=0;f<30;f++)c.step(1/30,false);
+ for(let f=0;f<330;f++){c.step(1/30,true);leave(s);}assert.equal(s.coverage,1);assert.equal(s.stats().free,c.retainedCount);assert.ok(c.retainedCount>18000);const st=s.stats();assert.equal(st.air+st.free+st.bound+st.lost,s.emitted);assert.equal(s.emitted,103200);
+});
+
+test('growing particle storage preserves its finite material, mask and contact state',()=>{
+ const s=new Sand({capacity:2,random:rng()});s.emit(100,100,2,{spread:0,height:0});s.state[0]=FREE;s.z[0]=3;s.pressed[0]=1;s.roll[1]=7;s.previousY[1]=97;s.reserve(10);assert.equal(s.capacity,10);assert.equal(s.count,2);assert.equal(s.emitted,2);assert.equal(s.state[0],FREE);assert.equal(s.pressed[0],1);assert.equal(s.roll[1],7);assert.equal(s.previousY[1],97);s.emit(200,200,8);assert.equal(s.emitted,10);assert.equal(s.count,10);
+});

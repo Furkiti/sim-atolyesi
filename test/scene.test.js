@@ -46,3 +46,13 @@ test('contact sheen timestamps only newly coated cells and does not relight old 
  const scene={time:1000,contactData:new Uint8Array(16),contactSeen:new Uint8Array(4),contactTexture:{needsUpdate:false}},bound=new Uint8Array([0,1,0,0]);
  AtelierScene.prototype.markContacts.call(scene,bound);assert.equal(scene.contactData[4],255);assert.equal(scene.contactData[5],60);assert.equal(scene.contactData[0],0);scene.time=5000;bound[3]=1;AtelierScene.prototype.markContacts.call(scene,bound);assert.equal(scene.contactData[5],60);assert.equal(scene.contactData[13],44);assert.equal(scene.contactData[14],1);
 });
+
+
+test('hold piece size scales live grain geometry fourfold without changing its position or count',()=>{
+ const geometry=new T.BufferGeometry();geometry.setAttribute('flakeSeed',new T.InstancedBufferAttribute(new Float32Array(1),1));const current=new T.InstancedMesh(geometry,new T.MeshBasicMaterial(),1);current.instanceColor=new T.InstancedBufferAttribute(new Float32Array(3),3);
+ const scene={current,colors:['#006633'],activeColor:0,bend:0,settings:{controlMode:'hold',holdGrainSize:1}},s=new Sand({capacity:1});s.emit(150,200,1);s.state[0]=FREE;AtelierScene.prototype.updateGrains.call(scene,s);const before=current.instanceMatrix.array.slice();scene.settings.holdGrainSize=4;AtelierScene.prototype.updateGrains.call(scene,s);assert.ok(Math.abs(current.instanceMatrix.array[0]-before[0]*4)<1e-5);assert.equal(current.instanceMatrix.array[12],before[12]);assert.equal(current.count,1);
+});
+
+test('growing an instanced grain pool retains its material, transforms, colors and parent',()=>{
+ const scene={paperGroup:new T.Group(),grainMaterial:new T.MeshBasicMaterial(),makeGrains:AtelierScene.prototype.makeGrains};scene.current=scene.makeGrains(2);scene.current.count=1;scene.current.setMatrixAt(0,new T.Matrix4().makeTranslation(12,34,56));scene.current.setColorAt(0,new T.Color('#990033'));const old=scene.current,material=old.material,color=old.instanceColor.array.slice();AtelierScene.prototype.ensureGrainCapacity.call(scene,'current',6);assert.equal(scene.current.instanceMatrix.count,6);assert.equal(scene.current.count,1);assert.equal(scene.current.material,material);assert.equal(scene.current.parent,scene.paperGroup);assert.equal(old.parent,null);assert.equal(scene.current.instanceMatrix.array[12],12);assert.deepEqual(scene.current.instanceColor.array.slice(0,3),color.slice(0,3));
+});

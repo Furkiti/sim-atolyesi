@@ -1,3 +1,5 @@
+const MAX_RENDER_GRAINS=128000;
+const grainScale=settings=>settings?.controlMode==='hold'?(settings.holdGrainSize||1):(settings?.grainSize||1);
 import {paperExit,exitVelocity} from './spill.js';
 import * as T from 'three';
 import {drainPose,bentPoint,surfaceVelocity,smooth} from './interaction.js';
@@ -97,6 +99,13 @@ export class AtelierScene {
   g.setAttribute('flakeSeed',new T.InstancedBufferAttribute(seeds,1));
   const m=new T.InstancedMesh(g,this.grainMaterial,capacity);m.instanceMatrix.setUsage(T.DynamicDrawUsage);m.instanceColor=new T.InstancedBufferAttribute(new Float32Array(capacity*3),3);m.frustumCulled=false;m.count=0;this.paperGroup.add(m);return m;
  }
+ ensureGrainCapacity(name,required){
+  const previous=this[name];if(required<=previous.instanceMatrix.count)return previous;
+  const capacity=Math.min(MAX_RENDER_GRAINS,Math.max(required,previous.instanceMatrix.count*2)),parent=previous.parent,replacement=this.makeGrains(capacity);
+  replacement.material=previous.material;replacement.count=previous.count;replacement.visible=previous.visible;replacement.castShadow=previous.castShadow;replacement.receiveShadow=previous.receiveShadow;
+  replacement.instanceMatrix.array.set(previous.instanceMatrix.array);replacement.instanceColor.array.set(previous.instanceColor.array);replacement.geometry.attributes.flakeSeed.array.set(previous.geometry.attributes.flakeSeed.array);
+  replacement.instanceMatrix.needsUpdate=true;replacement.instanceColor.needsUpdate=true;replacement.geometry.attributes.flakeSeed.needsUpdate=true;parent.add(replacement);parent.remove(previous);previous.dispose();previous.geometry.dispose();this[name]=replacement;return replacement;
+ }
  makeBrush(){
   this.brush=new T.Group();this.brush.visible=false;this.paperGroup.add(this.brush);this.brushVariants={};this.brushAngle=.65;
   const wood=new T.MeshStandardMaterial({color:'#263538',roughness:.33,metalness:.12}),metal=new T.MeshStandardMaterial({color:'#bfc4be',metalness:.85,roughness:.25});
@@ -163,7 +172,8 @@ export class AtelierScene {
  }
  makeHint(){const map=canvasTexture((c,s)=>{c.strokeStyle='#ffffee';c.lineWidth=5;c.beginPath();c.arc(s/2,s/2,48,0,TAU);c.stroke();c.fillStyle='#fffef0';c.beginPath();c.arc(s/2,s/2,7,0,TAU);c.fill()},256);const sp=new T.Sprite(new T.SpriteMaterial({map,transparent:true,depthTest:false}));sp.scale.set(90,90,1);return sp}
  applySettings(settings){
-  const old=this.settings;this.settings={...settings};
+  const old=this.settings,ratioOfGrains=grainScale(settings)/grainScale(old);this.settings={...settings};
+  if(this.collectedCount&&ratioOfGrains!==1){const matrices=this.collected.instanceMatrix.array;for(let i=0;i<this.collectedCount;i++)for(const axis of [0,1,2,4,5,6,8,9,10])matrices[i*16+axis]*=ratioOfGrains;this.collected.instanceMatrix.needsUpdate=true;}
   const ratio=Math.max(.5,Math.min(2.75,this.baseDpr*settings.renderScale));this.renderer.setPixelRatio(ratio);
   const shadowSize={off:0,low:512,medium:1024,high:1536}[settings.shadow];
   this.renderer.shadowMap.enabled=shadowSize>0;this.key.castShadow=shadowSize>0;
@@ -193,7 +203,7 @@ export class AtelierScene {
  posePour(pour){
   const jar=this.jars[this.activeColor%6];if(!jar)return;
   if(!pour){jar.position.copy(jar.userData.home);jar.quaternion.copy(jar.userData.homeRotation);jar.userData.fill.scale.y=1;jar.userData.fill.position.y=4+jar.userData.profile.fill/2;return;}
-  const t=pour.elapsed,unit=t/pour.duration,travel=smooth(Math.min(1,unit/.12)),back=smooth(Math.max(0,(unit-.89)/.11)),weight=travel*(1-back);
+  const t=pour.elapsed,unit=t/pour.duration,travel=smooth(Math.min(1,pour.kind==='hold'?t/.45:unit/.12)),back=smooth(Math.max(0,pour.kind==='hold'?(t-(pour.duration-.45))/.45:(unit-.89)/.11)),weight=travel*(1-back);
   this.paperGroup.updateMatrixWorld(true);
   const profile=jar.userData.profile;
   const tilted=new T.Quaternion().setFromEuler(new T.Euler(Math.PI+.30,0,this.paperGroup.rotation.z));
@@ -222,10 +232,11 @@ export class AtelierScene {
   const c=new T.Color(color),v=.60+(seed*47%1)*.7;c.multiplyScalar(v);if(seed*127%1>.965)c.lerp(new T.Color('#c2c8da'),.65);mesh.instanceColor.array.set([c.r,c.g,c.b],i*3);
  }
  updateGrains(sand){
+  if(sand.count>this.current.instanceMatrix.count)this.ensureGrainCapacity('current',sand.count);
   const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,seeds=this.current.geometry.attributes.flakeSeed,color=new T.Color(this.colors[this.activeColor]);let out=0;
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
-   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*(this.settings?.grainSize||1)*(sand.granular?.86:1);
+   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*grainScale(this.settings)*(sand.granular?.86:1);
    let px=sand.x[i]-300,py=400-sand.y[i],pz=3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]);
    if(this.bend||this.pitch){const point=bentPoint(px,py,pz,this.bend,this.pitch);px=point.x;py=point.y;pz=point.z;}
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
@@ -271,7 +282,7 @@ export class AtelierScene {
  preserve(sand){this.collectSpill(sand);}
  collectSpill(sand,outsideOnly=false){
   this.paperGroup.updateMatrixWorld(true);const color=new T.Color(this.colors[this.activeColor]);
-  for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<48000){
+  for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<MAX_RENDER_GRAINS){
    if(outsideOnly&&(sand.state[i]!==FREE||sand.cell(sand.x[i],sand.y[i])>=0))continue;
    const outside=sand.cell(sand.x[i],sand.y[i])<0,exit=outside?paperExit(sand.previousX[i],sand.previousY[i],sand.x[i],sand.y[i]):null;
    const x=exit?exit.x:sand.x[i],y=exit?exit.y:sand.y[i];
@@ -297,23 +308,24 @@ export class AtelierScene {
   }
  }
  catchGrain(p){
-  if(this.collectedCount>=48000)return;
+  if(this.collectedCount>=MAX_RENDER_GRAINS)return;if(this.collectedCount>=this.collected.instanceMatrix.count)this.ensureGrainCapacity('collected',this.collectedCount+1);
   const col=Math.max(0,Math.min(27,Math.floor((p.x+TRAY.halfWidth)/(TRAY.halfWidth*2)*28))),row=Math.max(0,Math.min(21,Math.floor((p.y-this.collectorBox.centerY+TRAY.halfDepth)/(TRAY.halfDepth*2)*22)));
   let chosen=row*28+col,score=this.trayBins[chosen]*.32;
   for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=col+dx,y=row+dy;if(x<0||x>=28||y<0||y>=22)continue;const k=y*28+x,cost=this.trayBins[k]*.32+Math.hypot(dx,dy)*1.3;if(cost<score){chosen=k;score=cost;}}
   const lowest=this.trayBins[chosen];
   const x=(chosen%28+.2+(p.seed*31%1)*.6)/28*TRAY.halfWidth*2-TRAY.halfWidth,y=(Math.floor(chosen/28)+.2+(p.seed*47%1)*.6)/22*TRAY.halfDepth*2-TRAY.halfDepth;
-  const object=this.spillObject;object.position.set(x,y,TRAY.bottom+Math.min(42,lowest*.32));object.rotation.set(.05,.03,p.seed*79);object.scale.set(2.1,2.1,.65);object.updateMatrix();
+  const object=this.spillObject;object.position.set(x,y,TRAY.bottom+Math.min(42,lowest*.32));object.rotation.set(.05,.03,p.seed*79);const size=grainScale(this.settings);object.scale.set(2.1*size,2.1*size,.65*size);object.updateMatrix();
   const i=this.collectedCount++;this.collected.setMatrixAt(i,object.matrix);this.collected.setColorAt(i,p.color);this.collected.geometry.attributes.flakeSeed.setX(i,p.seed);this.trayBins[chosen]++;
  }
  updateSpill(dt){
+  if(this.spills.length>this.spill.instanceMatrix.count)this.ensureGrainCapacity('spill',this.spills.length);
   let out=0;const object=this.spillObject,projected=new T.Vector3();
   for(const p of this.spills){
    const caught=stepFalling(p,dt,this.boxMotion>.95?this.collectorBox:NO_BOX);
    if(caught){this.catchGrain(p);continue;}
    projected.set(p.x,p.y,p.z).project(this.camera);
    if(projected.y > 1.3 || projected.y < -1.15 || Math.abs(projected.x)>1.3 || projected.z>1)continue;
-   object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar(1.8+p.seed);object.updateMatrix();
+   object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar((1.8+p.seed)*grainScale(this.settings));object.updateMatrix();
    this.spill.setMatrixAt(out,object.matrix);this.spill.setColorAt(out,p.color);this.spills[out++]=p;
   }
   this.spills.length=out;this.spill.count=out;this.spill.instanceMatrix.needsUpdate=true;this.spill.instanceColor.needsUpdate=true;
