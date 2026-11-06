@@ -1,0 +1,48 @@
+{
+  "runtime": "v22.23.4",
+  "method": "median of 3, 67 measured frames, CPU physics + populated transforms, GPU excluded",
+  "results": [
+    {
+      "count": 12000,
+      "speed": 1,
+      "before": {
+        "meanMs": 3.0328793880596976,
+        "peakMs": 3.7232500000000073,
+        "caught": 0
+      },
+      "after": {
+        "meanMs": 1.688153074626866,
+        "peakMs": 2.364375000000109,
+        "caught": 0
+      }
+    },
+    {
+      "count": 48000,
+      "speed": 1,
+      "before": {
+        "meanMs": 11.661927208955237,
+        "peakMs": 14.727624999999989,
+        "caught": 0
+      },
+      "after": {
+        "meanMs": 5.9505958656715725,
+        "peakMs": 9.217291999999361,
+        "caught": 0
+      }
+    },
+    {
+      "count": 48000,
+      "speed": 4,
+      "before": {
+        "meanMs": 16.09230595522396,
+        "peakMs": 31.45325000000048,
+        "caught": 21903
+      },
+      "after": {
+        "meanMs": 8.78291164179104,
+        "peakMs": 16.844208000000435,
+        "caught": 21903
+      }
+    }
+  ]
+}

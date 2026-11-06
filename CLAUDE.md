@@ -4,12 +4,12 @@ Bu repo mevcut, çalışan oyundur. Devam etmeden önce **[docs/CLAUDE_HANDOFF.m
 
 ## Mevcut checkpoint
 
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=23&mod=basili&giris=direct
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=24&mod=basili&giris=direct
 - Repo: https://github.com/Furkiti/sim-atolyesi
-- Güncel geliştirme: v23 — yerel döküşler ortak üst akışla birleştirilir; yalnız ulaşılmayan parçalara ek döküş yapılır. Ayrıntı: [docs/v23-shared-local-pours.md](docs/v23-shared-local-pours.md). v22 giriş/huni/ana mod davranışları korunur.
+- Güncel geliştirme: v24 — huni CPU/çizim optimizasyonu ve üç ortak sim toplama denemesi. Ayrıntı: [docs/v24-collection-and-performance.md](docs/v24-collection-and-performance.md); [görsel deneme masası](docs/v24-collection-lab.html). v22/v23 ana mod ve yerel döküş davranışları korunur.
 - Önceki sabit nokta: `v19-handoff` Git etiketi. Bu etiket tarihsel v19 sürümüdür.
 - Kaynak proje bu klasördür; derlenmiş giriş `game.js`, asıl uygulama `src/main.js`.
-- Son doğrulama: `npm run build` başarılı, 141 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
+- Son doğrulama: `npm run build` başarılı, 147 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
 
 ## Çalıştırma
 
@@ -45,3 +45,5 @@ Görsel araştırma ve kararlar: [docs/v20-ui-references.md](docs/v20-ui-referen
 - `holdPlacement`: `sheet` klasik, `width` hedef genişliğinde üst şerit, `local` ortak üst akışın ulaşamadığı parçalar için ek şeritlerdir; her parça ayrı kaynak gerektirmez.
 - Normal döküş, kâğıttaki artık ve huni akışı seçilen boyutu izler. Yalnız isteğe bağlı son dokunuşa ayrılan en fazla 24 tane, ilk bükmeden sonra `finishDust` ile %38 boyuta iner. Son dokunuş varsayılan kapalıdır.
 - Basılı tut ana varsayılan: hedef genişliği / yoğunluk %500 / boyut %170. `holdPresetVersion:22` bir kez yeni varsayılanları taşır; sonraki kullanıcı değişikliklerini korur. Basılı soyma hızlandırması kaldırıldı; genel oyun hızı çalışır.
+
+- `recovery`: classic / trough / rills / bowl. Ortak toplama sonlu kütle hesabıdır; çizilen aktarım paketleri birkaç taneyi temsil edebilir. Her fizik adımında `updateSpill(dt,false)`, görüntü başına bir kez `syncSpills()` çalışır.

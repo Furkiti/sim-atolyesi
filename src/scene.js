@@ -1,3 +1,5 @@
+import {Recovery,startRecovery,stepRecovery,transferPacket} from './recovery.js';
+import {RecoveryVisual} from './recovery-visual.js';
 import {exitOpacity,FINISH_DUST_SCALE} from './spill-appearance.js';
 const MAX_RENDER_GRAINS=128000;
 const grainScale=settings=>settings?.controlMode==='hold'?(settings.holdGrainSize||1):(settings?.grainSize||1);
@@ -110,7 +112,7 @@ export class AtelierScene {
    shader.vertexShader=shader.vertexShader.replace('#include <worldpos_vertex>',T.ShaderChunk.worldpos_vertex.replace('worldPosition = instanceMatrix * worldPosition;','worldPosition = instanceMatrix * worldPosition; worldPosition.xyz += surfaceOffset(instanceMatrix[3].xyz);'));
   };
   this.savedCount=0;this.currentInitialized=0;
-  this.spill=this.makeGrains(48000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=true;this.spill.material.depthWrite=false;this.spill.material.transparent=true;
+  this.spill=this.makeGrains(48000);this.paperGroup.remove(this.spill);this.scene.add(this.spill);this.spill.material=this.grainMaterial.clone();this.spill.material.depthTest=true;this.spill.material.depthWrite=true;this.spill.material.transparent=false;
   this.spill.material.customProgramCacheKey=()=> 'soft-spill-v22';this.spill.material.onBeforeCompile=shader=>{
    this.grainMaterial.onBeforeCompile(shader);shader.vertexShader='attribute float grainOpacity; varying float vGrainOpacity;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvGrainOpacity=grainOpacity;');
    shader.fragmentShader='varying float vGrainOpacity;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','diffuseColor.a*=vGrainOpacity;\n#include <opaque_fragment>');
@@ -133,7 +135,14 @@ export class AtelierScene {
   this.peelSheet.frustumCulled=false;this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
   this.makeBrush();this.makeTweezers();this.makeGlints();this.makeCelebration();this.makeGallery();this.makeJars();this.makeCollector();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
   this.desiredBrush={x:130,y:250,angle:-.72,contact:false,visible:false};this.brushPoint={x:130,y:250};this.pourPoint={x:140,y:180};this.autoPour=false;
-  this.applySettings(settings);this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();
+  this.applySettings(settings);this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();this.warmCollection();
+ }
+ warmCollection(){
+  // Compile the late funnel/stream materials during the opening peel. A small
+  // offscreen scene shares geometry/materials; it never draws into the canvas.
+  const warm=new T.Scene();warm.environment=this.scene.environment;warm.environmentIntensity=this.scene.environmentIntensity;warm.add(this.key.clone(),this.fill.clone(),new T.HemisphereLight('#fff7dd','#505668',1.5));
+  const collector=this.boxGroup.clone(true);collector.visible=true;warm.add(collector);const stream=new T.InstancedMesh(this.spill.geometry,this.spill.material,1);stream.frustumCulled=false;stream.instanceColor=new T.InstancedBufferAttribute(new Float32Array([1,1,1]),3);warm.add(stream);
+  this.renderer.compileAsync(warm,this.camera).then(()=>{warm.clear();stream.dispose();}).catch(error=>console.warn('Toplama malzemesi hazırlığı:',error));
  }
  makeGrains(capacity){
   const g=flakeGeometry(),seeds=new Float32Array(capacity);for(let i=0;i<capacity;i++)seeds[i]=((i*16807)%2147483647)/2147483647;
@@ -215,6 +224,8 @@ export class AtelierScene {
   const footRing=new T.Mesh(new T.TorusGeometry(39,1.25,6,40),new T.MeshStandardMaterial({color:'#8a9d90',roughness:.55}));footRing.position.z=-FUNNEL.length-94;this.funnelBody.add(footRing);
   this.jarFill=new T.Mesh(new T.CylinderGeometry(36,36,1,40),new T.MeshStandardMaterial({color:this.colors[0],map:this.heapTexture,bumpMap:this.heapTexture,bumpScale:1,roughness:.5,metalness:.7}));this.jarFill.rotation.x=Math.PI/2;this.jarFill.visible=false;this.funnelBody.add(this.jarFill);
   this.collected=this.makeGrains(JAR_SAMPLES);this.paperGroup.remove(this.collected);this.funnelBody.add(this.collected);
+  this.recovery=new Recovery(this.settings.recovery||'classic');this.recoveryColor=new T.Color(this.colors[0]);
+  this.recoveryVisual=new RecoveryVisual(this.scene,this.heapTexture,this.grainMaterial.clone(),n=>{const mesh=this.makeGrains(n);this.paperGroup.remove(mesh);return mesh;});
  }
  makeHands(){
   this.hands=[];const skin=new T.MeshStandardMaterial({color:'#d9ac8e',roughness:.85}),nail=new T.MeshStandardMaterial({color:'#f0cec0',roughness:.42});
@@ -389,7 +400,7 @@ export class AtelierScene {
   return{x:this.hit.x+300,y:400-this.hit.y};
  }
 
- setStage(index){this.contactData.fill(0);this.contactSeen.fill(0);this.contactTexture.needsUpdate=true;this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;this.current.count=0;this.currentInitialized=0;this.currentColorDirty=true;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.heapShadow.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
+ setStage(index){this.recovery?.reset();this.catchSamples=[];this.catchSampleCursor=0;this.collectedCount=0;this.collected.count=0;this.contactData.fill(0);this.contactSeen.fill(0);this.contactTexture.needsUpdate=true;this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;if(this.recoveryColor)this.recoveryColor.set(this.colors[index]);this.current.count=0;this.currentInitialized=0;this.currentColorDirty=true;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.heapShadow.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
  initInstance(mesh,i,seed,color){
   const mat=new T.Matrix4(),q=new T.Quaternion().setFromEuler(new T.Euler((seed*17%1-.5)*1.3,(seed*31%1-.5)*1.3,seed*79)),scale=1.15+(seed*197%1)*.9;
   mat.compose(new T.Vector3(0,0,-1000),q,new T.Vector3(scale,scale,scale));mesh.instanceMatrix.array.set(mat.elements,i*16);
@@ -463,18 +474,19 @@ export class AtelierScene {
    // Offset along the bent surface tangent, rather than sampling past its lip:
    // bentPoint deliberately treats y < -400 as detached, flat coordinates.
    if(exit){const offset=surfaceVelocity(x-300,exit.nx*2,exit.ny*2,this.bend,this.pitch);q.x+=offset.x;q.y+=offset.y;q.z+=offset.z;}
-   const v=this.paperGroup.localToWorld(new T.Vector3(q.x,q.y,q.z));
+   const m=this.paperGroup.matrixWorld.elements,wx=m[0]*q.x+m[4]*q.y+m[8]*q.z+m[12],wy=m[1]*q.x+m[5]*q.y+m[9]*q.z+m[13],wz=m[2]*q.x+m[6]*q.y+m[10]*q.z+m[14];
    const tangent=exit?exitVelocity(exit,sand.vx[i],sand.vy[i],this.draining):{vx:sand.vx[i],vy:sand.vy[i]};
    const speed=surfaceVelocity(x-300,tangent.vx,tangent.vy,this.bend,this.pitch);speed.z+=Math.min(-15,sand.vz[i]);
-   const velocity=new T.Vector3(speed.x,speed.y,speed.z).applyQuaternion(this.paperGroup.quaternion);
-   this.spills.push({x:v.x,y:v.y,z:v.z,vx:velocity.x,vy:velocity.y,vz:velocity.z,seed:sand.seed[i],dust:!!sand.dust?.[i],tiny:!!sand.finishDust?.[i],fadeOnExit:!this.draining,fadeAge:0,edge:exit?.edge,color});sand.state[i]=LOST;sand.lost++;
+   const vx=m[0]*speed.x+m[4]*speed.y+m[8]*speed.z,vy=m[1]*speed.x+m[5]*speed.y+m[9]*speed.z,vz=m[2]*speed.x+m[6]*speed.y+m[10]*speed.z;
+   const detached={x:wx,y:wy,z:wz,vx,vy,vz,seed:sand.seed[i],dust:!!sand.dust?.[i],tiny:!!sand.finishDust?.[i],fadeOnExit:!this.draining,fadeAge:0,edge:exit?.edge||'bottom',color};if(this.settings?.recovery&&this.settings.recovery!=='classic'){detached.fadeOnExit=false;startRecovery(detached);}this.spills.push(detached);sand.state[i]=LOST;sand.lost++;
   }
  }
- beginCleanup(){this.draining=true;this.collectedCount=0;this.collected.count=0;this.trayBins.fill(0);this.jarFill.material.color.set(this.colors[this.activeColor]);}
+ beginCleanup(){this.draining=true;this.recovery?.open();if((!this.settings.recovery||this.settings.recovery==='classic')&&!this.recovery?.deposited){this.collectedCount=0;this.collected.count=0;this.catchSamples=[];this.catchSampleCursor=0;}this.trayBins.fill(0);this.jarFill.material.color.set(this.colors[this.activeColor]);}
  updateCollector(phase,dt){
   this.draining=phase==='shake';this.boxMotion=Math.max(0,Math.min(1,this.boxMotion+(this.draining?1:-1)*dt*2.8));
-  this.boxGroup.visible=this.boxMotion>0;this.boxGroup.position.y=FUNNEL.centerY-(1-smooth(this.boxMotion))*360;
-  this.collectorBox={...FUNNEL,centerY:this.boxGroup.position.y};
+  this.boxGroup.visible=(!this.settings.recovery||this.settings.recovery==='classic')&&this.boxMotion>0;this.boxGroup.position.y=FUNNEL.centerY-(1-smooth(this.boxMotion))*360;
+  this.collectorBox.centerY=this.boxGroup.position.y;
+  if(this.recovery){this.recovery.style=this.settings.recovery||'classic';this.recoveryVisual.update(this.recovery.style,this.recovery,grainScale(this.settings),this.colors[this.activeColor],phase!=='complete'&&!this.galleryActive&&!this.entry,this.collectedCount);}
   const fill=Math.min(62,Math.cbrt(this.collectedCount)*1.2*Math.pow(grainScale(this.settings),.65));this.jarFill.visible=this.collectedCount>0;this.jarFill.scale.y=Math.max(.01,fill);this.jarFill.position.z=FUNNEL.bottom+fill/2;this.collected.position.set(0,0,FUNNEL.bottom+fill);
   for(let side=0;side<2;side++){
    const hand=this.hands[side];hand.visible=this.draining;const x=side?300:-300,q=bentPoint(x,0,5,this.bend,this.pitch);
@@ -482,27 +494,58 @@ export class AtelierScene {
   }
  }
  catchGrain(p){
-  const i=this.collectedCount%JAR_SAMPLES,seed=p.seed,angle=seed*7919,r=Math.sqrt(seed*197%1)*35,object=this.spillObject;
-  object.position.set(Math.cos(angle)*r,Math.sin(angle)*r,seed*13%1*2);object.rotation.set(.05,.03,seed*79);const size=grainScale(this.settings)*(p.tiny?FINISH_DUST_SCALE:1);object.scale.set(2.1*size,2.1*size,.65*size);object.updateMatrix();
-  this.collected.setMatrixAt(i,object.matrix);this.collected.setColorAt(i,p.color);this.collected.geometry.attributes.flakeSeed.setX(i,seed);this.collectedCount++;
+  const samples=this.catchSamples||(this.catchSamples=[]),i=this.catchSampleCursor||0;samples[i]=p;this.catchSampleCursor=(i+1)%JAR_SAMPLES;this.collectedCount+=p.mass||1;this.collectedDirty=true;
  }
- updateSpill(dt){
-  if(this.spills.length>this.spill.instanceMatrix.count)this.ensureGrainCapacity('spill',this.spills.length);
-  let out=0;const object=this.spillObject,projected=new T.Vector3();
+
+ updateSpill(dt,sync=true){
+  let out=0;const recovery=this.recovery;
   for(const p of this.spills){
-   p.fadeAge=(p.fadeAge||0)+dt;if(p.fadeOnExit&&exitOpacity(p.fadeAge)<=0)continue;
-   const caught=stepFunnel(p,dt,!p.fadeOnExit&&this.boxMotion>.95?this.collectorBox:NO_FUNNEL);
-   if(caught){this.catchGrain(p);continue;}
-   projected.set(p.x,p.y,p.z).project(this.camera);
-   if(projected.y > 1.3 || projected.y < -1.15 || Math.abs(projected.x)>1.3 || projected.z>1)continue;
-   object.position.set(p.x,p.y,p.z);object.rotation.set(.2,.1,p.seed*79);object.scale.setScalar((1.8+p.seed)*grainScale(this.settings)*(p.tiny?FINISH_DUST_SCALE:1));object.updateMatrix();
-   this.spill.setMatrixAt(out,object.matrix);this.spill.setColorAt(out,p.color);this.spill.geometry.attributes.grainOpacity.setX(out,p.fadeOnExit?exitOpacity(p.fadeAge):1);this.spill.geometry.attributes.flakeSeed.setX(out,p.seed);this.spills[out++]=p;
+   if(p.recovery){
+    if(stepRecovery(p,dt)){
+     if(p.recovery==='intake')recovery.deposit(p.mass||1);
+     else{recovery.catch(p.mass);this.catchGrain(p);}continue;
+    }
+   }else{
+    p.fadeAge=(p.fadeAge||0)+dt;if(p.fadeOnExit&&exitOpacity(p.fadeAge)<=0)continue;
+    if(stepFunnel(p,dt,!p.fadeOnExit&&this.boxMotion>.95?this.collectorBox:NO_FUNNEL)){this.catchGrain(p);continue;}
+   }
+   this.spills[out++]=p;
   }
-  this.spills.length=out;this.spill.count=out;
-  for(const attr of [this.spill.instanceMatrix,this.spill.instanceColor,this.spill.geometry.attributes.grainOpacity,this.spill.geometry.attributes.flakeSeed]){attr.clearUpdateRanges();if(out){attr.addUpdateRange(0,out*attr.itemSize);attr.needsUpdate=true;}}
-  this.collected.count=Math.min(JAR_SAMPLES,this.collectedCount);this.collected.instanceMatrix.needsUpdate=true;this.collected.instanceColor.needsUpdate=true;this.collected.geometry.attributes.flakeSeed.needsUpdate=true;
+  this.spills.length=out;
+  if(recovery?.pending)recovery.step(dt,packet=>this.spills.push(transferPacket(packet,recovery.style,this.recoveryColor)));
+  if(sync)this.syncSpills();
  }
- reset(){this.galleryFrame.visible=this.gallerySides.visible=false;this.floor.material.color.copy(this.floorRestColor);this.finishClock=0;this.heroProgress=0;this.celebration.visible=false;this.coatUniforms.uCelebrate.value=0;this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);this.stand.visible=false;for(const jar of this.jars)jar.visible=false;this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}
+ syncSpills(){
+  if(this.spills.length>this.spill.instanceMatrix.count)this.ensureGrainCapacity('spill',this.spills.length);
+  const matrix=this.spill.instanceMatrix.array,colours=this.spill.instanceColor.array,alpha=this.spill.geometry.attributes.grainOpacity,seeds=this.spill.geometry.attributes.flakeSeed,projected=this.spillProjection||(this.spillProjection=new T.Vector3()),size=grainScale(this.settings),cx=Math.cos(.2),sx=Math.sin(.2),cy=Math.cos(.1),sy=Math.sin(.1);let out=0,kept=0,fading=false;
+  for(const p of this.spills){
+   projected.set(p.x,p.y,p.z).project(this.camera);
+   if(projected.y>1.3||projected.y< -1.15||Math.abs(projected.x)>1.3||projected.z>1){if(p.recovery)this.spills[kept++]=p;continue;}this.spills[kept++]=p;
+   const cs=p.cs??(p.cs=Math.cos(p.seed*79)),sn=p.sn??(p.sn=Math.sin(p.seed*79)),scale=(1.8+p.seed)*size*(p.tiny?FINISH_DUST_SCALE:1),j=out*16,k=out*3;
+   matrix[j]=cy*cs*scale;matrix[j+1]=(cx*sn+sx*sy*cs)*scale;matrix[j+2]=(sx*sn-cx*sy*cs)*scale;matrix[j+3]=0;
+   matrix[j+4]=-cy*sn*scale;matrix[j+5]=(cx*cs-sx*sy*sn)*scale;matrix[j+6]=(sx*cs+cx*sy*sn)*scale;matrix[j+7]=0;
+   matrix[j+8]=sy*scale;matrix[j+9]=-sx*cy*scale;matrix[j+10]=cx*cy*scale;matrix[j+11]=0;
+   matrix[j+12]=p.x;matrix[j+13]=p.y;matrix[j+14]=p.z;matrix[j+15]=1;
+   colours[k]=p.color.r;colours[k+1]=p.color.g;colours[k+2]=p.color.b;alpha.array[out]=p.fadeOnExit?exitOpacity(p.fadeAge):1;seeds.array[out]=p.seed;fading ||=!!p.fadeOnExit;out++;
+  }
+  this.spills.length=kept;this.spill.count=out;this.spillUploadBytes=out*84;
+  // Full-opacity funnel flow writes depth; this avoids the dense transparent
+  // overdraw hotspot. Only the short legacy edge fade needs alpha blending.
+  if(this.spill.material.transparent!==fading){this.spill.material.transparent=fading;this.spill.material.depthWrite=!fading;this.spill.material.needsUpdate=true;}
+  for(const attr of [this.spill.instanceMatrix,this.spill.instanceColor,alpha,seeds]){attr.clearUpdateRanges();if(out){attr.addUpdateRange(0,out*attr.itemSize);attr.needsUpdate=true;}}
+  if(this.collectedDirty){
+   const object=this.spillObject,samples=this.catchSamples||[];
+   for(let i=0;i<samples.length;i++){const p=samples[i],seed=p.seed,angle=seed*7919,r=Math.sqrt(seed*197%1)*35;
+    object.position.set(Math.cos(angle)*r,Math.sin(angle)*r,seed*13%1*2);object.rotation.set(.05,.03,seed*79);const grain=size*(p.tiny?FINISH_DUST_SCALE:1);object.scale.set(2.1*grain,2.1*grain,.65*grain);object.updateMatrix();
+    this.collected.setMatrixAt(i,object.matrix);this.collected.setColorAt(i,p.color);this.collected.geometry.attributes.flakeSeed.setX(i,seed);
+   }
+   this.collected.count=samples.length;
+   for(const attr of [this.collected.instanceMatrix,this.collected.instanceColor,this.collected.geometry.attributes.flakeSeed]){attr.clearUpdateRanges();if(samples.length){attr.addUpdateRange(0,samples.length*attr.itemSize);attr.needsUpdate=true;}}
+   this.collectedDirty=false;
+  }
+ }
+
+ reset(){this.recovery?.reset();if(this.recoveryVisual)this.recoveryVisual.group.visible=false;this.catchSamples=[];this.catchSampleCursor=0;this.collectedDirty=false;this.galleryFrame.visible=this.gallerySides.visible=false;this.floor.material.color.copy(this.floorRestColor);this.finishClock=0;this.heroProgress=0;this.celebration.visible=false;this.coatUniforms.uCelebrate.value=0;this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);this.stand.visible=false;for(const jar of this.jars)jar.visible=false;this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}
  setPeelPiece(image,piece){
   this.peelPiece=piece;this.peelAnchor=piece.grip;
   const {w,h}=piece.bounds,step=this.settings.profile==='economy'?14:10;
@@ -520,7 +563,7 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,cleanupPose=null,finished=false}){
-  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;if(!finished&&!this.galleryActive&&!this.entry)this.updateGrains(sand);
+  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;if(!finished&&!this.galleryActive&&!this.entry)this.updateGrains(sand);this.syncSpills();
   const showHeap=this.settings.relief&&!finished&&!this.galleryActive&&!this.entry&&phase!=='shake'&&sand.surfaceCount>0;
   this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=sand.granular?.10:.23;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){

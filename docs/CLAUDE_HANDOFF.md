@@ -1,15 +1,15 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 6 Kasım 2026. Ürün/cache sürümü **v23**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 6 Kasım 2026. Ürün/cache sürümü **v24**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=23&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=24&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Güncel geliştirme: **v23**, ortak yerel döküş; v22 giriş/huni/ana mod davranışları korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Güncel geliştirme: **v24**, huni optimizasyonu ve üç ortak toplama düzeni; v22/v23 davranışları korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
 - Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
 - v20 araştırma/önceki teknik kararlar: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
@@ -24,7 +24,9 @@ Tarih: 6 Kasım 2026. Ürün/cache sürümü **v23**. Bu belge mevcut oyunu devr
 
 `package.json` içindeki `1.0.0`, v20 cache sürümünden ayrıdır.
 
-Güncel yerel döküş: [v23-shared-local-pours.md](v23-shared-local-pours.md). Giriş/ana mod: [v22-entry-and-hold.md](v22-entry-and-hold.md). Önceki sürüm: [v21-feel-and-gallery.md](v21-feel-and-gallery.md).
+Güncel toplama/perf: [v24-collection-and-performance.md](v24-collection-and-performance.md). [Görsel denemeler](v24-collection-lab.html).
+
+Yerel döküş: [v23-shared-local-pours.md](v23-shared-local-pours.md). Giriş/ana mod: [v22-entry-and-hold.md](v22-entry-and-hold.md). Önceki sürüm: [v21-feel-and-gallery.md](v21-feel-and-gallery.md).
 
 ## 2. Ürünün amacı ve kullanıcının öncelikleri
 
@@ -85,10 +87,10 @@ Toplam **51 renk aşaması**. Oyuncu ilk bölümden başlar; önceki tamamlanın
 
 URL örnekleri:
 
-- `?v=23&mod=basili&bolum=barcelona`
-- `?v=23&mod=egim&bolum=naruto`
-- `?v=23&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=23&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=24&mod=basili&bolum=barcelona`
+- `?v=24&mod=egim&bolum=naruto`
+- `?v=24&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=24&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -189,6 +191,12 @@ Cache sürümünü artırırken bu anahtarları otomatik değiştirme; kullanıc
 
 `funnel.js` eğimli koni/boğaz/kavanoz fiziğidir. `cleanup.js` değişken artık planı ve gerçek gevşek paketlerin ikinci temizlik geçişini yönetir. `Sand.step(...,{pinned})` bu paketleri ilk bükmede yerinde tutar. Sonra aynı paketler hareket eder; yapışmış sim ve kaplama korunur. Kavanozun hacim gösterimi bütün yakalanan miktardan, üst taneler en fazla 2.200 örnekten gelir. Masa önce çizilir; alttaki kavanoz dolumu örtülmez.
 
+### v24 toplama ve performans
+
+`recovery.js` sonlu hazne/aktarım/kavanoz hesabı ve dış kenar rotalarıdır. `recovery-visual.js` oluk, iki açık kanal ve eğilen çanağı çizer. `recovery:classic` önceki davranıştır; yeni seçenekler ayarlardan veya `?toplama=trough|rills|bowl` ile denenir. Hazne ve yoldaki miktar bitmeden renk geçmez. `beginCleanup` erken toplanan miktarı silmez.
+
+`updateSpill(dt,false)` yalnız dünya fiziğini ilerletir; `syncSpills()` görüntü başına bir kez matrisleri/sınırlı üst örnekleri hazırlar. Bu ayrımı bozma. Shader ön hazırlığı görünmeyen küçük sahnede yapılır. Tam kaplama canvas bake’i temizliğin başında tekrar yapılmaz; renk geçişindeki bake korunur. Ölçüm script’i ve sınırları v24 belgesindedir. Fiziksel telefon FPS garantisi değildir.
+
 ## 9. Dosya haritası
 
 | Dosya | Sorumluluk |
@@ -232,7 +240,7 @@ Ham videolar/sohbet ekleri ve `/tmp` içindeki çıkarım scriptleri clone için
 
 ## 11. Test ve görsel QA
 
-`npm run build` başarılı ve **141 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
+`npm run build` başarılı ve **147 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
 
 Özellikle dikkat edilecek regresyon testleri:
 
@@ -300,4 +308,4 @@ Kimlik bilgisi/token depoya yazma veya loga basma. Bu makinenin mevcut Git crede
 
 Başlangıç için Claude’a verilebilecek metin:
 
-> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v23 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
+> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v24 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
