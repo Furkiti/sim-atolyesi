@@ -1,3 +1,5 @@
+> v26: Basılı tut modunda %96’ya ulaşınca kalan gerçek hedef taneleri yerleşir; parmağı bırakmadan temizlik ve renk geçişi başlar.
+
 > v25: Yapışan gerçek taneler hareketli stoğu tüketir. Yeni **Masada kalsın** modunda erken ve son döküntüler masa düzleminde durup söner; son bükme fiziği hafifletildi. [Notlar ve ölçümler](docs/v25-adhesion-and-desk.md).
 
 > v24: [Üç ortak toplama düzenini gör ve dene](docs/v24-collection-lab.html): Oluk & kapak, Çift kanal, Eğilen çanak. Erken düşen simler de finalde aynı kavanoza gider. Klasik huni optimize edildi ve seçilebilir. [Ölçümler ve kontroller](docs/v24-collection-and-performance.md).
@@ -12,7 +14,7 @@
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=25&mod=basili&giris=direct)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=26&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
