@@ -1,15 +1,15 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 6 Kasım 2026. Ürün/cache sürümü **v29**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 6 Kasım 2026. Ürün/cache sürümü **v30**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=29&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=30&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Güncel geliştirme: **v29**, [devam eden rengin kaplaması da sergide söner](v29-active-coat-fade.md). v28: sergi geçişleri, ses ayrımı, birleşik döküş ve görsel/son dokunuş seçenekleri. [Notlar](v28-gallery-and-gestures.md). %100 kaplamadan sonra otomatik bitiş korunur. v25: gerçek katman yapışması, masa modu ve hafif son bükme; önceki davranışlar/seçenekler korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Güncel geliştirme: **v30**, [%100 sayaç düzeltmesi ve son tabloya sergiden açılış](v30-startup-and-finish.md). v29: [devam eden rengin kaplaması da sergide söner](v29-active-coat-fade.md). v28: sergi geçişleri, ses ayrımı, birleşik döküş ve görsel/son dokunuş seçenekleri. [Notlar](v28-gallery-and-gestures.md). %100 kaplamadan sonra otomatik bitiş korunur. v25: gerçek katman yapışması, masa modu ve hafif son bükme; önceki davranışlar/seçenekler korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
 - Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
 - v20 araştırma/önceki teknik kararlar: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
@@ -89,10 +89,10 @@ Toplam **51 renk aşaması**. Oyuncu ilk bölümden başlar; önceki tamamlanın
 
 URL örnekleri:
 
-- `?v=29&mod=basili&bolum=barcelona`
-- `?v=29&mod=egim&bolum=naruto`
-- `?v=29&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=29&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=30&mod=basili&bolum=barcelona`
+- `?v=30&mod=egim&bolum=naruto`
+- `?v=30&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=30&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -161,7 +161,7 @@ Bitişte eseri örten modal yoktur. Poster üç boyutlu koyu çerçeve, ince alt
 - Çalışma sırasında sergiyi açıp geri dönmek o anki simi/boyayı korur; oyun zamanı durur, görsel parıltı zamanı sürer.
 - `Yeni bölüm` veya `Bu esere gir` bir sayfa navigasyonu yapmaz. `LevelLoader` maskeleri önceden yükler; kamera hedefe kayıp yaklaşır, kaplayan poster altında sahne verisi yenilenir ve yeni kâğıda açılır. Aynı renderer/canvas/ses bağlamı korunur. URL `history.pushState` ile güncellenir; geri düğmesi history çoğaltmadan çalışır.
 - Giriş kamerası oyun hızından bağımsız gerçek zaman kullanır. `onCovered` sıfırlamasının kamera konumunu bir kare için bile değiştirmemesi regresyon testindedir.
-- Son altı farklı bitmiş eser 480×640 JPEG olarak aynı tarayıcıda saklanır. Yarım ilerleme disk üzerinde kaydedilmez.
+- Son altı farklı bitmiş eser 480×640 JPEG olarak aynı tarayıcıda saklanır. v30 son tablo ve tamamlanmış renk sınırlarını kaydeder; yarım rengin uçuşan/yapışmış tane dizileri kaydedilmez.
 - Paylaş/Kaydet/New bölüm eylemleri posterin üstüne gelmez; önceki düğme animasyonları ve hareket azaltma tercihi korunur.
 - Paylaş, desteklenirse Web Share API ile **1200×1600 PNG dosyasını** açar. Alıcı otomatik seçilmez. Destek yoksa PNG indirilir; iptal hata sayılmaz.
 - Export temiz boyalı kâğıttır. Çerçeveler, masa, UI ve VFX export’a eklenmez.
@@ -173,8 +173,9 @@ Depolama anahtarları:
 | `sim-atelier-v4` | Ayarlar, mod, oyun hızı, kalite vb. |
 | `sim-atolyesi-gallery-v1` | Son tamamlanan eserlerin küçük görselleri |
 | `sim-atolyesi-progress-v1` | Küçük tamamlanma kaydı; ardışık bölüm kilitleri |
+| `sim-atolyesi-session-v1` | Son galeri odağı ve tablo başına mevcut renk indeksi/bitmiş durumu |
 
-Cache sürümünü artırırken bu anahtarları otomatik değiştirme; kullanıcı ayarları/geçmişi silinir. Yerel sunucu ile GitHub Pages farklı origin olduğundan ayrı kayıtlara sahiptir. Aktif rengin sim parçacıkları ve yarım bölüm ilerlemesi otomatik kaydedilmez.
+Cache sürümünü artırırken bu anahtarları otomatik değiştirme; kullanıcı ayarları/geçmişi silinir. Yerel sunucu ile GitHub Pages farklı origin olduğundan ayrı kayıtlara sahiptir. Son tablo ve tamamlanmış renk sınırları `sim-atolyesi-session-v1` içinde saklanır. Aktif rengin sim parçacıkları saklanmaz; o renk yeniden hazırlanır.
 
 ### v20 çizim ve bellek düzeni
 
@@ -248,7 +249,7 @@ Ham videolar/sohbet ekleri ve `/tmp` içindeki çıkarım scriptleri clone için
 
 ## 11. Test ve görsel QA
 
-`npm run build` başarılı ve **160 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
+`npm run build` başarılı ve **165 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
 
 Özellikle dikkat edilecek regresyon testleri:
 
@@ -325,3 +326,7 @@ Başlangıç için Claude’a verilebilecek metin:
 ## v29 ekleri
 
 [Video incelemesi](v29-active-coat-fade.md). `displayPaper` render altlığıdır, `paperCanvas` tam export resmidir. Aktif kaplama shader görünürlüğüyle söner; önceki renkler ve sonlu yapışma stokları değişmez. Bitmiş eserlerde aktif kaplama alfa 1 kalır.
+
+## v30 ekleri
+
+[v30-startup-and-finish.md](v30-startup-and-finish.md). `releaseLayer` temas rezervasyonunu bir kez kapatır; Float32 temas noktası kontrolden önce yuvarlanır. `session.js` son tablo/renk sınırlarını saklar. Açılış doğrudan oyuna değil, shader/asset hazırlığından sonra sergiye gelir. `lobbyCover` başlangıç galeri resmidir; oyuna girerken `hideLobby` ile kapanır ve mevcut renk aşaması hazırlanır.

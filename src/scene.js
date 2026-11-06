@@ -141,14 +141,14 @@ export class AtelierScene {
   this.peelSheet.frustumCulled=false;this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
   this.makeBrush();this.makeTweezers();this.makeGlints();this.makeCelebration();this.makeGallery();this.makeJars();this.makeCollector();this.makeTable();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
   this.desiredBrush={x:130,y:250,angle:-.72,contact:false,visible:false};this.brushPoint={x:130,y:250};this.pourPoint={x:140,y:180};this.autoPour=false;
-  this.applySettings(settings);this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();this.warmCollection();
+  this.applySettings(settings);this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();this.warmReady=this.warmCollection();
  }
  warmCollection(){
   // Compile the late funnel/stream materials during the opening peel. A small
   // offscreen scene shares geometry/materials; it never draws into the canvas.
   const warm=new T.Scene();warm.environment=this.scene.environment;warm.environmentIntensity=this.scene.environmentIntensity;warm.add(this.key.clone(),this.fill.clone(),new T.HemisphereLight('#fff7dd','#505668',1.5));
   const collector=this.boxGroup.clone(true);collector.visible=true;warm.add(collector);const stream=new T.InstancedMesh(this.spill.geometry,this.spill.material,1);stream.frustumCulled=false;stream.instanceColor=new T.InstancedBufferAttribute(new Float32Array([1,1,1]),3);warm.add(stream);const desk=new T.InstancedMesh(this.tablePool.geometry,this.tablePool.material,1);desk.instanceColor=stream.instanceColor;desk.frustumCulled=false;warm.add(desk);
-  this.renderer.compileAsync(warm,this.camera).then(()=>{warm.clear();stream.dispose();desk.dispose();}).catch(error=>console.warn('Toplama malzemesi hazırlığı:',error));
+  return this.renderer.compileAsync(warm,this.camera).then(()=>{warm.clear();stream.dispose();desk.dispose();}).catch(error=>console.warn('Toplama malzemesi hazırlığı:',error));
  }
  makeTable(){
   this.tableTime=0;this.tableActive=0;this.tableLanded=0;this.tableCleared=0;this.tableDrawCount=0;this.tableAdds=[];this.tableUniform={value:0};
@@ -305,6 +305,11 @@ export class AtelierScene {
   this.frameFactory=frame;this.galleryCurrent=0;this.galleryFocus=0;this.galleryActive=false;this.entry=null;
   this.entryCover=new T.Mesh(new T.PlaneGeometry(W,H),new T.MeshBasicMaterial({transparent:true,opacity:0,toneMapped:false,depthWrite:false,depthTest:false}));this.entryCover.position.z=3;this.entryCover.renderOrder=90;this.entryCover.visible=false;this.paperGroup.add(this.entryCover);
  }
+ setLobbyImage(image){
+  if(!this.lobbyCover){this.lobbyCover=new T.Mesh(new T.PlaneGeometry(W,H),new T.MeshBasicMaterial({toneMapped:false,depthWrite:false,depthTest:false}));this.lobbyCover.position.z=4;this.lobbyCover.renderOrder=80;this.paperGroup.add(this.lobbyCover);}
+  this.lobbyCover.material.map?.dispose();const texture=new T.CanvasTexture(image);texture.colorSpace=T.SRGBColorSpace;this.lobbyCover.material.map=texture;this.lobbyCover.material.needsUpdate=true;this.lobbyCover.visible=true;this.renderer.initTexture(texture);
+ }
+ hideLobby(){if(this.lobbyCover){this.lobbyCover.visible=false;this.lobbyCover.material.map?.dispose();this.lobbyCover.material.map=null;}}
  setGalleryEntries(entries,current){
   if(this.galleryEntries?.length===entries.length&&this.galleryEntries.every((entry,i)=>entry===entries[i])&&this.galleryNeighbors.length===entries.length){this.galleryCurrent=current;for(const item of this.galleryNeighbors)item.group.position.x=galleryOffset(item.index,current,GALLERY.spacing);return;}this.galleryEntries=entries;
   for(const item of this.galleryNeighbors){item.picture.material.map?.dispose();item.picture.material.dispose();item.picture.geometry.dispose();item.label.material.map?.dispose();item.label.material.dispose();item.label.geometry.dispose();this.gallerySides.remove(item.group);}

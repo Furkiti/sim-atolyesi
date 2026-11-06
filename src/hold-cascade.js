@@ -58,20 +58,21 @@ export class HoldCascade {
    s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.byParticle.set(i,route);this.activeRoutes.push(route);
   }
  }
- requestFinish(){this.finishing=true;this.finishElapsed??=0;}
+ releaseLayer(route){if(route.layerCell===undefined)return;this.pendingLayers[route.layerCell]--;this.pendingLayerCount--;delete route.layerCell;}
+ requestFinish(){this.finishing=true;this.sealing=true;this.finishElapsed??=0;}
  step(dt,held=false,refresh=true){
   held=held||!!this.finishing;if(this.finishing)this.finishElapsed+=dt;
   const s=this.sand;this.press+=(Number(held)-this.press)*(1-Math.exp(-dt*(held?8:11)));
   const previousTime=this.elapsed;if(held)this.elapsed+=dt;
   let active=0;for(let at=0;at<this.activeRoutes.length;at++){
-   const route=this.activeRoutes[at],i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST)continue;this.activeRoutes[active++]=route;
+   const route=this.activeRoutes[at],i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST){this.releaseLayer(route);continue;}this.activeRoutes[active++]=route;
    if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+(s.seed[i]*127%1)*25*this.depth/1.25;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;}continue;}
    s.previousX[i]=s.x[i];s.previousY[i]=s.y[i];s.vx[i]=s.vy[i]=0;if(!held)continue;
    if(route.parked){s.z[i]+=(route.rest.z-s.z[i])*Math.min(1,dt*14);continue;}
    if(route.landing!==undefined){
     route.landing+=dt;const progress=Math.min(1,route.landing/.18),ease=progress*progress*(3-2*progress);
     s.z[i]=route.contactZ+(2.2-route.contactZ)*ease;s.roll[i]+=dt*2;
-    if(progress===1){s.z[i]=2.2;if(route.layerCell!==undefined){this.pendingLayers[route.layerCell]--;this.pendingLayerCount--;if(s.bindLayer(i))this.adheredLayers++;}else s.bind(i,true);}continue;
+    if(progress===1){s.z[i]=2.2;const layer=route.layerCell!==undefined;this.releaseLayer(route);const bound=layer?s.bindLayer(i):s.bind(i,true);if(layer&&bound)this.adheredLayers++;if(!bound){delete route.landing;delete route.contactZ;}}continue;
    }
    const travel=route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
    const old=s.y[i],next=this.finishing&&route.target?old+(route.y-old)*Math.min(1,dt/Math.max(.001,.30-this.finishElapsed)):old+travel;route.distance+=travel;
@@ -84,7 +85,7 @@ export class HoldCascade {
    if(!route.target&&!route.rest&&!this.sealing){
     const samples=Math.max(1,Math.ceil((next-old)/CELL));
     for(let n=1;n<=samples;n++){
-     const y=old+(next-old)*n/samples,k=s.cell(s.x[i],y);
+     const y=Math.fround(old+(next-old)*n/samples),k=s.cell(s.x[i],y);
      if(k<0||!s.bound[k]||s.bound[k]+this.pendingLayers[k]>=this.layerCapacity[k]||!s.onGlue(s.x[i],y))continue;
      s.y[i]=y;s.vy[i]=0;route.layerCell=k;route.contactZ=s.z[i];route.landing=0;this.pendingLayers[k]++;this.pendingLayerCount++;break;
     }

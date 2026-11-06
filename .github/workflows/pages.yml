@@ -29,9 +29,9 @@ jobs:
           cp -R assets _site/assets
           cp -R audio _site/audio
           mkdir -p _site/docs/handoff
-          cp docs/v20-reference-board.html docs/v20-ui-references.md docs/v21-feel-and-gallery.md docs/v22-entry-and-hold.md docs/v23-shared-local-pours.md docs/v24-collection-and-performance.md docs/v24-collection-lab.html docs/v25-adhesion-and-desk.md docs/v28-gallery-and-gestures.md docs/v29-active-coat-fade.md _site/docs/
+          cp docs/v20-reference-board.html docs/v20-ui-references.md docs/v21-feel-and-gallery.md docs/v22-entry-and-hold.md docs/v23-shared-local-pours.md docs/v24-collection-and-performance.md docs/v24-collection-lab.html docs/v25-adhesion-and-desk.md docs/v28-gallery-and-gestures.md docs/v29-active-coat-fade.md docs/v30-startup-and-finish.md _site/docs/
           cp docs/handoff/v20-cpu-benchmark.json _site/docs/handoff/
-          cp docs/handoff/v21-*.png docs/handoff/v22-*.png docs/handoff/v23-*.png docs/handoff/v24-*.png docs/handoff/v24-collection-benchmark.json docs/handoff/v25-*.png docs/handoff/v25-*.json docs/handoff/v28-*.png docs/handoff/v29-*.png _site/docs/handoff/
+          cp docs/handoff/v21-*.png docs/handoff/v22-*.png docs/handoff/v23-*.png docs/handoff/v24-*.png docs/handoff/v24-collection-benchmark.json docs/handoff/v25-*.png docs/handoff/v25-*.json docs/handoff/v28-*.png docs/handoff/v29-*.png docs/handoff/v30-*.png _site/docs/handoff/
       - uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: _site

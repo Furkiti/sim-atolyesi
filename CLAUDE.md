@@ -4,12 +4,12 @@ Bu repo mevcut, çalışan oyundur. Devam etmeden önce **[docs/CLAUDE_HANDOFF.m
 
 ## Mevcut checkpoint
 
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=29&mod=basili&giris=direct
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=30&mod=basili&giris=direct
 - Repo: https://github.com/Furkiti/sim-atolyesi
-- Güncel geliştirme: v29 — [aktif renk kaplaması da sergide söner](docs/v29-active-coat-fade.md). v28: yumuşak sergi/devam geçişleri, sergi müziği, birleşik yerel döküş, ışıltılı tablo ve rastgele son dokunuş. [v28 notları](docs/v28-gallery-and-gestures.md). v27 %100 eşiği korunur. v25: gerçek yapışan ek tanelerle akış azalması, yeni masada bekleyip sönme modu ve daha hafif son bükme. Ayrıntı: [docs/v25-adhesion-and-desk.md](docs/v25-adhesion-and-desk.md). Önceki modlar korunur.
+- Güncel geliştirme: v30 — [%100 kilitlenmesi, yükleme ve son tabloya açılış](docs/v30-startup-and-finish.md). v29: [aktif renk kaplaması da sergide söner](docs/v29-active-coat-fade.md). v28: yumuşak sergi/devam geçişleri, sergi müziği, birleşik yerel döküş, ışıltılı tablo ve rastgele son dokunuş. [v28 notları](docs/v28-gallery-and-gestures.md). v27 %100 eşiği korunur. v25: gerçek yapışan ek tanelerle akış azalması, yeni masada bekleyip sönme modu ve daha hafif son bükme. Ayrıntı: [docs/v25-adhesion-and-desk.md](docs/v25-adhesion-and-desk.md). Önceki modlar korunur.
 - Önceki sabit nokta: `v19-handoff` Git etiketi. Bu etiket tarihsel v19 sürümüdür.
 - Kaynak proje bu klasördür; derlenmiş giriş `game.js`, asıl uygulama `src/main.js`.
-- Son doğrulama: `npm run build` başarılı, 160 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
+- Son doğrulama: `npm run build` başarılı, 165 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
 
 ## Çalıştırma
 
@@ -54,3 +54,5 @@ Görsel araştırma ve kararlar: [docs/v20-ui-references.md](docs/v20-ui-referen
 - Sergide fizik durur, sim yalnız shader saydamlığıyla sönüp geri gelir. Devam yolu `beginEntry(...,null,...)` ile mevcut oyunu korur; yeni bölüm hazırlığı kamera başlamadan yapılır.
 
 - v29 `displayPaper` yalnız koruyucu/yapışkan + önceki tamamlanmış renkler + çizgidir; aktif renk shader ile çizilir. `paperCanvas` export/galeri kaydı için aktif kaplamayı da içerir. İkisini birleştirme: sergide görünür pembe/kırmızı iz geri gelir. `uActiveAlpha` bitmiş poster için 1, devam eden renk için `workAlpha` olur.
+
+- v30 açılışı `data-loading`/inert ile örtülür; maskeler, galeri ve shader hazırlığı sonrası sergiye açılır. `AtelierSession` son odağı ve tamamlanan renk sınırlarını saklar. Yarım rengin parçacıkları diskten dönmez. `devam` QA kısayolu geçerlidir, ama o da sergiden başlar. `pendingLayerCount` yalnız gerçek açık rezervasyonları sayar; bir temas her iptal/bağlanmada bir kez bırakılır.

@@ -1,3 +1,4 @@
+import {AtelierSession} from './session.js';
 import {GalleryMusic,audioScene} from './gallery-audio.js';
 import {Sand,W,H} from './sand.js';
 import {AtelierScene} from './scene.js';
@@ -27,9 +28,10 @@ installButtonMotion();
 const sessionId=String(Date.now());
 let gallery;try{gallery=new GalleryHistory(localStorage,levels.map(entry=>entry.id))}catch{gallery=new GalleryHistory(null,levels.map(entry=>entry.id))}
 let progression;try{progression=new LevelProgress(localStorage,levels.map(e=>e.id),gallery.entries)}catch{progression=new LevelProgress(null,levels.map(e=>e.id),gallery.entries)}
-if(!progression.canPlay(level.id)){
- level=levels[Math.min(progression.frontier,levels.length-1)];stages=level.stages;const url=new URL(location.href);url.searchParams.set('bolum',level.id);url.searchParams.delete('devam');history.replaceState({},'',url);
-}
+let session;try{session=new AtelierSession(localStorage,levels)}catch{session=new AtelierSession(null,levels)}
+const bootChoice=session.start(location.search,progression,gallery.entries),resumeRequested=new URLSearchParams(location.search).has('devam');
+level=bootChoice.level;stages=level.stages;
+let booting=true,lobby=false;
 const loader=new LevelLoader(),rail=new ExhibitionRail(levels.length,levels.indexOf(level)),previewCache=new Map();
 let exhibition=false,transitioning=false,galleryArt=[],following=levels[Math.min(levels.indexOf(level)+1,levels.length-1)],cleanup=null;
 let settings;try{settings=loadSettings(localStorage)}catch{settings=loadSettings({getItem:()=>null})}
@@ -139,6 +141,7 @@ function sound(amount=0){
 $('#sound').textContent='Ses: açık';$('#sound').setAttribute('aria-label','Sesi kapat');
 $('#sound').onclick=async()=>{soundOn=!soundOn;await audio();sound(0);$('#sound').textContent=soundOn?'Ses: açık':'Ses: kapalı';$('#sound').setAttribute('aria-label',soundOn?'Sesi kapat':'Sesi aç')};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)sound(0)});
+document.addEventListener('pointerdown',()=>{if(!booting&&exhibition&&soundOn)audio()},{passive:true});
 function releaseAll(){if(rail.drag)rail.end(true);holdLatched=false;paperMotion.end();down=false;gate.cancel();strokes.length=0;sound(0)}
 function settingsTab(name){
  document.querySelectorAll('[data-settings-tab]').forEach(e=>e.hidden=e.dataset.settingsTab!==name);
@@ -222,7 +225,7 @@ async function galleryPictures(){
  const entries=await Promise.all(levels.map(async entry=>{
   const record=gallery.entries.find(item=>item.id===entry.id),locked=!progression.canPlay(entry.id),completed=progression.isComplete(entry.id)&&!locked,key=entry.id+':'+(record?.completedAt||'preview')+':'+locked+':'+completed;
   for(const cached of previewCache.keys())if(cached.startsWith(entry.id+':')&&cached!==key)previewCache.delete(cached);
-  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=29`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
+  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=30`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
   return previewCache.get(key);
  }));galleryArt=entries;view.setGalleryEntries(entries,levels.indexOf(level));return entries;
 }
@@ -237,28 +240,28 @@ function galleryLabels(){
  $('#share').hidden=$('#save').hidden=!(finished&&current);$('#again').hidden=!(finished&&record&&!locked);$('#again').setAttribute('aria-label',selected.name+' bölümünü yeniden oyna');$('#exhibition-close').hidden=finished;
  document.querySelectorAll('#gallery-dots button').forEach((button,i)=>button.setAttribute('aria-current',String(i===rail.target)));
 }
-function selectArtwork(index){rail.select(index);galleryLabels();if(progression.canPlay(levels[rail.target].id))loader.load(levels[rail.target]).catch(console.warn);}
-function showExhibition(){
- if(!view||transitioning)return;releaseAll();pointer.visible=false;exhibition=true;sound(0);if(soundOn)audio();rail.focus=rail.target=levels.indexOf(level);view.galleryActive=true;view.galleryFocus=rail.focus;document.body.dataset.exhibition='true';$('#complete').hidden=false;galleryLabels();galleryPictures().catch(console.warn);
+function selectArtwork(index){rail.select(index);session.focus(levels[rail.target].id);galleryLabels();if(progression.canPlay(levels[rail.target].id))loader.load(levels[rail.target]).catch(console.warn);}
+function showExhibition({silent=false}={}){
+ if(!view||transitioning)return;releaseAll();pointer.visible=false;exhibition=true;sound(0);if(soundOn&&!silent)audio();rail.focus=rail.target=levels.indexOf(level);view.galleryActive=true;view.galleryFocus=rail.focus;document.body.dataset.exhibition='true';$('#complete').hidden=false;galleryLabels();galleryPictures().catch(console.warn);
 }
 function closeExhibition(){
- if(transitioning||finished||!exhibition)return;releaseAll();transitioning=true;document.body.dataset.transition='entering';rail.focus=rail.target=levels.indexOf(level);
- view.beginEntry(levels.indexOf(level),null,()=>{exhibition=false;view.galleryActive=false;delete document.body.dataset.exhibition;$('#complete').hidden=true;},()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
+ if(transitioning||finished||!exhibition)return;if(soundOn)audio();releaseAll();transitioning=true;document.body.dataset.transition='entering';rail.focus=rail.target=levels.indexOf(level);
+ view.beginEntry(levels.indexOf(level),lobby?galleryArt[levels.indexOf(level)].sharp:null,()=>{lobby=false;view.hideLobby();exhibition=false;view.galleryActive=false;delete document.body.dataset.exhibition;$('#complete').hidden=true;},()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
 }
 
 async function openLevel(id,replace=false){
  const target=levels.find(entry=>entry.id===id);if(!target||!view||transitioning||!progression.canPlay(target.id))return;
  if(target===level&&!finished){closeExhibition();return;}
- if(dialog.open)closeSettings();if(settings.entryMode!=='direct'||!exhibition)showExhibition();selectArtwork(levels.indexOf(target));transitioning=true;document.body.dataset.transition='loading';releaseAll();
+ if(soundOn)audio();if(dialog.open)closeSettings();if(settings.entryMode!=='direct'||!exhibition)showExhibition();selectArtwork(levels.indexOf(target));transitioning=true;document.body.dataset.transition='loading';releaseAll();
  try{
   const [bundle]=await Promise.all([loader.load(target),galleryArt.length?Promise.resolve():galleryPictures()]);
   const image=galleryArt[levels.indexOf(target)].sharp;document.body.dataset.transition='entering';
   await prepareStage(target,bundle);
   view.beginEntry(levels.indexOf(target),image,()=>{
-   level=target;stages=level.stages;installBundle(bundle);view.colors=stages.map(stage=>stage.color);exhibition=false;view.galleryCurrent=levels.indexOf(level);rail.focus=rail.target=levels.indexOf(level);
+   lobby=false;view.hideLobby();level=target;stages=level.stages;installBundle(bundle);view.colors=stages.map(stage=>stage.color);exhibition=false;view.galleryCurrent=levels.indexOf(level);rail.focus=rail.target=levels.indexOf(level);
    reset();levelLabels();document.body.dataset.transition='arriving';delete document.body.dataset.exhibition;
    // Same renderer, same document. Only the local level bundle is replaced.
-   const url=new URL(location.href);url.search='';url.searchParams.set('v','29');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
+   const url=new URL(location.href);url.search='';url.searchParams.set('v','30');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
    view.setGalleryEntries(galleryArt,levels.indexOf(level));
   },()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
  }catch(error){transitioning=false;delete document.body.dataset.transition;$('#share-status').textContent='Eser yüklenemedi. Yeniden deneyebilirsin.';console.error(error);}
@@ -334,7 +337,7 @@ async function prepareStage(target,bundle){
 function activate(){
  cascade=null;cleanup=null;holdLatched=false;holdSupplyPending=false;autoKick=.38;paperMotion.reset();paperPose={x:0,y:0,cup:0,pitch:0};if(preparedStage?.id!==stages[index].id)preparedStage=null;sand=preparedStage?.sand||new Sand();sand.setBehavior(settings);if(!preparedStage)sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
  gc.globalCompositeOperation='source-over';gc.clearRect(0,0,W,H);partLayers=preparedStage?.layers||makePartLayers();flow.setRollDuration(peelDuration(partLayers.map(p=>p.piece)));
- makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);preparedStage=null;updateUI();
+ makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);preparedStage=null;session.checkpoint(level.id,index,false);updateUI();
 }
 function beginRoll(){if(soundOn)audio();if(finished||!flow.roll())return;down=false;strokes.length=0;peel=0;updateUI()}
 function prepareDose(){
@@ -364,11 +367,11 @@ function startShake(advance=false){if(finished||!flow.shake(advance))return;shak
 function nextStage(){
  refillAfterShake=false;nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
  if(index<stages.length-1){index++;activate();autoKick=(settings.autoAdvance||settings.controlMode==='hold')?.22:0;}
- else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;document.body.dataset.complete='true';progression.complete(level.id);levelLabels();try{gallery.remember({id:level.id,image:galleryThumbnail(paperCanvas),completedAt:Date.now()})}catch{}$('#gallery-caption').textContent=gallery.entries.length<2?'Galerinin ilk eseri':`Galerinde ${gallery.entries.length} eser`;showExhibition();galleryPictures().catch(console.warn);deviceTilt.stop();completedPoster=posterBlob(paperCanvas).catch(()=>null);releaseAll();$('#complete-title').focus({preventScroll:true});updateUI();}
+ else{finished=true;flow.phase='complete';pointer.visible=false;view.current.visible=false;view.heap.visible=false;$('#complete').hidden=false;document.body.dataset.complete='true';progression.complete(level.id);session.checkpoint(level.id,index,true);levelLabels();try{gallery.remember({id:level.id,image:galleryThumbnail(paperCanvas),completedAt:Date.now()})}catch{}$('#gallery-caption').textContent=gallery.entries.length<2?'Galerinin ilk eseri':`Galerinde ${gallery.entries.length} eser`;showExhibition();galleryPictures().catch(console.warn);deviceTilt.stop();completedPoster=posterBlob(paperCanvas).catch(()=>null);releaseAll();$('#complete-title').focus({preventScroll:true});updateUI();}
 }
 for(const button of document.querySelectorAll('[data-tool]'))button.onclick=()=>{const t=button.dataset.tool;if(t==='peel')beginRoll();else if(t==='pour')addSand();else if(t==='clean')startShake(false);else if(t==='brush'&&settings.controlMode==='tilt'&&!tiltFrame.active)enableTilt();else updateUI()};
 $('#add-sand').onclick=addSand;$('#shake').onclick=()=>startShake(false);$('#next').onclick=()=>{if(ready())startShake(true)};
-function reset(){if(!view)return;releaseAll();exhibition=false;view.galleryActive=false;delete document.body.dataset.exhibition;refillAfterShake=false;finished=false;index=0;autoKick=0;bakedContext.clearRect(0,0,W,H);cc.clearRect(0,0,W,H);view.reset();$('#complete').hidden=true;delete document.body.dataset.complete;completedPoster=null;sharing=false;$('#share').disabled=false;$('#save').disabled=false;$('#share-status').textContent='';activate()}
+function reset(){if(!view)return;lobby=false;view.hideLobby();releaseAll();exhibition=false;view.galleryActive=false;delete document.body.dataset.exhibition;refillAfterShake=false;finished=false;index=0;autoKick=0;bakedContext.clearRect(0,0,W,H);cc.clearRect(0,0,W,H);view.reset();$('#complete').hidden=true;delete document.body.dataset.complete;completedPoster=null;sharing=false;$('#share').disabled=false;$('#save').disabled=false;$('#share-status').textContent='';activate()}
 $('#reset').onclick=()=>{reset();closeSettings()};$('#again').onclick=()=>openLevel(levels[rail.target].id);
 let sharing=false,completedPoster=null;
 async function exportPoster(share=false){
@@ -382,7 +385,7 @@ async function exportPoster(share=false){
 }
 $('#save').onclick=()=>exportPoster();$('#share').onclick=()=>exportPoster(true);
 function beginPointer(e){
- e.preventDefault();if(view&&(exhibition||finished)&&!transitioning){if(!gate.begin(e.pointerId,e.isPrimary!==false))return;e.currentTarget.setPointerCapture(e.pointerId);rail.begin(e.clientX,e.timeStamp);galleryTap={x:e.clientX,y:e.clientY,time:e.timeStamp};return;}if(transitioning)return;if(!view||finished||(flow.busy&&flow.phase!=='rolling')||!gate.begin(e.pointerId,e.isPrimary!==false))return;
+ e.preventDefault();if(view&&(exhibition||finished)&&!transitioning){if(!gate.begin(e.pointerId,e.isPrimary!==false))return;e.currentTarget.setPointerCapture(e.pointerId);rail.begin(e.clientX,e.timeStamp);galleryTap={x:e.clientX,y:e.clientY,time:e.timeStamp};return;}if(transitioning||booting)return;if(!view||finished||(flow.busy&&flow.phase!=='rolling')||!gate.begin(e.pointerId,e.isPrimary!==false))return;
  e.currentTarget.setPointerCapture(e.pointerId);pointer={...view.mapPointer(e),visible:true};previous={...pointer};pointerTime=e.timeStamp;
  if(soundOn)audio();
  if(flow.phase==='peel'){beginRoll();down=false;pointer.visible=false;updateUI();return;}
@@ -405,7 +408,7 @@ canvas.addEventListener('pointermove',e=>{
  if(Math.hypot(p.x-previous.x,p.y-previous.y)>.1){appendStroke(strokes,{from:{...previous},to:{...p},seconds:Math.max(.001,Math.min(.1,(e.timeStamp-pointerTime)/1000))})}previous=p;pointerTime=e.timeStamp;
 });
 function pointerEnd(e){if(!gate.end(e.pointerId))return;if(exhibition||finished){
- const tap=galleryTap;galleryTap=null;rail.end(e.type==='pointercancel');galleryLabels();
+ const tap=galleryTap;galleryTap=null;rail.end(e.type==='pointercancel');session.focus(levels[rail.target].id);galleryLabels();
  if(tap&&e.type==='pointerup'&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<10&&e.timeStamp-tap.time<500){const hit=view.pickArtwork(e);if(hit!==null){selectArtwork(hit);if(progression.canPlay(levels[hit].id))openLevel(levels[hit].id);}}
  return;
  }paperMotion.end();down=false;if(e.pointerType!=='mouse')pointer.visible=false;sound(0);updateUI()}
@@ -414,7 +417,7 @@ canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
  $('#gallery-caption').style.top=(view.heroFrame.y+view.heroFrame.height+16)+'px';
- Object.assign(canvas.dataset,{version:'29',activeCoatAlpha:(view.coatUniforms.uActiveAlpha.value).toFixed(3),workAlpha:(view.workAlpha??1).toFixed(3),finishAction:cleanup?.action||'',posterShine:settings.posterShine,phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'30',booting:Number(booting),lobby:Number(lobby),activeCoatAlpha:(view.coatUniforms.uActiveAlpha.value).toFixed(3),workAlpha:(view.workAlpha??1).toFixed(3),finishAction:cleanup?.action||'',posterShine:settings.posterShine,phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#stat-recovery-label').textContent=settings.recovery==='table'?'Masaya inen / sönen':'Toplanan / kavanoz';$('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-table-upload':((view.tableUploadBytes||0)/1024).toFixed(1),'stat-recovery':(settings.recovery==='table'?(view.tableLanded||0):(view.recovery?.deposited||0)).toLocaleString('tr')+' / '+(settings.recovery==='table'?(view.tableCleared||0):view.collectedCount).toLocaleString('tr'),'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.tableActive||0)+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-transfer':((m.visible?view.grainUploadBytes||0:0)/1024).toFixed(0),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -469,12 +472,21 @@ function frame(t){
  const drawStart=performance.now();view.render(sand,{time:(gameTime+exhibitTime)*1000,dt:steps.total,realDt:dt,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip||(settings.controlMode==='hold'&&(cascade?.press||0)>.02),peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,cleanupPose:flow.phase==='shake'?cleanup?.pose:null,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
  if((statClock+=dt)>.2){statClock=0;updateUI();updateStats();}
 }
+function loadingStatus(message,percent){$('#loading-message').textContent=message;$('#loading-progress').style.width=percent+'%';$('#loading-screen').setAttribute('aria-valuenow',String(percent));}
 applySettings(settings);
 try{
- installBundle(await loader.load(level));
- index=resumeIndex(location.search,stages.length);
- for(let i=0;i<index;i++){
+ loadingStatus('Renkler hazırlanıyor',12);installBundle(await loader.load(level));
+ index=resumeRequested?resumeIndex(location.search,stages.length):bootChoice.index;
+ const bootFinished=!resumeRequested&&bootChoice.finished;if(bootFinished)index=stages.length-1;
+ loadingStatus('Tablon hazırlanıyor',40);
+ for(let i=0;i<(bootFinished?stages.length:index);i++){
   makeGlitter(stages[i].color);cc.clearRect(0,0,W,H);cc.drawImage(glitter,0,0);cc.globalCompositeOperation='destination-in';cc.drawImage(assets[stages[i].id],0,0);cc.globalCompositeOperation='source-over';bakedContext.drawImage(coat,0,0);
  }
- cc.clearRect(0,0,W,H);repaintPaper();view=new AtelierScene(canvas,displayPaper,stages.map(s=>s.color),settings);galleryPictures().catch(console.warn);activate();requestAnimationFrame(frame);
-}catch(error){$('#instruction-title').textContent='Atölye açılamadı.';$('#instruction-text').textContent='Sayfayı güncel bir tarayıcıda yenileyerek tekrar dene.';console.error(error);}
+ cc.clearRect(0,0,W,H);repaintPaper();view=new AtelierScene(canvas,displayPaper,stages.map(s=>s.color),settings);activate();
+ loadingStatus('Sergin açılıyor',75);await Promise.all([galleryPictures(),view.warmReady]);
+ finished=bootFinished;if(finished){flow.phase='complete';autoKick=0;completedPoster=posterBlob(paperCanvas).catch(()=>null);document.body.dataset.complete='true';}
+ lobby=true;showExhibition({silent:true});selectArtwork(levels.findIndex(l=>l.id===bootChoice.focus));view.galleryFocus=rail.focus=rail.target;view.finishClock=1.65;view.setLobbyImage(galleryArt[levels.indexOf(level)].image);session.checkpoint(level.id,index,finished);session.focus(levels[rail.target].id);
+ requestAnimationFrame(frame);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ loadingStatus('Hazır',100);booting=false;canvas.dataset.booting='0';document.body.removeAttribute('data-loading');$('#app').inert=false;$('#app').setAttribute('aria-busy','false');$('#loading-screen').classList.add('leaving');setTimeout(()=>{$('#loading-screen').hidden=true},450);
+}catch(error){loadingStatus('Atölye açılamadı. Yeniden deneyebilirsin.',0);$('#loading-retry').hidden=false;console.error(error);}
+$('#loading-retry').onclick=()=>location.reload();
