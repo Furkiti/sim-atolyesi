@@ -1,15 +1,15 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 6 Kasım 2026. Ürün/cache sürümü **v27**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 6 Kasım 2026. Ürün/cache sürümü **v28**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=27&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=28&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Güncel geliştirme: **v27**, basılı tut modunda %100 kaplamadan sonra otomatik bitiş. v25: gerçek katman yapışması, masa modu ve hafif son bükme; önceki davranışlar/seçenekler korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Güncel geliştirme: **v28**, sergi geçişleri, ses ayrımı, birleşik döküş ve görsel/son dokunuş seçenekleri. [Notlar](v28-gallery-and-gestures.md). %100 kaplamadan sonra otomatik bitiş korunur. v25: gerçek katman yapışması, masa modu ve hafif son bükme; önceki davranışlar/seçenekler korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
 - Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
 - v20 araştırma/önceki teknik kararlar: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
@@ -89,10 +89,10 @@ Toplam **51 renk aşaması**. Oyuncu ilk bölümden başlar; önceki tamamlanın
 
 URL örnekleri:
 
-- `?v=27&mod=basili&bolum=barcelona`
-- `?v=27&mod=egim&bolum=naruto`
-- `?v=27&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=27&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=28&mod=basili&bolum=barcelona`
+- `?v=28&mod=egim&bolum=naruto`
+- `?v=28&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=28&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -248,7 +248,7 @@ Ham videolar/sohbet ekleri ve `/tmp` içindeki çıkarım scriptleri clone için
 
 ## 11. Test ve görsel QA
 
-`npm run build` başarılı ve **153 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
+`npm run build` başarılı ve **160 test başarılı**. `exhibition.test.js`, sonlu sergi, sürükleme, tek kare kamera sıçraması ve kare başına yoğunluk hesabının paketleri/yapışmayı aynen korumasını kapsar.
 
 Özellikle dikkat edilecek regresyon testleri:
 
@@ -317,3 +317,7 @@ Kimlik bilgisi/token depoya yazma veya loga basma. Bu makinenin mevcut Git crede
 Başlangıç için Claude’a verilebilecek metin:
 
 > Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v27 eşiği ile v25 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
+
+## v28 ekleri
+
+[v28-gallery-and-gestures.md](v28-gallery-and-gestures.md) güncel geçiş, ses, hazırlık ve yeni modları açıklar. `gallery-audio.js` özgün, çevrimdışı render edilen hafif müziktir. Ayar anahtarları değişmedi. Simleri gizlemek için stokları/sayıları değiştirme: `workUniform` yalnız görüntüyü söndürür. `closeExhibition` de yeni giriş gibi `beginEntry` kullanır; null resim mevcut oyunu koruyan devam yoludur.

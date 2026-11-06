@@ -28,8 +28,8 @@ test('equal-height overlapping local pours keep one wide source rather than dele
  const pieces=[{bounds:{x:200,y:150,w:100,h:20}},{bounds:{x:215,y:150,w:80,h:20}}],l=holdLayout(new Uint8Array(480000),{holdPlacement:'local',pieces});assert.equal(l.bands.length,1);assert.equal(l.bands[0].bounds.w,100);
 });
 test('both targeted placements coat every exact mask, without premature painting or material duplication',()=>{
- for(const placement of ['width','local'])for(const level of levels)for(const stage of level.stages){const s=new Sand({random:rng()});s.setMask(mask(stage.id));const c=new HoldCascade(s,{...DEFAULTS,holdDensity:.5,holdRows:2,holdPlacement:placement,pieces:piecesByStage[stage.id]});c.pour(1,0);for(let n=0;n<30;n++)c.step(1/30,false,false);assert.equal(s.coverage,0);
-  for(const r of c.routes.filter(r=>r.target)){const b=c.bands[r.band];assert.ok(r.x>=b.x0&&r.x<=b.x1,stage.id+': horizontal source');if(placement==='local')assert.ok(b.y<=Math.max(2,r.y),stage.id+': upstream source');}
+ for(const placement of ['width','local','joined'])for(const level of levels)for(const stage of level.stages){const s=new Sand({random:rng()});s.setMask(mask(stage.id));const c=new HoldCascade(s,{...DEFAULTS,holdDensity:.5,holdRows:2,holdPlacement:placement,pieces:piecesByStage[stage.id]});c.pour(1,0);for(let n=0;n<30;n++)c.step(1/30,false,false);assert.equal(s.coverage,0);
+  for(const r of c.routes.filter(r=>r.target)){const b=c.bands[r.band];assert.ok(r.x>=b.x0&&r.x<=b.x1,stage.id+': horizontal source');if(['local','joined'].includes(placement))assert.ok(b.y<=Math.max(2,r.y),stage.id+': upstream source');}
   const total=s.emitted;for(let n=0;n<330;n++){c.step(1/30,true,false);for(let i=0;i<s.count;i++)if(s.state[i]===FREE&&s.y[i]>=800){s.state[i]=LOST;s.lost++;}}
   assert.equal(s.coverage,1,placement+':'+stage.id);assert.equal(s.emitted,total);const stats=s.stats();assert.equal(stats.air+stats.free+stats.bound+stats.lost,total);
  }

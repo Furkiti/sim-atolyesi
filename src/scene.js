@@ -11,7 +11,7 @@ import {peelFront,peelPoint} from './peel.js';
 import {FUNNEL,stepFunnel} from './funnel.js';
 import {paperLift} from './paper-motion.js';
 import {completionLayout,completionEase,galleryCamera,GALLERY} from './completion.js';
-import {entryZoomDistance,entryFrameOpacity,galleryOffset,entryProgress} from './exhibition.js';
+import {entryZoomDistance,entryFrameOpacity,workOpacity,galleryOffset,entryProgress} from './exhibition.js';
 import {BRUSHES} from './feel.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,ROWS,MAX_HEAP_HEIGHT,MAX_GRAIN_HEIGHT} from './sand.js';
@@ -52,10 +52,10 @@ export class AtelierScene {
   this.contactData=new Uint8Array(COLS*ROWS*4);this.contactSeen=new Uint8Array(COLS*ROWS);this.contactTexture=new T.DataTexture(this.contactData,COLS,ROWS);this.contactTexture.magFilter=T.NearestFilter;this.contactTexture.minFilter=T.NearestFilter;this.contactTexture.needsUpdate=true;
   const noise=new Uint8Array(W*H*4);for(let i=0;i<W*H;i++){noise[i*4]=Math.random()*255;noise[i*4+1]=Math.random()>.988?90+Math.random()*165:0;noise[i*4+3]=255;}
   this.sparkleField=new T.DataTexture(noise,W,H);this.sparkleField.generateMipmaps=true;this.sparkleField.minFilter=T.LinearMipmapLinearFilter;this.sparkleField.magFilter=T.LinearFilter;this.sparkleField.needsUpdate=true;
-  this.coatUniforms={uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
+  this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uRadiant:{value:settings.posterShine==='radiant'?1:0},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
   this.paper.material.onBeforeCompile=shader=>{
    Object.assign(shader.uniforms,this.coatUniforms);
-   shader.fragmentShader='uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
+   shader.fragmentShader='uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uRadiant; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
     vec4 contactInk=texture2D(uContact,vec2(vMapUv.x,1.0-vMapUv.y));
     float liveCoat=texture2D(uActiveMask,vMapUv).a*step(.5,contactInk.r);
@@ -71,6 +71,10 @@ export class AtelierScene {
     float flicker=pow(max(0.0,sin(uTime*1.4+rnd*197.0)),32.0);
     float coat=max(texture2D(uCoat,vMapUv).a,liveCoat);
     gl_FragColor.rgb+=coat*uSparkle*field.g*flicker*.24;
+    float shimmer=pow(max(0.0,sin(uTime*.83+rnd*173.0)),38.0);
+    float lightPass=pow(max(0.0,cos((vMapUv.x*.6+vMapUv.y*.85-uTime*.11)*6.28318)),32.0);
+    float breath=pow(max(0.0,sin(uTime*.69)),6.0);
+    gl_FragColor.rgb+=coat*uSparkle*uRadiant*(field.g*shimmer*.9+lightPass*breath*(.035+field.g*.6))*vec3(1.0,.96,.83);
     vec4 contact=texture2D(uContact,vec2(vMapUv.x,1.0-vMapUv.y));
     float birth=floor(contact.g*255.0+.5)+floor(contact.b*255.0+.5)*256.0;
     float age=mod(uTime*60.0-birth+65536.0,65536.0);
@@ -79,11 +83,11 @@ export class AtelierScene {
     gl_FragColor.rgb+=seated*(.035+step(.73,rnd)*.14)*vec3(1.0,.93,.76);`);
   };
   this.shaders=[];this.sparkLight=new T.Vector3(-.35,.45,1);
-  this.grainMaterial=new T.MeshStandardMaterial({color:'#ffffff',metalness:.95,roughness:.43,envMapIntensity:.5,side:T.DoubleSide});
+  this.grainMaterial=new T.MeshStandardMaterial({color:'#ffffff',metalness:.95,roughness:.43,envMapIntensity:.5,side:T.DoubleSide,alphaHash:true});
   this.grainMaterial.onBeforeCompile=shader=>{
-   shader.uniforms.uSparkLight={value:this.sparkLight};shader.uniforms.uSparkEnabled={value:this.settings.sparkles?1:0};shader.vertexShader='attribute float flakeSeed; varying float vFlakeSeed;\n'+shader.vertexShader;
+   shader.uniforms.uWorkAlpha=this.workUniform;shader.uniforms.uSparkLight={value:this.sparkLight};shader.uniforms.uSparkEnabled={value:this.settings.sparkles?1:0};shader.vertexShader='attribute float flakeSeed; varying float vFlakeSeed;\n'+shader.vertexShader;
    shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvFlakeSeed=flakeSeed;');
-   shader.fragmentShader='uniform float uSparkEnabled; uniform vec3 uSparkLight; varying float vFlakeSeed;\n'+shader.fragmentShader;
+   shader.fragmentShader='uniform float uWorkAlpha; uniform float uSparkEnabled; uniform vec3 uSparkLight; varying float vFlakeSeed;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
     // Preserve pigment under the strong studio lamps; only highlights bleach.
     vec3 pigment=linearToOutputTexel(vec4(diffuseColor.rgb,1.0)).rgb;
@@ -91,7 +95,7 @@ export class AtelierScene {
     vec3 halfLight=normalize(uSparkLight+normalize(vViewPosition));
     float glint=pow(max(dot(normal,halfLight),0.0),140.0);
     gl_FragColor.rgb+=uSparkEnabled*step(.975,vFlakeSeed)*glint*1.8*vec3(1.0,0.95,0.82);`);
-   this.shaders.push(shader);
+   shader.fragmentShader=shader.fragmentShader.replace('#include <alphahash_fragment>','diffuseColor.a*=uWorkAlpha;\n#include <alphahash_fragment>');this.shaders.push(shader);
   };
   this.current=this.makeGrains(48000);
   // Bend only each flake's centre, exactly as the CPU path does. All triangles,
@@ -122,8 +126,8 @@ export class AtelierScene {
   this.heapTexture=canvasTexture((c,s)=>{c.fillStyle='#898989';c.fillRect(0,0,s,s);for(let i=0;i<18000;i++){const g=Math.random()*255|0;c.fillStyle=`rgb(${g},${g},${g})`;c.fillRect(Math.random()*s,Math.random()*s,1,1)}},128);this.heapTexture.wrapS=this.heapTexture.wrapT=T.RepeatWrapping;this.heapTexture.repeat.set(11,15);
   this.heapGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);
   this.heapGeo.setAttribute('heapAmount',new T.Float32BufferAttribute(new Float32Array(this.heapGeo.attributes.position.count),1));
-  this.heapMat=new T.MeshStandardMaterial({color:colors[0],roughness:.65,metalness:.9,bumpMap:this.heapTexture,bumpScale:.7,envMapIntensity:.8});
-  const clipHeap=shader=>{shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<3.0) discard;');shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>','#include <dithering_fragment>\ngl_FragColor.rgb=mix(linearToOutputTexel(vec4(diffuseColor.rgb,1.0)).rgb,gl_FragColor.rgb,.35);\n#ifdef USE_BUMPMAP\nvec2 tile=floor(vBumpMapUv*128.0);float fleck=fract(sin(dot(tile,vec2(12.9898,78.233)))*43758.5453);gl_FragColor.rgb*=.78+fleck*.36;gl_FragColor.rgb+=step(.983,fleck)*.32;\n#endif');};
+  this.heapMat=new T.MeshStandardMaterial({alphaHash:true,color:colors[0],roughness:.65,metalness:.9,bumpMap:this.heapTexture,bumpScale:.7,envMapIntensity:.8});
+  const clipHeap=shader=>{shader.uniforms.uWorkAlpha=this.workUniform;shader.fragmentShader='uniform float uWorkAlpha;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <alphahash_fragment>','diffuseColor.a*=uWorkAlpha;\n#include <alphahash_fragment>');shader.vertexShader='attribute float heapAmount; varying float vHeap;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHeap=heapAmount;');shader.fragmentShader='varying float vHeap;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vHeap<3.0) discard;');shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>','#include <dithering_fragment>\ngl_FragColor.rgb=mix(linearToOutputTexel(vec4(diffuseColor.rgb,1.0)).rgb,gl_FragColor.rgb,.35);\n#ifdef USE_BUMPMAP\nvec2 tile=floor(vBumpMapUv*128.0);float fleck=fract(sin(dot(tile,vec2(12.9898,78.233)))*43758.5453);gl_FragColor.rgb*=.78+fleck*.36;gl_FragColor.rgb+=step(.983,fleck)*.32;\n#endif');};
   this.heapMat.onBeforeCompile=clipHeap;this.heap=new T.Mesh(this.heapGeo,this.heapMat);this.heap.frustumCulled=false;this.heap.receiveShadow=true;this.heap.castShadow=true;this.heap.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking});this.heap.customDepthMaterial.onBeforeCompile=clipHeap;this.paperGroup.add(this.heap);
   this.heapShadowGeo=new T.PlaneGeometry(W,H,COLS/2,ROWS/2);this.heapShadowGeo.setAttribute('heapAmount',new T.Float32BufferAttribute(new Float32Array(this.heapShadowGeo.attributes.position.count),1));
   const shadowMat=new T.MeshBasicMaterial({color:'#1c2830',transparent:true,opacity:.23,depthWrite:false});
@@ -291,7 +295,7 @@ export class AtelierScene {
    const hole=new T.Path();hole.moveTo(-iw/2,-ih/2);hole.lineTo(-iw/2,ih/2);hole.lineTo(iw/2,ih/2);hole.lineTo(iw/2,-ih/2);hole.closePath();shape.holes.push(hole);
    return new T.ExtrudeGeometry(shape,{depth,steps:1,bevelEnabled:bevel>0,bevelSize:bevel,bevelThickness:bevel*.7,bevelSegments:2,curveSegments:1});
   };
-  this.galleryMaterials=[new T.MeshStandardMaterial({color:'#8d7e65',roughness:.58,metalness:.18}),new T.MeshStandardMaterial({color:'#302a22',roughness:.8})];
+  this.galleryMaterials=[new T.MeshStandardMaterial({color:'#8d7e65',roughness:.58,metalness:.18,alphaHash:true}),new T.MeshStandardMaterial({color:'#302a22',roughness:.8,alphaHash:true})];
   // One continuous lip overlaps the opaque artwork. No coplanar cream rings.
   const geometries=[ring(660,860,598,798,14,2),new T.BoxGeometry(654,854,6)],zs=[0,-12];
   const frame=()=>{const group=new T.Group();for(let i=0;i<geometries.length;i++){const mesh=new T.Mesh(geometries[i],this.galleryMaterials[i]);mesh.userData.framePart=true;mesh.position.z=zs[i];mesh.castShadow=i===0;mesh.receiveShadow=true;group.add(mesh)}return group};
@@ -301,12 +305,16 @@ export class AtelierScene {
   this.entryCover=new T.Mesh(new T.PlaneGeometry(W,H),new T.MeshBasicMaterial({transparent:true,opacity:0,toneMapped:false,depthWrite:false,depthTest:false}));this.entryCover.position.z=3;this.entryCover.renderOrder=90;this.entryCover.visible=false;this.paperGroup.add(this.entryCover);
  }
  setGalleryEntries(entries,current){
+  if(this.galleryEntries?.length===entries.length&&this.galleryEntries.every((entry,i)=>entry===entries[i])&&this.galleryNeighbors.length===entries.length){this.galleryCurrent=current;for(const item of this.galleryNeighbors)item.group.position.x=galleryOffset(item.index,current,GALLERY.spacing);return;}this.galleryEntries=entries;
   for(const item of this.galleryNeighbors){item.picture.material.map?.dispose();item.picture.material.dispose();item.picture.geometry.dispose();item.label.material.map?.dispose();item.label.material.dispose();item.label.geometry.dispose();this.gallerySides.remove(item.group);}
   this.galleryNeighbors=[];this.galleryCurrent=current;
   entries.forEach((entry,index)=>{
    const group=this.frameFactory();group.position.set(galleryOffset(index,current,GALLERY.spacing),0,110);this.gallerySides.add(group);
    const map=new T.CanvasTexture(entry.image);map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
    const picture=new T.Mesh(new T.PlaneGeometry(W,H),new T.MeshBasicMaterial({map,toneMapped:false}));picture.position.z=3;group.add(picture);
+   if(entry.completed){picture.material.onBeforeCompile=shader=>{Object.assign(shader.uniforms,{uTime:this.coatUniforms.uTime,uRadiant:this.coatUniforms.uRadiant,uSparkle:this.coatUniforms.uSparkle,uSparkleField:this.coatUniforms.uSparkleField});shader.fragmentShader='uniform float uTime; uniform float uRadiant; uniform float uSparkle; uniform sampler2D uSparkleField;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
+    vec2 field=texture2D(uSparkleField,vMapUv).rg;float flash=pow(max(0.0,sin(uTime*.83+field.r*173.0)),38.0);float pass=pow(max(0.0,cos((vMapUv.x*.6+vMapUv.y*.85-uTime*.11)*6.28318)),32.0);float breath=pow(max(0.0,sin(uTime*.69)),6.0);gl_FragColor.rgb+=uSparkle*uRadiant*(field.g*flash*.9+pass*breath*(.035+field.g*.6))*vec3(1.0,.96,.83);`);};picture.material.customProgramCacheKey=()=> 'gallery-radiant-v28';}
+   this.renderer.initTexture(map);
    const labelCanvas=document.createElement('canvas');labelCanvas.width=512;labelCanvas.height=96;const c=labelCanvas.getContext('2d');c.fillStyle='#e4dccb';c.fillRect(0,0,512,96);c.fillStyle='#4e493e';c.font='500 24px sans-serif';c.fillText(String(index+1).padStart(2,'0')+'   '+entry.name,22,39);c.fillStyle='#8c806a';c.font='14px sans-serif';c.fillText(entry.completed?'SİM ÜZERİNE IŞIK · KOLEKSİYONUN':'YENİ BİR PARILTI SENİ BEKLİYOR',22,70);
    const labelMap=new T.CanvasTexture(labelCanvas);labelMap.colorSpace=T.SRGBColorSpace;const label=new T.Mesh(new T.PlaneGeometry(300,56),new T.MeshBasicMaterial({map:labelMap,toneMapped:false,transparent:true}));label.position.set(140,-488,-20);group.add(label);
    group.visible=index!==current;this.galleryNeighbors.push({group,picture,label,index});
@@ -318,22 +326,23 @@ export class AtelierScene {
   for(const item of this.galleryNeighbors)if(item.group.visible){choices.push({mesh:item.picture,index:item.index});for(const mesh of item.group.children)if(mesh.userData.framePart)choices.push({mesh,index:item.index});}
   const hits=this.ray.intersectObjects(choices.map(c=>c.mesh),false);return hits.length?choices.find(c=>c.mesh===hits[0].object).index:null;
  }
- restoreEntryFrame(entry){for(const item of entry.frameMaterials||[]){item.mesh.material.dispose();item.mesh.material=item.original;}}
+ restoreEntryFrame(entry){for(const item of entry.frameMaterials||[]){item.mesh.material.dispose();item.mesh.material=item.original;}if(entry.pictureState){const {picture,original,sharp}=entry.pictureState;picture.material.map=original;sharp.dispose();entry.pictureState=null;}}
  beginEntry(index,image,onCovered,onDone){
-  const item=this.galleryNeighbors[index],texture=new T.CanvasTexture(image);texture.colorSpace=T.SRGBColorSpace;
-  this.entryCover.material.map?.dispose();this.entryCover.material.map=texture;this.entryCover.material.needsUpdate=true;
+  const resume=!image,item=this.galleryNeighbors[index],texture=resume?null:new T.CanvasTexture(image);if(texture)texture.colorSpace=T.SRGBColorSpace;
+  if(texture){this.entryCover.material.map?.dispose();this.entryCover.material.map=texture;this.entryCover.material.needsUpdate=true;this.renderer?.initTexture(texture);}
   // The same sharp picture is used on both sides of the coordinate rebase.
-  if(item&&index!==this.galleryCurrent){item.picture.material.map.dispose();item.picture.material.map=texture.clone();item.picture.material.map.needsUpdate=true;}
+  let pictureState=null;if(texture&&item&&index!==this.galleryCurrent){const original=item.picture.material.map,sharp=texture.clone();item.picture.material.map=sharp;sharp.needsUpdate=true;this.renderer?.initTexture(sharp);pictureState={picture:item.picture,original,sharp};}
   const frame=index===this.galleryCurrent?this.galleryFrame:item?.group,frameMaterials=[];
-  for(const mesh of frame?.children||[])if(mesh.userData.framePart){const original=mesh.material;mesh.material=original.clone();mesh.material.transparent=true;mesh.material.depthWrite=false;frameMaterials.push({mesh,original});}
-  this.entry={index,age:0,stage:'in',style:this.settings.entryMode||'classic',frameMaterials,start:this.camera.position.clone(),rotation:this.camera.quaternion.clone(),onCovered,onDone};
+  for(const mesh of frame?.children||[])if(mesh.userData.framePart){const original=mesh.material;mesh.material=original.clone();mesh.material.opacity=1;mesh.material.transparent=true;mesh.material.alphaHash=false;mesh.material.depthWrite=false;frameMaterials.push({mesh,original});}
+  if(this.renderer){const visible=this.entryCover.visible;this.entryCover.visible=!!texture;this.renderer.compile(this.scene,this.camera);this.entryCover.visible=visible;}
+  this.entry={pictureState,workStart:this.workAlpha??0,resume,index,age:0,stage:'in',style:this.settings.entryMode||'classic',frameMaterials,start:this.camera.position.clone(),rotation:this.camera.quaternion.clone(),onCovered,onDone};
  }
  updateCompletion(finished,dt,time){
   const active=finished||this.galleryActive;this.finishClock=Math.max(0,Math.min(1.65,this.finishClock+(active?dt:-dt)*1.3));
   const e=completionEase(this.finishClock,this.reducedMotion.matches&&active);this.heroProgress=e;
   this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);
   this.paperGroup.rotation.z=.018+(this.cardTapRoll||0);this.celebration.visible=finished&&this.settings.sparkles&&!this.reducedMotion.matches;
-  this.galleryFrame.visible=this.gallerySides.visible=e>.002;
+  this.galleryFrame.visible=this.gallerySides.visible=e>.002;if(!this.entry){this.entryFrameAlpha=e;for(const material of this.galleryMaterials){material.opacity=e;}}
   this.paperOutline.visible=e<.1;
   for(const neighbor of this.galleryNeighbors){neighbor.group.visible=neighbor.index!==this.galleryCurrent;neighbor.label.visible=neighbor.index!==Math.round(this.galleryFocus);}
   this.floor.material.color.lerpColors(this.floorRestColor,this.galleryWallColor,e);this.scene.background.copy(this.floor.material.color);
@@ -360,12 +369,12 @@ export class AtelierScene {
     this.entryFrameAlpha=entryFrameOpacity(p);for(const item of entry.frameMaterials||[])item.mesh.material.opacity=this.entryFrameAlpha;
     if(p===1){
      this.restoreEntryFrame(entry);this.camera.position.x-=x;entry.start.copy(this.camera.position);entry.rotation.copy(this.camera.quaternion);entry.stage='out';entry.age=0;
-     entry.onCovered();this.camera.position.copy(entry.start);this.camera.quaternion.copy(entry.rotation);this.finishClock=0;this.galleryActive=false;this.galleryFrame.visible=this.gallerySides.visible=false;this.paperGroup.position.set(0,0,110);this.paperGroup.rotation.set(0,0,0);this.entryCover.visible=true;this.entryCover.material.opacity=1;
+     entry.onCovered();this.camera.position.copy(entry.start);this.camera.quaternion.copy(entry.rotation);this.finishClock=0;this.galleryActive=false;this.galleryFrame.visible=this.gallerySides.visible=false;this.paperGroup.position.set(0,0,110);this.paperGroup.rotation.set(0,0,0);this.entryCover.visible=!entry.resume;this.entryCover.material.opacity=entry.resume?0:1;
     }
    }else{
     const p=entryProgress(entry.age*1.3,this.reducedMotion.matches);
     this.camera.position.copy(entry.start).lerp(this.playCameraPosition,p);this.camera.quaternion.copy(entry.rotation).slerp(this.playCameraQuaternion,p);this.paperGroup.position.z=110*(1-p);this.paperGroup.rotation.z=.018*p;
-    this.entryCover.material.opacity=1-smooth(Math.max(0,(p-.18)/.72));this.entryCover.visible=p<.9;
+    this.entryCover.material.opacity=1-smooth(Math.max(0,(p-.18)/.72));this.entryCover.visible=!entry.resume&&p<.9;
     if(p===1){this.entry=null;this.entryCover.visible=false;entry.onDone();}
    }
   }
@@ -389,7 +398,7 @@ export class AtelierScene {
   this.key.shadow.needsUpdate=true;
   this.scene.environmentIntensity=settings.reflections?.55:0;
   this.grainMaterial.envMapIntensity=settings.reflections?.5:0;this.grainMaterial.metalness=settings.reflections?.95:.85;this.grainMaterial.roughness=settings.sparkles?.43:.6;for(const key of ['metalness','roughness','envMapIntensity'])this.current.material[key]=this.grainMaterial[key];
-  this.heapMat.envMapIntensity=settings.reflections?.25:0;this.coatUniforms.uSparkle.value=settings.sparkles?1:0;
+  this.coatUniforms.uRadiant.value=settings.posterShine==='radiant'?1:0;this.heapMat.envMapIntensity=settings.reflections?.25:0;this.coatUniforms.uSparkle.value=settings.sparkles?1:0;
   for(const shader of this.shaders)shader.uniforms.uSparkEnabled.value=settings.sparkles?1:0;
   if(old?.shadow!==settings.shadow)this.scene.traverse(o=>{if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material])m.needsUpdate=true;}});
   for(const sp of this.glints)if(!settings.sparkles)sp.visible=false;
@@ -487,7 +496,7 @@ export class AtelierScene {
  }
  setCardPose(paperPose,phase,bendPose){
   this.updateBend(bendPose.bend,bendPose.pitch);
-  this.cardTapRoll=bendPose.roll||0;this.paperGroup.rotation.x=phase==='shake'?0:paperPose.y;this.paperGroup.rotation.y=phase==='shake'?0:paperPose.x;this.paperGroup.rotation.z=.018+this.cardTapRoll;this.paperGroup.position.z=phase==='shake'?(bendPose.lift||0):paperLift(paperPose);this.paperGroup.updateMatrixWorld(true);
+  this.cardTapRoll=bendPose.roll||0;this.paperGroup.rotation.x=phase==='shake'?(bendPose.tiltY||0):paperPose.y;this.paperGroup.rotation.y=phase==='shake'?(bendPose.tiltX||0):paperPose.x;this.paperGroup.rotation.z=.018+this.cardTapRoll;this.paperGroup.position.z=phase==='shake'?(bendPose.lift||0):paperLift(paperPose);this.paperGroup.updateMatrixWorld(true);
  }
  markContacts(bound){
   const frame=Math.floor((this.time||0)*.06)%65536;let changed=false;
@@ -527,7 +536,7 @@ export class AtelierScene {
   const fill=Math.min(62,Math.cbrt(this.collectedCount)*1.2*Math.pow(grainScale(this.settings),.65));this.jarFill.visible=this.collectedCount>0;this.jarFill.scale.y=Math.max(.01,fill);this.jarFill.position.z=FUNNEL.bottom+fill/2;this.collected.position.set(0,0,FUNNEL.bottom+fill);
   for(let side=0;side<2;side++){
    const hand=this.hands[side];hand.visible=this.draining;const x=side?300:-300,q=bentPoint(x,0,5,this.bend,this.pitch);
-   hand.position.set(q.x+(side?8:-8),q.y,q.z+this.paperGroup.position.z);hand.rotation.y=(side?-1:1)*this.bend*.7;
+   hand.position.set(q.x+(side?8:-8),q.y,q.z+this.paperGroup.position.z);hand.rotation.set(0,(side?-1:1)*this.bend*.7,0);
   }
  }
  catchGrain(p){
@@ -605,9 +614,11 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,cleanupPose=null,finished=false}){
-  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;if(!finished&&!this.galleryActive&&!this.entry)this.updateGrains(sand);this.syncSpills();this.syncTable();this.tablePool.visible=!(finished||this.galleryActive||this.entry);
-  const showHeap=this.settings.relief&&!finished&&!this.galleryActive&&!this.entry&&phase!=='shake'&&sand.surfaceCount>0;
-  this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=sand.granular?.10:.23;if(showHeap)this.updateHeap(sand,dt);
+  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;this.workAlpha=finished?0:workOpacity(this.heroProgress,this.entry,this.reducedMotion.matches);this.workUniform.value=this.workAlpha;
+  if(this.entry?.stage==='out'){const p=entryProgress(this.entry.age*1.3,this.reducedMotion.matches);this.updateBend(pose.bend*p,pose.pitch*p);this.paperGroup.rotation.x=paperPose.y*p;this.paperGroup.rotation.y=paperPose.x*p;}
+  if(this.workAlpha>.001&&!finished)this.updateGrains(sand);this.current.visible=this.workAlpha>.001&&!finished;this.syncSpills();this.syncTable();this.tablePool.visible=this.workAlpha>.001;
+  const showHeap=this.settings.relief&&this.workAlpha>.001&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
+  this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=(sand.granular?.10:.23)*this.workAlpha;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;
    this.key.position.y+=((340-(pointer.y-400)*.25)-this.key.position.y)*.045;
@@ -631,6 +642,10 @@ export class AtelierScene {
   const p=variant.strands.geometry.attributes.position,base=variant.base;
   for(let i=0;i<p.count;i++){const tip=i%2;p.setXYZ(i,base[i*3]*(1+tip*flex*.2),base[i*3+1]+tip*flex*5,base[i*3+2]*(1-tip*flex*.55));}p.needsUpdate=true;
   variant.mat.color.set('#b58b55').lerp(new T.Color(this.colors[this.activeColor]),Math.min(.4,brushMotion.load*.5));
+  if(phase==='shake'&&cleanupPose&&!this.galleryActive&&!this.entry){
+   for(let side=0;side<2;side++){const hand=this.hands[side],x=side?300:-300,y=370*(cleanupPose.gripTop||0),q=bentPoint(x,y,5,this.bend,this.pitch);hand.position.copy(this.paperGroup.localToWorld(new T.Vector3(q.x+(side?8:-8),q.y,q.z)));}
+   if(cleanupPose.sweep){this.hands[1].visible=false;const hand=this.hands[0],t=smooth(cleanupPose.sweepProgress||0);hand.position.copy(this.paperGroup.localToWorld(new T.Vector3(-240+480*t,cleanupPose.sweepY||0,18)));hand.rotation.set(0,0,-.9);}
+  }
   this.posePour(pour);
   const sampleCount=this.settings.sparkles&&!finished?Math.min(sand.count,28):0;
   for(let j=0;j<28;j++){
@@ -640,8 +655,8 @@ export class AtelierScene {
    const k=sand.cell(sand.x[i],sand.y[i]);if(flash<.1||(sand.state[i]===FREE&&k>=0&&sand.z[i]<sand.height[k]*.73)){sp.visible=false;continue;}
    sp.visible=true;const glintPoint=bentPoint(sand.x[i]-300,400-sand.y[i],sand.z[i]+4,this.bend,this.pitch);sp.position.set(glintPoint.x,glintPoint.y,glintPoint.z);sp.scale.setScalar(8+flash*7);sp.material.opacity=flash*.8;
   }
-  if(this.galleryActive||finished||this.entry){this.brush.visible=this.tweezers.visible=this.hint.visible=this.peelSheet.visible=false;this.current.visible=this.heap.visible=this.heapShadow.visible=false;for(const hand of this.hands)hand.visible=false;for(const jar of this.jars)jar.visible=false;for(const glint of this.glints)glint.visible=false;}
-  this.spill.visible=!(this.galleryActive||finished||this.entry);
+  if(this.galleryActive||finished||this.entry){this.brush.visible=this.tweezers.visible=this.hint.visible=this.peelSheet.visible=false;if(this.workAlpha<=.001)this.current.visible=this.heap.visible=this.heapShadow.visible=false;for(const hand of this.hands)hand.visible=false;for(const jar of this.jars)jar.visible=false;for(const glint of this.glints)glint.visible=false;}
+  this.spill.visible=this.workAlpha>.001;
   this.renderer.render(this.scene,this.camera);
  }
  capture(){this.renderer.render(this.scene,this.camera);return this.canvas.toDataURL('image/png')}

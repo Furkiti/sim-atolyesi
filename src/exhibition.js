@@ -17,3 +17,9 @@ export function entryProgress(seconds,reduced=false){const t=Math.min(1,Math.max
 
 export function entryZoomDistance(aspect,fov=35){return Math.max(600/aspect,800)/(2*Math.tan(fov*Math.PI/360))*1.04;}
 export function entryFrameOpacity(progress){const t=Math.max(0,Math.min(1,(progress-.25)/.65));return 1-t*t*(3-2*t);}
+
+// Loose material belongs to the work view; preserve it while only fading its draw.
+export function workOpacity(heroProgress,entry,reduced=false){
+ if(entry){if(entry.stage==='in'){const t=Math.max(0,Math.min(1,entry.age/.3));return (entry.workStart||0)*(1-t*t*(3-2*t));}const p=entryProgress(entry.age*1.3,reduced),t=Math.max(0,Math.min(1,(p-.16)/.68));return t*t*(3-2*t);}
+ const t=Math.max(0,Math.min(1,heroProgress/.7));return 1-t*t*(3-2*t);
+}

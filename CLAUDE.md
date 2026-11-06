@@ -4,12 +4,12 @@ Bu repo mevcut, çalışan oyundur. Devam etmeden önce **[docs/CLAUDE_HANDOFF.m
 
 ## Mevcut checkpoint
 
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=27&mod=basili&giris=direct
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=28&mod=basili&giris=direct
 - Repo: https://github.com/Furkiti/sim-atolyesi
-- Güncel geliştirme: v27 — basılı tut modunda alan %100 dolunca otomatik bitiş. v25: gerçek yapışan ek tanelerle akış azalması, yeni masada bekleyip sönme modu ve daha hafif son bükme. Ayrıntı: [docs/v25-adhesion-and-desk.md](docs/v25-adhesion-and-desk.md). Önceki modlar korunur.
+- Güncel geliştirme: v28 — yumuşak sergi/devam geçişleri, sergi müziği, birleşik yerel döküş, ışıltılı tablo ve rastgele son dokunuş. [v28 notları](docs/v28-gallery-and-gestures.md). v27 %100 eşiği korunur. v25: gerçek yapışan ek tanelerle akış azalması, yeni masada bekleyip sönme modu ve daha hafif son bükme. Ayrıntı: [docs/v25-adhesion-and-desk.md](docs/v25-adhesion-and-desk.md). Önceki modlar korunur.
 - Önceki sabit nokta: `v19-handoff` Git etiketi. Bu etiket tarihsel v19 sürümüdür.
 - Kaynak proje bu klasördür; derlenmiş giriş `game.js`, asıl uygulama `src/main.js`.
-- Son doğrulama: `npm run build` başarılı, 153 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
+- Son doğrulama: `npm run build` başarılı, 160 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
 
 ## Çalıştırma
 
@@ -49,3 +49,6 @@ Görsel araştırma ve kararlar: [docs/v20-ui-references.md](docs/v20-ui-referen
 - `recovery`: classic / trough / rills / bowl / table. Ortak toplama sonlu kütle hesabıdır; çizilen aktarım paketleri birkaç taneyi temsil edebilir. Her fizik adımında `updateSpill(dt,false)`, görüntü başına bir kez `syncSpills()` çalışır.
 
 - Masa modu `table-spill.js` ile gerçek masa düzleminde durur. Sabit taneler bir kez GPU’ya yazılır, sönme shader saatinde yapılır. `bindLayer` gerçek serbest taneyi bağlar; kapsama ağırlığını yeniden artırmaz.
+
+- `finishStyle:variety` yalnız `extraFinish` açıkken rastgele none/fold/tap/left/right/diagonal/lift/sweep seçer. Var olan sonlu toz paketleri taşınır. `posterShine:radiant` yalnız kaplama ve bitmiş komşu tablolarda ek ışık verir. `holdPlacement:joined` aynı yüksekliğe yakın yerel şeritleri birleştirir.
+- Sergide fizik durur, sim yalnız shader saydamlığıyla sönüp geri gelir. Devam yolu `beginEntry(...,null,...)` ile mevcut oyunu korur; yeni bölüm hazırlığı kamera başlamadan yapılır.

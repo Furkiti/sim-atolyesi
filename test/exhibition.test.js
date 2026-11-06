@@ -38,3 +38,12 @@ test('level replacement cannot reset the camera for one frame under either entry
  assert.equal(covered,1);assert.equal(done,1);assert.ok(camera.position.distanceTo(play)<1e-8);assert.equal(scene.entryCover.visible,false);
  }
 });
+
+// The resume path uses the same frame fading as new artwork, without replacing material state.
+test('resuming an unfinished painting fades its frame and never installs a stale poster cover',()=>{
+ const camera=new T.PerspectiveCamera(35,390/844,80,16000),play=new T.Vector3(0,-669,2230),group=new T.Group(),material=new T.MeshBasicMaterial(),frame=new T.Group();const rim=new T.Mesh(new T.BoxGeometry(10,800,5),material);rim.userData.framePart=true;frame.add(rim);camera.position.copy(play);
+ const scene={restoreEntryFrame:AtelierScene.prototype.restoreEntryFrame,camera,playCameraPosition:play,playCameraQuaternion:new T.Quaternion(),paperGroup:group,finishClock:1.65,reducedMotion:{matches:false},settings:{sparkles:false,entryMode:'direct'},celebration:{visible:false},galleryFrame:frame,gallerySides:{visible:true},paperOutline:{visible:true},galleryMaterials:[material],galleryNeighbors:[],floor:{material:{color:new T.Color()}},scene:{background:new T.Color()},floorRestColor:new T.Color(),galleryWallColor:new T.Color(),coatUniforms:{uCelebrate:{value:0}},heroFrame:{x:73,y:252,width:244,height:318},canvas:{clientHeight:844},galleryCurrent:0,galleryFocus:0,galleryActive:true,celebrationStars:[],bend:0,pitch:0,updateBend(){},entryCover:new T.Mesh(new T.PlaneGeometry(600,800),new T.MeshBasicMaterial())};scene.entryCover.visible=false;let covered=0,done=0,sawFade=false;
+ AtelierScene.prototype.beginEntry.call(scene,0,null,()=>{covered++;scene.galleryActive=false;},()=>done++);for(let f=0;f<260;f++){AtelierScene.prototype.updateCompletion.call(scene,false,1/60,f*1000/60);if(scene.entry?.stage==='in'&&rim.material.opacity>.01&&rim.material.opacity<.99)sawFade=true;assert.equal(scene.entryCover.visible,false);}
+ assert.ok(sawFade);assert.equal(covered,1);assert.equal(done,1);assert.equal(rim.material,material);assert.equal(material.opacity,0);
+ const original=new T.Texture(),sharp=new T.Texture(),picture={material:{map:sharp}};let disposed=false;sharp.addEventListener('dispose',()=>disposed=true);AtelierScene.prototype.restoreEntryFrame.call(scene,{pictureState:{picture,original,sharp}});assert.equal(picture.material.map,original);assert.ok(disposed,'temporary sharp entry image must not permanently reveal the gallery preview');
+});

@@ -1,3 +1,4 @@
+import {GalleryMusic,audioScene} from './gallery-audio.js';
 import {Sand,W,H} from './sand.js';
 import {AtelierScene} from './scene.js';
 import {Flow,PointerGate,FramePacer,drainPose,appendStroke} from './interaction.js';
@@ -81,8 +82,8 @@ const baked=document.createElement('canvas');baked.width=W;baked.height=H;const 
 const coat=document.createElement('canvas');coat.width=W;coat.height=H;const cc=coat.getContext('2d');
 const paintMask=document.createElement('canvas');paintMask.width=W;paintMask.height=H;const mc=paintMask.getContext('2d');
 const glitter=document.createElement('canvas');glitter.width=W;glitter.height=H;const tc=glitter.getContext('2d');
-let lastCoated=-1;
-function makeGlitter(color){drawGlitter(tc,color,W,H,settings.controlMode==='hold'?settings.holdGrainSize:1);view?.setActiveCoat(assets[stages[index].id],glitter,assets.lines)}
+let lastCoated=-1,preparedStage=null;
+function makeGlitter(color){if(preparedStage?.glitter){tc.clearRect(0,0,W,H);tc.drawImage(preparedStage.glitter,0,0);}else drawGlitter(tc,color,W,H,settings.controlMode==='hold'?settings.holdGrainSize:1);view?.setActiveCoat(assets[stages[index].id],glitter,assets.lines)}
 function updateCoat(force=false,finish=false){
  if(!sand||(!force&&lastCoated===sand.coveredWeight))return;
  lastCoated=sand.coveredWeight;
@@ -110,7 +111,7 @@ function repaintPaper(){
  pc.drawImage(baked,0,0);pc.drawImage(coat,0,0);
  pc.globalAlpha=.96;pc.drawImage(assets.lines,0,0);pc.globalAlpha=1;view?.paperChanged();
 }
-let audioCtx,soundOn=true,brushSource,brushGain,pourSource,playedPour=-1;
+let audioCtx,soundOn=true,brushSource,brushGain,pourSource,playedPour=-1,galleryMusic;
 const audioBuffers={};
 async function audio(){
  if(!audioCtx){
@@ -119,18 +120,22 @@ async function audio(){
   if(audioBuffers.brush){brushSource=audioCtx.createBufferSource();brushSource.buffer=audioBuffers.brush;brushSource.loop=true;brushSource.connect(brushGain);brushSource.start();}
  }
  await audioCtx.resume();
+ if(!galleryMusic)galleryMusic=new GalleryMusic(audioCtx);
 }
 function sound(amount=0){
+ const scene=audioScene({exhibition,transitioning,finished,dialog:dialog.open,visible:!document.hidden});canvas.dataset.audioScene=scene;canvas.dataset.pourPlaying=String(!!pourSource);canvas.dataset.galleryMusic=String(!!galleryMusic?.active);
  if(!audioCtx||!brushGain)return;
- brushGain.gain.setTargetAtTime(soundOn&&flow.phase==='brush'?Math.min(1,amount*5*(.8+brushMotion.load*.35)):0,audioCtx.currentTime,.035);
+ galleryMusic?.setActive(soundOn&&settings.galleryMusic&&scene==='gallery');
+ brushGain.gain.setTargetAtTime(soundOn&&scene==='work'&&flow.phase==='brush'?Math.min(1,amount*5*(.8+brushMotion.load*.35)):0,audioCtx.currentTime,.035);
  if(brushSource)brushSource.playbackRate.setTargetAtTime(.85+Math.min(.35,brushMotion.speed/1800),audioCtx.currentTime,.06);
- if(soundOn&&flow.phase==='pour'&&flow.elapsed>=.48&&flow.elapsed<flow.pourDuration-.35&&playedPour!==flow.serial&&audioBuffers.pour){
+ if(soundOn&&scene==='work'&&flow.phase==='pour'&&flow.elapsed>=.48&&flow.elapsed<flow.pourDuration-.35&&playedPour!==flow.serial&&audioBuffers.pour){
   playedPour=flow.serial;pourSource?.stop();pourSource=audioCtx.createBufferSource();pourSource.buffer=audioBuffers.pour;pourSource.loop=true;pourSource.connect(audioCtx.destination);pourSource.start();
  }
- if((!soundOn||flow.phase!=='pour')&&pourSource){try{pourSource.stop()}catch{}pourSource=null;}
+ if((!soundOn||scene!=='work'||flow.phase!=='pour')&&pourSource){try{pourSource.stop()}catch{}pourSource=null;playedPour=-1;}
 }
 $('#sound').textContent='Ses: açık';$('#sound').setAttribute('aria-label','Sesi kapat');
 $('#sound').onclick=async()=>{soundOn=!soundOn;await audio();sound(0);$('#sound').textContent=soundOn?'Ses: açık':'Ses: kapalı';$('#sound').setAttribute('aria-label',soundOn?'Sesi kapat':'Sesi aç')};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)sound(0)});
 function releaseAll(){if(rail.drag)rail.end(true);holdLatched=false;paperMotion.end();down=false;gate.cancel();strokes.length=0;sound(0)}
 function settingsTab(name){
  document.querySelectorAll('[data-settings-tab]').forEach(e=>e.hidden=e.dataset.settingsTab!==name);
@@ -152,9 +157,10 @@ function applySettings(next){
  if(partLayers.length&&previousSurface!==settings.surface){for(const layer of partLayers)paintGlue(layer);gc.clearRect(0,0,W,H);const count=revealedParts;revealedParts=0;revealUntil(count);repaintPaper();}pacer.setLimit(settings.frameLimit);if(!settings.autoAdvance)autoKick=0;syncSettings();readySince=0;updateUI();updateTiltUI();
 }
 function syncSettings(){
+ $('#finish-style').disabled=!settings.extraFinish;$('#poster-shine').disabled=!settings.sparkles;
  document.querySelectorAll('input[name="layout"]').forEach(e=>e.checked=e.value===settings.layout);
- for(const [id,key] of Object.entries({'auto-advance':'autoAdvance','extra-finish':'extraFinish','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'}))$('#'+id).checked=settings[key];
- for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','control-mode':'controlMode','tilt-sensitivity':'tiltSensitivity','heap-depth':'heapDepth','surface-style':'surface','hold-density':'holdDensity','hold-grain-size':'holdGrainSize','hold-rows':'holdRows','hold-placement':'holdPlacement','entry-mode':'entryMode','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
+ for(const [id,key] of Object.entries({'auto-advance':'autoAdvance','extra-finish':'extraFinish','gallery-music':'galleryMusic','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'}))$('#'+id).checked=settings[key];
+ for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','control-mode':'controlMode','tilt-sensitivity':'tiltSensitivity','heap-depth':'heapDepth','surface-style':'surface','hold-density':'holdDensity','hold-grain-size':'holdGrainSize','hold-rows':'holdRows','hold-placement':'holdPlacement','entry-mode':'entryMode','finish-style':'finishStyle','poster-shine':'posterShine','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
  document.querySelectorAll('input[name=recovery]').forEach(e=>e.checked=e.value===settings.recovery);
  document.querySelectorAll('input[name=feel]').forEach(e=>e.checked=e.value===settings.feel);
  document.querySelectorAll('input[name=game-speed]').forEach(e=>e.checked=Number(e.value)===settings.gameSpeed);$('#speed-readout').textContent=settings.gameSpeed+'x';
@@ -164,14 +170,14 @@ function syncSettings(){
 }
 document.querySelectorAll('input[name="layout"]').forEach(e=>e.onchange=()=>applySettings({...settings,layout:e.value,autoAdvance:e.value==='flow'}));
 $('#quality-profile').onchange=e=>{if(e.target.value!=='custom')applySettings(profileSettings(settings,e.target.value))};
-const checks={'auto-advance':'autoAdvance','extra-finish':'extraFinish','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'};
+const checks={'auto-advance':'autoAdvance','extra-finish':'extraFinish','gallery-music':'galleryMusic','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'};
 for(const [id,key] of Object.entries(checks))$('#'+id).onchange=e=>applySettings({...settings,[key]:e.target.checked,profile:['autoAdvance','extraFinish','showStats'].includes(key)?settings.profile:'custom'});
 for(const [id,key,numeric] of [['render-scale','renderScale',true],['pour-amount','pourAmount',true],['shadow-quality','shadow',false],['frame-limit','frameLimit',true],['pace','pace',false]]){
  $('#'+id).addEventListener(id.includes('scale')||id.includes('amount')?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,profile:['renderScale','shadow','frameLimit'].includes(key)?'custom':settings.profile}));
 }
 document.querySelectorAll('input[name=game-speed]').forEach(e=>e.onchange=()=>applySettings({...settings,gameSpeed:Number(e.value)}));
 document.querySelectorAll('input[name=feel]').forEach(e=>e.onchange=()=>applySettings(feelSettings(settings,e.value)));
-for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['control-mode','controlMode',false],['tilt-sensitivity','tiltSensitivity',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true],['hold-density','holdDensity',true],['hold-grain-size','holdGrainSize',true],['hold-rows','holdRows',true],['hold-placement','holdPlacement',false],['entry-mode','entryMode',false]]){
+for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['control-mode','controlMode',false],['tilt-sensitivity','tiltSensitivity',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true],['hold-density','holdDensity',true],['hold-grain-size','holdGrainSize',true],['hold-rows','holdRows',true],['hold-placement','holdPlacement',false],['entry-mode','entryMode',false],['finish-style','finishStyle',false],['poster-shine','posterShine',false]]){
  $('#'+id).addEventListener(numeric&&id!=='hold-rows'?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface','supply','paperMotion','heapDepth','controlMode','tiltSensitivity','holdDensity','holdGrainSize','holdRows','holdPlacement','entryMode'].includes(key)?settings.feel:'custom'}));
 }
 document.querySelectorAll('input[name=recovery]').forEach(e=>e.onchange=()=>applySettings({...settings,recovery:e.value}));
@@ -179,7 +185,7 @@ const tiltMessages={off:'Telefonu rahat tut, sonra hareketi aç.',requesting:'Ha
 function updateTiltUI(){
  const enabled=settings.controlMode==='tilt',hold=settings.controlMode==='hold',live=['active','demo'].includes(deviceTilt.status);
  for(const id of ['response','brush-shape','brush-width','paper-motion'])$('#'+id).closest('label').hidden=enabled||hold;
- $('#feel-name').textContent=hold?'Basılı akış':FEELS[settings.feel]?.name||'Özel karışım';$('#hold-detail').hidden=!hold;$('#hold-detail').textContent=`${settings.holdPlacement==='local'?'Ortak üst akışın ulaşamadığı parçalara ek şerit dökülür.':settings.holdPlacement==='width'?'Üstte yalnızca hedef genişliği kadar bir şerit dökülür.':`Sim üst kenara ${settings.holdRows===2?'iki yatay sıra':'bir yatay sıra'} halinde dökülür.`} Basılı tut: kâğıt bükülsün, sim aksın. %100’de kendisi tamamlanır. Kalan taneler huniye dökülür. Son dokunuş açıksa küçük vuruşlar temizliği tamamlar.`;$('#hold-options').hidden=!hold;for(const id of ['pour-amount','grain-size'])$('#'+id).closest('label').hidden=hold;for(const id of ['supply-style','mobility','pour-style'])$('#'+id).closest('label').hidden=hold;document.querySelector('.feel-options').hidden=hold;
+ $('#feel-name').textContent=hold?'Basılı akış':FEELS[settings.feel]?.name||'Özel karışım';$('#hold-detail').hidden=!hold;$('#hold-detail').textContent=`${['local','joined'].includes(settings.holdPlacement)?(settings.holdPlacement==='joined'?'Yakın parçalar için tek kesintisiz yerel şerit dökülür.':'Ortak üst akışın ulaşamadığı parçalara ek şerit dökülür.'):settings.holdPlacement==='width'?'Üstte yalnızca hedef genişliği kadar bir şerit dökülür.':`Sim üst kenara ${settings.holdRows===2?'iki yatay sıra':'bir yatay sıra'} halinde dökülür.`} Basılı tut: kâğıt bükülsün, sim aksın. %100’de kendisi tamamlanır. ${settings.recovery==='table'?'Kalan taneler masada sönerek kaybolur.':'Kalan taneler seçilen toplama alanına dökülür.'} Son dokunuş açıksa ${settings.finishStyle==='variety'?'rastgele bir hareket':'küçük vuruşlar'} temizliği tamamlar.`;$('#hold-options').hidden=!hold;for(const id of ['pour-amount','grain-size'])$('#'+id).closest('label').hidden=hold;for(const id of ['supply-style','mobility','pour-style'])$('#'+id).closest('label').hidden=hold;document.querySelector('.feel-options').hidden=hold;
  const controls={'supply-style':'supply','pour-amount':'pourAmount','paper-motion':'paperMotion',mobility:'mobility',response:'response','brush-shape':'brushShape','brush-width':'brushWidth','grain-size':'grainSize','pour-style':'pourStyle','tilt-sensitivity':'tiltSensitivity','auto-advance':'autoAdvance',pace:'pace'};
  for(const [id,key] of Object.entries(controls)){const active=settingAvailable(key,settings.controlMode);$('#'+id).disabled=!active;$('#'+id).closest('label').hidden=!active||(enabled&&['response','brush-shape','brush-width','paper-motion'].includes(id));}
  for(const e of document.querySelectorAll('input[name=feel],input[name=layout]'))e.disabled=hold;
@@ -213,7 +219,7 @@ async function galleryPictures(){
  const entries=await Promise.all(levels.map(async entry=>{
   const record=gallery.entries.find(item=>item.id===entry.id),locked=!progression.canPlay(entry.id),completed=progression.isComplete(entry.id)&&!locked,key=entry.id+':'+(record?.completedAt||'preview')+':'+locked+':'+completed;
   for(const cached of previewCache.keys())if(cached.startsWith(entry.id+':')&&cached!==key)previewCache.delete(cached);
-  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=27`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
+  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=28`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
   return previewCache.get(key);
  }));galleryArt=entries;view.setGalleryEntries(entries,levels.indexOf(level));return entries;
 }
@@ -230,9 +236,13 @@ function galleryLabels(){
 }
 function selectArtwork(index){rail.select(index);galleryLabels();if(progression.canPlay(levels[rail.target].id))loader.load(levels[rail.target]).catch(console.warn);}
 function showExhibition(){
- if(!view||transitioning)return;releaseAll();pointer.visible=false;exhibition=true;rail.focus=rail.target=levels.indexOf(level);view.galleryActive=true;view.galleryFocus=rail.focus;document.body.dataset.exhibition='true';$('#complete').hidden=false;galleryLabels();galleryPictures().catch(console.warn);
+ if(!view||transitioning)return;releaseAll();pointer.visible=false;exhibition=true;sound(0);if(soundOn)audio();rail.focus=rail.target=levels.indexOf(level);view.galleryActive=true;view.galleryFocus=rail.focus;document.body.dataset.exhibition='true';$('#complete').hidden=false;galleryLabels();galleryPictures().catch(console.warn);
 }
-function closeExhibition(){if(transitioning||finished)return;releaseAll();exhibition=false;view.galleryActive=false;rail.focus=rail.target=levels.indexOf(level);delete document.body.dataset.exhibition;$('#complete').hidden=true;updateUI();}
+function closeExhibition(){
+ if(transitioning||finished||!exhibition)return;releaseAll();transitioning=true;document.body.dataset.transition='entering';rail.focus=rail.target=levels.indexOf(level);
+ view.beginEntry(levels.indexOf(level),null,()=>{exhibition=false;view.galleryActive=false;delete document.body.dataset.exhibition;$('#complete').hidden=true;},()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
+}
+
 async function openLevel(id,replace=false){
  const target=levels.find(entry=>entry.id===id);if(!target||!view||transitioning||!progression.canPlay(target.id))return;
  if(target===level&&!finished){closeExhibition();return;}
@@ -240,11 +250,12 @@ async function openLevel(id,replace=false){
  try{
   const [bundle]=await Promise.all([loader.load(target),galleryArt.length?Promise.resolve():galleryPictures()]);
   const image=galleryArt[levels.indexOf(target)].sharp;document.body.dataset.transition='entering';
+  await prepareStage(target,bundle);
   view.beginEntry(levels.indexOf(target),image,()=>{
    level=target;stages=level.stages;installBundle(bundle);view.colors=stages.map(stage=>stage.color);exhibition=false;view.galleryCurrent=levels.indexOf(level);rail.focus=rail.target=levels.indexOf(level);
    reset();levelLabels();document.body.dataset.transition='arriving';delete document.body.dataset.exhibition;
    // Same renderer, same document. Only the local level bundle is replaced.
-   const url=new URL(location.href);url.search='';url.searchParams.set('v','25');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
+   const url=new URL(location.href);url.search='';url.searchParams.set('v','28');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
    view.setGalleryEntries(galleryArt,levels.indexOf(level));
   },()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
  }catch(error){transitioning=false;delete document.body.dataset.transition;$('#share-status').textContent='Eser yüklenemedi. Yeniden deneyebilirsin.';console.error(error);}
@@ -270,7 +281,7 @@ function updateUI(){
  if(phase==='rolling')messages.rolling=['↗',`Parça ${activePart+1} / ${partLayers.length} · ${settings.gameSpeed>1?settings.gameSpeed+'x hızla':'yavaşça'} soyuluyor`,'Küçük parçalar kısa, büyük parçalar yavaşça açılır.','SOY'];
  if(settings.controlMode==='tilt'){messages.brush=['◉','Telefonu eğ, simi akıt.','Yapışkana değen taneler kendiliğinden tutunur.','EĞ'];messages.pour=['⠿','Sim dökülüyor.','Birazdan telefonu eğerek simleri taşı.','DÖK'];}
  if(settings.controlMode==='brush'&&phase==='brush'&&settings.paperMotion==='hands')messages.brush[2]='Simleri yay; kâğıdı eğmek için yan kenarını tut.';
- if(settings.controlMode==='hold'){messages.peel=['↗','Kâğıt hazırlanıyor.','Parçalar açılınca üst kenara sim dökülecek.','HAZIRLA'];messages.pour=['⠿',settings.holdPlacement==='local'?'Gerekli parçalara ortak döküş.':settings.holdPlacement==='width'?'Hedef genişliğinde bir şerit.':settings.holdRows===2?'Üst kenara iki sıra sim.':'Üst kenara bir şerit sim.','Şerit hazırlanınca ekrana basılı tut.','DÖK'];messages.brush=['∪',(down||holdLatched)?'Bükülüyor, simler akıyor.':'Basılı tut, simi akıt.','Bırakınca durur. Yapışkana ulaşan simler tutunur.','BASILI TUT'];}
+ if(settings.controlMode==='hold'){messages.peel=['↗','Kâğıt hazırlanıyor.','Parçalar açılınca üst kenara sim dökülecek.','HAZIRLA'];messages.pour=['⠿',['local','joined'].includes(settings.holdPlacement)?'Gerekli parçalara ortak döküş.':settings.holdPlacement==='width'?'Hedef genişliğinde bir şerit.':settings.holdRows===2?'Üst kenara iki sıra sim.':'Üst kenara bir şerit sim.','Şerit hazırlanınca ekrana basılı tut.','DÖK'];messages.brush=['∪',(down||holdLatched)?'Bükülüyor, simler akıyor.':'Basılı tut, simi akıt.','Bırakınca durur. Yapışkana ulaşan simler tutunur.','BASILI TUT'];}
  if(settings.recovery!=='classic'){messages.brush[2]=settings.recovery==='rills'?'Düşen simler kanallardan kavanoza akıyor.':'Düşen simler altta birikiyor; sonda kavanoza akacak.';messages.shake=['∪',settings.recovery==='rills'?'Son simleri de kavanoza akıt.':'Biriken simleri kavanoza doldur.','Oyun boyunca topladığın simler de aynı kavanoza giriyor.','TOPLA'];}
  if(settings.recovery==='table'){messages.brush[2]='Düşen simler masada kalıp yavaşça sönüyor.';messages.shake=['∪','Simler masaya dökülsün.','Masanın üstünde durup yumuşakça kaybolacaklar.','MASAYA BIRAK'];}
  if(phase==='shake'&&cleanup?.tapping)messages.shake=['⋰','Son tanelere hafif bir vuruş.','Kâğıtta kalan simler de huniye dökülüyor.','SON DOKUNUŞ'];
@@ -288,10 +299,10 @@ function updateUI(){
   button.classList.toggle('selected',selected);button.disabled=finished||flow.busy||(t==='peel'?phase!=='peel':phase==='peel');
  }
 }
-function makePartLayers(){
- return piecesByStage[stages[index].id].map(piece=>{
+function makePartLayers(stage=stages[index],source=assets){
+ return piecesByStage[stage.id].map(piece=>{
   const b=piece.bounds,mask=document.createElement('canvas');mask.width=b.w;mask.height=b.h;const m=mask.getContext('2d');m.fillStyle='#fff';for(const [y,x,length] of piece.runs)m.fillRect(x,y,length,1);
-  const paper=document.createElement('canvas');paper.width=b.w;paper.height=b.h;const p=paper.getContext('2d');p.drawImage(paperBase,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=.96;p.drawImage(assets.lines,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=1;p.globalCompositeOperation='destination-in';p.drawImage(mask,0,0);
+  const paper=document.createElement('canvas');paper.width=b.w;paper.height=b.h;const p=paper.getContext('2d');p.drawImage(paperBase,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=.96;p.drawImage(source.lines,b.x,b.y,b.w,b.h,0,0,b.w,b.h);p.globalAlpha=1;p.globalCompositeOperation='destination-in';p.drawImage(mask,0,0);
   const brown=document.createElement('canvas');brown.width=b.w;brown.height=b.h;const layer={piece,paper,brown,mask};paintGlue(layer);return layer;
  });
 }
@@ -309,10 +320,18 @@ function animatePeel(){
  if(activePart!==pose.index){activePart=pose.index;view.setPeelPiece(partLayers[activePart].paper,partLayers[activePart].piece);}
  peel=pose.progress;view.peelProgress(peel);repaintPaper();
 }
+async function prepareStage(target,bundle){
+ // Do expensive raster preparation before the camera moves, never at the covered seam.
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ const stage=target.stages[0],sand=new Sand();sand.setBehavior(settings);sand.setMask(bundle.masks[stage.id]);
+ const texture=document.createElement('canvas');texture.width=W;texture.height=H;drawGlitter(texture.getContext('2d'),stage.color,W,H,settings.controlMode==='hold'?settings.holdGrainSize:1);
+ preparedStage={id:stage.id,sand,layers:makePartLayers(stage,bundle.assets),glitter:texture};
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+}
 function activate(){
- cascade=null;cleanup=null;holdLatched=false;holdSupplyPending=false;autoKick=.38;paperMotion.reset();sand=new Sand();sand.setBehavior(settings);sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
- gc.globalCompositeOperation='source-over';gc.clearRect(0,0,W,H);partLayers=makePartLayers();flow.setRollDuration(peelDuration(partLayers.map(p=>p.piece)));
- makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);updateUI();
+ cascade=null;cleanup=null;holdLatched=false;holdSupplyPending=false;autoKick=.38;paperMotion.reset();paperPose={x:0,y:0,cup:0,pitch:0};if(preparedStage?.id!==stages[index].id)preparedStage=null;sand=preparedStage?.sand||new Sand();sand.setBehavior(settings);if(!preparedStage)sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
+ gc.globalCompositeOperation='source-over';gc.clearRect(0,0,W,H);partLayers=preparedStage?.layers||makePartLayers();flow.setRollDuration(peelDuration(partLayers.map(p=>p.piece)));
+ makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);preparedStage=null;updateUI();
 }
 function beginRoll(){if(soundOn)audio();if(finished||!flow.roll())return;down=false;strokes.length=0;peel=0;updateUI()}
 function prepareDose(){
@@ -338,7 +357,7 @@ $('#hold-repour').onclick=()=>{
  if(settings.controlMode!=='hold'||finished)return;releaseAll();view.reset();activate();flow.phase='pour';peeled=true;peel=1;revealUntil(partLayers.length);view.peelProgress(1);prepareDose();repaintPaper();closeSettings();updateUI();
 };
 function addSand(){if(finished||flow.busy)return;sand.compact();view.currentInitialized=0;if(sand.capacity-sand.count<200&&sand.hasLoose()){refillAfterShake=true;startShake(false);return;}if(!flow.pour())return;releaseAll();prepareDose();readySince=0;updateUI()}
-function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();cleanup=settings.extraFinish?new CleanupCycle(sand,cascade?.retainedIndices):null;flow.returnDuration=cleanup?.28:1;view.beginCleanup();pour=null;view.posePour(null);readySince=0;updateUI()}
+function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();cleanup=settings.extraFinish?new CleanupCycle(sand,cascade?.retainedIndices,sand.random,{style:settings.finishStyle}):null;flow.returnDuration=cleanup?.28:1;view.beginCleanup();pour=null;view.posePour(null);readySince=0;updateUI()}
 function nextStage(){
  refillAfterShake=false;nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
  if(index<stages.length-1){index++;activate();autoKick=(settings.autoAdvance||settings.controlMode==='hold')?.22:0;}
@@ -392,7 +411,7 @@ canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
  $('#gallery-caption').style.top=(view.heroFrame.y+view.heroFrame.height+16)+'px';
- Object.assign(canvas.dataset,{version:'27',phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'28',workAlpha:(view.workAlpha??1).toFixed(3),finishAction:cleanup?.action||'',posterShine:settings.posterShine,phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#stat-recovery-label').textContent=settings.recovery==='table'?'Masaya inen / sönen':'Toplanan / kavanoz';$('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-table-upload':((view.tableUploadBytes||0)/1024).toFixed(1),'stat-recovery':(settings.recovery==='table'?(view.tableLanded||0):(view.recovery?.deposited||0)).toLocaleString('tr')+' / '+(settings.recovery==='table'?(view.tableCleared||0):view.collectedCount).toLocaleString('tr'),'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.tableActive||0)+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-transfer':((m.visible?view.grainUploadBytes||0:0)/1024).toFixed(0),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -410,7 +429,7 @@ function advanceGame(dt){
  holding=settings.controlMode==='hold'&&(down||holdLatched)&&!dialog.open&&flow.phase==='brush'&&!finished;
  if(flow.phase==='brush'&&!dialog.open&&shouldFinishHeld(sand.coverage,settings.controlMode))cascade?.requestFinish();
  if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.step(dt,holding,false);
- paperPose=settings.controlMode==='hold'?(cascade?.pose||{x:0,y:0,cup:0,pitch:0}):settings.controlMode==='tilt'?{x:tiltPlaying?tiltFrame.x*.25:0,y:tiltPlaying?tiltFrame.y*.25:0,cup:0}:paperMotion.step(dt,settings.paperMotion,brushMotion,down);
+ paperPose=settings.controlMode==='hold'?(['pour','brush'].includes(flow.phase)?cascade?.pose:null)||{x:0,y:0,cup:0,pitch:0}:settings.controlMode==='tilt'?{x:tiltPlaying?tiltFrame.x*.25:0,y:tiltPlaying?tiltFrame.y*.25:0,cup:0}:paperMotion.step(dt,settings.paperMotion,brushMotion,down);
  const drainage=flow.phase==='shake'?(cleanup?.pose||drainPose(flow.progress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};view.setCardPose(paperPose,flow.phase,drainage);
  if(!finished&&!(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase)))sand.step(dt,{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying,granular:settings.controlMode==='tilt'&&flow.phase!=='shake',pinned:flow.phase==='shake'?cleanup?.pinned:null});
  if(flow.phase==='shake'&&cleanup)cleanup.advance(dt,view.spills.length+(view.recovery?.pending||0));

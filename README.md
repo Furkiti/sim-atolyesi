@@ -1,3 +1,5 @@
+> v28: [Sergi geçişleri ve yeni hissiyat seçenekleri](docs/v28-gallery-and-gestures.md). Simler yumuşakça sönüp geri gelir; sergi müziği, birleşik yerel döküş, ışıltılı tablo ve rastgele son dokunuş eklendi.
+
 > v27: Basılı tut modunda alan doğal akışla %100 dolunca parmağı bırakmadan temizlik ve renk geçişi başlar. Erken tamamlama kaldırıldı.
 
 > v26: Basılı tut modunda %96’ya ulaşınca kalan gerçek hedef taneleri yerleşir; parmağı bırakmadan temizlik ve renk geçişi başlar.
@@ -16,7 +18,7 @@
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=27&mod=basili&giris=direct)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=28&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 

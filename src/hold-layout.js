@@ -11,12 +11,16 @@ function supplied(bounds,sources){
  return false;
 }
 export function holdLayout(mask,settings={}){
- const placement=settings.holdPlacement||'sheet',rows=settings.holdRows===2?2:1,full=boundsOf(mask),parts=placement==='local'&&settings.pieces?.length?settings.pieces:[{bounds:full}],bands=[];
+ const placement=settings.holdPlacement||'sheet',local=['local','joined'].includes(placement),rows=settings.holdRows===2?2:1,full=boundsOf(mask),parts=local&&settings.pieces?.length?settings.pieces:[{bounds:full}],bands=[];
  let sources=parts.map(({bounds})=>{
   const padding=clamp(bounds.w*.2+14,24,85);
-  return {bounds,x0:placement==='sheet'?.5:clamp(bounds.x-padding,.5,W-.5),x1:placement==='sheet'?W-.5:clamp(bounds.x+bounds.w+padding,.5,W-.5),y:placement==='local'?Math.max(2,bounds.y-65):22};
+  return {bounds,x0:placement==='sheet'?.5:clamp(bounds.x-padding,.5,W-.5),x1:placement==='sheet'?W-.5:clamp(bounds.x+bounds.w+padding,.5,W-.5),y:local?Math.max(2,bounds.y-65):22};
  });
- if(placement==='local'){
+ if(placement==='joined'){
+  // Same-height overlapping/nearby ribbons become one continuous bottle sweep.
+  const groups=[];for(const source of sources.sort((a,b)=>a.y-b.y||a.x0-b.x0)){const group=groups.find(b=>Math.abs(b.y-source.y)<=72&&source.x0<=b.x1+36&&source.x1>=b.x0-36);if(group){group.x0=Math.min(group.x0,source.x0);group.x1=Math.max(group.x1,source.x1);group.y=Math.min(group.y,source.y);group.bounds={x:group.x0,y:Math.min(group.bounds.y,source.bounds.y),w:group.x1-group.x0,h:Math.max(group.bounds.h,source.bounds.h)};}else groups.push({...source});}sources=groups;
+ }
+ if(local){
   // Remove the smallest/lower redundant supplies first, keeping the broad upper
   // pour whenever it can serve the whole mask. Recheck all islands each time so
   // deleting a source never leaves targets assigned to an unreachable stream.
@@ -24,7 +28,7 @@ export function holdLayout(mask,settings={}){
   for(const source of removable){const rest=sources.filter(s=>s!==source);if(rest.length&&parts.every(p=>supplied(p.bounds,rest)))sources=rest;}
   sources.sort((a,b)=>a.y-b.y||b.x1-b.x0-(a.x1-a.x0));
  }
- for(const [group,source] of sources.entries())for(let row=0;row<rows;row++)bands.push({...source,group,row,y:placement==='local'?Math.max(2,source.y-(rows-1-row)*72):22+row*72});
+ for(const [group,source] of sources.entries())for(let row=0;row<rows;row++)bands.push({...source,group,row,y:local?Math.max(2,source.y-(rows-1-row)*72):22+row*72});
  const length=bands.reduce((sum,b)=>sum+b.x1-b.x0,0),doseScale=placement==='sheet'?1:length/(W*rows);
  return {placement,rows,bands,doseScale};
 }

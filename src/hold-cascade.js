@@ -16,7 +16,7 @@ export class HoldCascade {
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
    if(pixel){
-    const row=this.rows===2&&(this.placement==='local'||pixel.y>104)?(k*37%101)%2:0,band=this.placement==='local'?holdSourceBand(this.bands,pixel.x,pixel.y,row):Math.min(this.bands.length-1,row);this.routes.push({...pixel,target:true,row,band});counts[band]++;
+    const row=this.rows===2&&(['local','joined'].includes(this.placement)||pixel.y>104)?(k*37%101)%2:0,band=['local','joined'].includes(this.placement)?holdSourceBand(this.bands,pixel.x,pixel.y,row):Math.min(this.bands.length-1,row);this.routes.push({...pixel,target:true,row,band});counts[band]++;
    }
   }
   const available=sand.capacity-sand.count,loose=Math.min(plannedLoose,Math.max(0,available-this.routes.length)),totalWidth=this.bands.reduce((sum,b)=>sum+b.x1-b.x0,0);let assigned=0;
