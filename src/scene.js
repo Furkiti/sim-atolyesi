@@ -52,13 +52,14 @@ export class AtelierScene {
   this.contactData=new Uint8Array(COLS*ROWS*4);this.contactSeen=new Uint8Array(COLS*ROWS);this.contactTexture=new T.DataTexture(this.contactData,COLS,ROWS);this.contactTexture.magFilter=T.NearestFilter;this.contactTexture.minFilter=T.NearestFilter;this.contactTexture.needsUpdate=true;
   const noise=new Uint8Array(W*H*4);for(let i=0;i<W*H;i++){noise[i*4]=Math.random()*255;noise[i*4+1]=Math.random()>.988?90+Math.random()*165:0;noise[i*4+3]=255;}
   this.sparkleField=new T.DataTexture(noise,W,H);this.sparkleField.generateMipmaps=true;this.sparkleField.minFilter=T.LinearMipmapLinearFilter;this.sparkleField.magFilter=T.LinearFilter;this.sparkleField.needsUpdate=true;
-  this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uRadiant:{value:settings.posterShine==='radiant'?1:0},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
+  this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uActiveAlpha:{value:1},uRadiant:{value:settings.posterShine==='radiant'?1:0},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
   this.paper.material.onBeforeCompile=shader=>{
    Object.assign(shader.uniforms,this.coatUniforms);
-   shader.fragmentShader='uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uRadiant; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
+   shader.fragmentShader='uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uActiveAlpha; uniform float uRadiant; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
     vec4 contactInk=texture2D(uContact,vec2(vMapUv.x,1.0-vMapUv.y));
-    float liveCoat=texture2D(uActiveMask,vMapUv).a*step(.5,contactInk.r);
+    float activeMask=texture2D(uActiveMask,vMapUv).a;
+    float liveCoat=activeMask*step(.5,contactInk.r)*uActiveAlpha;
     vec4 artLine=texture2D(uLineArt,vMapUv);
     vec3 livePigment=linearToOutputTexel(texture2D(uActiveGlitter,vMapUv)).rgb;
     livePigment=mix(livePigment,linearToOutputTexel(artLine).rgb,artLine.a*.96);
@@ -69,7 +70,7 @@ export class AtelierScene {
     vec2 field=texture2D(uSparkleField,vMapUv).rg;
     float rnd=field.r;
     float flicker=pow(max(0.0,sin(uTime*1.4+rnd*197.0)),32.0);
-    float coat=max(texture2D(uCoat,vMapUv).a,liveCoat);
+    float coat=max(texture2D(uCoat,vMapUv).a*(1.0-activeMask),liveCoat);
     gl_FragColor.rgb+=coat*uSparkle*field.g*flicker*.24;
     float shimmer=pow(max(0.0,sin(uTime*.83+rnd*173.0)),38.0);
     float lightPass=pow(max(0.0,cos((vMapUv.x*.6+vMapUv.y*.85-uTime*.11)*6.28318)),32.0);
@@ -614,7 +615,7 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,cleanupPose=null,finished=false}){
-  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;this.workAlpha=finished?0:workOpacity(this.heroProgress,this.entry,this.reducedMotion.matches);this.workUniform.value=this.workAlpha;
+  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;this.workAlpha=finished?0:workOpacity(this.heroProgress,this.entry,this.reducedMotion.matches);this.workUniform.value=this.workAlpha;this.coatUniforms.uActiveAlpha.value=finished?1:this.workAlpha;
   if(this.entry?.stage==='out'){const p=entryProgress(this.entry.age*1.3,this.reducedMotion.matches);this.updateBend(pose.bend*p,pose.pitch*p);this.paperGroup.rotation.x=paperPose.y*p;this.paperGroup.rotation.y=paperPose.x*p;}
   if(this.workAlpha>.001&&!finished)this.updateGrains(sand);this.current.visible=this.workAlpha>.001&&!finished;this.syncSpills();this.syncTable();this.tablePool.visible=this.workAlpha>.001;
   const showHeap=this.settings.relief&&this.workAlpha>.001&&!finished&&phase!=='shake'&&sand.surfaceCount>0;

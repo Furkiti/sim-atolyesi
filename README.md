@@ -1,3 +1,5 @@
+> v29: Devam eden renkte yapışmış simler de sergiye çıkarken saydamlaşır; geri girince aynı ilerleme görünür. [Video incelemesi ve düzeltme](docs/v29-active-coat-fade.md).
+
 > v28: [Sergi geçişleri ve yeni hissiyat seçenekleri](docs/v28-gallery-and-gestures.md). Simler yumuşakça sönüp geri gelir; sergi müziği, birleşik yerel döküş, ışıltılı tablo ve rastgele son dokunuş eklendi.
 
 > v27: Basılı tut modunda alan doğal akışla %100 dolunca parmağı bırakmadan temizlik ve renk geçişi başlar. Erken tamamlama kaldırıldı.
@@ -18,7 +20,7 @@
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=28&mod=basili&giris=direct)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=29&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
