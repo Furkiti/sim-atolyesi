@@ -11,6 +11,7 @@ export class HoldCascade {
   const plannedLoose=Math.round(holdLooseCount(settings)*layout.doseScale);
   sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+plannedLoose)));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.activeRoutes=[];this.retainedIndices=[];this.dustAssigned=0;
   const counts=new Uint32Array(this.bands.length);
+  this.layerCapacity=Uint8Array.from(sand.target,pixels=>Math.min(24,Math.max(1,Math.ceil(pixels/(1.25*(settings.holdGrainSize||1)**2)))));this.pendingLayers=new Uint8Array(sand.target.length);this.pendingLayerCount=0;this.adheredLayers=0;
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
@@ -70,7 +71,7 @@ export class HoldCascade {
    if(route.landing!==undefined){
     route.landing+=dt;const progress=Math.min(1,route.landing/.18),ease=progress*progress*(3-2*progress);
     s.z[i]=route.contactZ+(2.2-route.contactZ)*ease;s.roll[i]+=dt*2;
-    if(progress===1){s.z[i]=2.2;s.bind(i,true);}continue;
+    if(progress===1){s.z[i]=2.2;if(route.layerCell!==undefined){this.pendingLayers[route.layerCell]--;this.pendingLayerCount--;if(s.bindLayer(i))this.adheredLayers++;}else s.bind(i,true);}continue;
    }
    const travel=route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
    const old=s.y[i],next=this.finishing&&route.target?old+(route.y-old)*Math.min(1,dt/Math.max(.001,.30-this.finishElapsed)):old+travel;route.distance+=travel;
@@ -80,9 +81,17 @@ export class HoldCascade {
    s.x[i]=route.x+(route.target?0:Math.sin(route.distance*.035+s.seed[i]*31)*2.2);
    s.x[i]=Math.max(.2,Math.min(W-.2,s.x[i]));s.y[i]=next;s.vy[i]=route.speed;s.roll[i]+=travel*.075;
    if(route.rest&&next>=route.rest.y){s.x[i]=route.rest.x;s.y[i]=route.rest.y;s.vy[i]=0;route.parked=true;this.retainedIndices.push(i);continue;}
+   if(!route.target&&!route.rest&&!this.sealing){
+    const samples=Math.max(1,Math.ceil((next-old)/CELL));
+    for(let n=1;n<=samples;n++){
+     const y=old+(next-old)*n/samples,k=s.cell(s.x[i],y);
+     if(k<0||!s.bound[k]||s.bound[k]+this.pendingLayers[k]>=this.layerCapacity[k]||!s.onGlue(s.x[i],y))continue;
+     s.y[i]=y;s.vy[i]=0;route.layerCell=k;route.contactZ=s.z[i];route.landing=0;this.pendingLayers[k]++;this.pendingLayerCount++;break;
+    }
+   }
    if(route.target&&old<=route.y&&next>=route.y){s.x[i]=route.x;s.y[i]=route.y;s.vy[i]=0;route.contactZ=s.z[i];s.z[i]=route.contactZ;route.landing=0;}
   }
-  this.activeRoutes.length=active;
+  this.activeRoutes.length=active;if(this.finishing&&s.coverage===1)this.sealing=true;
   // Reuse the existing density/height representation without advancing its
   // independent physics solver. Painting is exclusively the travelling packets.
   if(refresh)this.refresh();

@@ -4,12 +4,12 @@ Bu repo mevcut, çalışan oyundur. Devam etmeden önce **[docs/CLAUDE_HANDOFF.m
 
 ## Mevcut checkpoint
 
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=24&mod=basili&giris=direct
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=25&mod=basili&giris=direct
 - Repo: https://github.com/Furkiti/sim-atolyesi
-- Güncel geliştirme: v24 — huni CPU/çizim optimizasyonu ve üç ortak sim toplama denemesi. Ayrıntı: [docs/v24-collection-and-performance.md](docs/v24-collection-and-performance.md); [görsel deneme masası](docs/v24-collection-lab.html). v22/v23 ana mod ve yerel döküş davranışları korunur.
+- Güncel geliştirme: v25 — gerçek yapışan ek tanelerle akış azalması, yeni masada bekleyip sönme modu ve daha hafif son bükme. Ayrıntı: [docs/v25-adhesion-and-desk.md](docs/v25-adhesion-and-desk.md). Önceki modlar korunur.
 - Önceki sabit nokta: `v19-handoff` Git etiketi. Bu etiket tarihsel v19 sürümüdür.
 - Kaynak proje bu klasördür; derlenmiş giriş `game.js`, asıl uygulama `src/main.js`.
-- Son doğrulama: `npm run build` başarılı, 147 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
+- Son doğrulama: `npm run build` başarılı, 153 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
 
 ## Çalıştırma
 
@@ -46,4 +46,6 @@ Görsel araştırma ve kararlar: [docs/v20-ui-references.md](docs/v20-ui-referen
 - Normal döküş, kâğıttaki artık ve huni akışı seçilen boyutu izler. Yalnız isteğe bağlı son dokunuşa ayrılan en fazla 24 tane, ilk bükmeden sonra `finishDust` ile %38 boyuta iner. Son dokunuş varsayılan kapalıdır.
 - Basılı tut ana varsayılan: hedef genişliği / yoğunluk %500 / boyut %170. `holdPresetVersion:22` bir kez yeni varsayılanları taşır; sonraki kullanıcı değişikliklerini korur. Basılı soyma hızlandırması kaldırıldı; genel oyun hızı çalışır.
 
-- `recovery`: classic / trough / rills / bowl. Ortak toplama sonlu kütle hesabıdır; çizilen aktarım paketleri birkaç taneyi temsil edebilir. Her fizik adımında `updateSpill(dt,false)`, görüntü başına bir kez `syncSpills()` çalışır.
+- `recovery`: classic / trough / rills / bowl / table. Ortak toplama sonlu kütle hesabıdır; çizilen aktarım paketleri birkaç taneyi temsil edebilir. Her fizik adımında `updateSpill(dt,false)`, görüntü başına bir kez `syncSpills()` çalışır.
+
+- Masa modu `table-spill.js` ile gerçek masa düzleminde durur. Sabit taneler bir kez GPU’ya yazılır, sönme shader saatinde yapılır. `bindLayer` gerçek serbest taneyi bağlar; kapsama ağırlığını yeniden artırmaz.

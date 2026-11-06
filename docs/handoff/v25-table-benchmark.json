@@ -1,0 +1,20 @@
+{
+  "runtime": "v22.23.4",
+  "method": "median of 3, 160 measured frames; already-settled grains only; excludes GPU and landing physics",
+  "results": [
+    {
+      "count": 12000,
+      "beforeMs": 0.4119278375000002,
+      "afterMs": 0.000280962499999049,
+      "beforeUploadBytes": 1008000,
+      "afterUploadBytes": 0
+    },
+    {
+      "count": 48000,
+      "beforeMs": 2.0754609437500022,
+      "afterMs": 0.00111457500000256,
+      "beforeUploadBytes": 4032000,
+      "afterUploadBytes": 0
+    }
+  ]
+}

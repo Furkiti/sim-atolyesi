@@ -1,3 +1,4 @@
+import {startTable,stepTable,TABLE_Z} from './table-spill.js';
 import {Recovery,startRecovery,stepRecovery,transferPacket} from './recovery.js';
 import {RecoveryVisual} from './recovery-visual.js';
 import {exitOpacity,FINISH_DUST_SCALE} from './spill-appearance.js';
@@ -133,7 +134,7 @@ export class AtelierScene {
   const clipAttached=shader=>{shader.vertexShader='attribute float peelLift; varying float vPeelLift;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvPeelLift=peelLift;');shader.fragmentShader='varying float vPeelLift;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('void main() {','void main() {\nif(vPeelLift<.35) discard;');};
   this.peelSheet.material.onBeforeCompile=clipAttached;this.peelSheet.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking,side:T.DoubleSide});this.peelSheet.customDepthMaterial.onBeforeCompile=clipAttached;
   this.peelSheet.frustumCulled=false;this.peelSheet.castShadow=true;this.peelSheet.visible=false;this.paperGroup.add(this.peelSheet);
-  this.makeBrush();this.makeTweezers();this.makeGlints();this.makeCelebration();this.makeGallery();this.makeJars();this.makeCollector();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
+  this.makeBrush();this.makeTweezers();this.makeGlints();this.makeCelebration();this.makeGallery();this.makeJars();this.makeCollector();this.makeTable();this.makeHands();this.hint=this.makeHint();this.paperGroup.add(this.hint);
   this.desiredBrush={x:130,y:250,angle:-.72,contact:false,visible:false};this.brushPoint={x:130,y:250};this.pourPoint={x:140,y:180};this.autoPour=false;
   this.applySettings(settings);this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();this.warmCollection();
  }
@@ -141,8 +142,41 @@ export class AtelierScene {
   // Compile the late funnel/stream materials during the opening peel. A small
   // offscreen scene shares geometry/materials; it never draws into the canvas.
   const warm=new T.Scene();warm.environment=this.scene.environment;warm.environmentIntensity=this.scene.environmentIntensity;warm.add(this.key.clone(),this.fill.clone(),new T.HemisphereLight('#fff7dd','#505668',1.5));
-  const collector=this.boxGroup.clone(true);collector.visible=true;warm.add(collector);const stream=new T.InstancedMesh(this.spill.geometry,this.spill.material,1);stream.frustumCulled=false;stream.instanceColor=new T.InstancedBufferAttribute(new Float32Array([1,1,1]),3);warm.add(stream);
-  this.renderer.compileAsync(warm,this.camera).then(()=>{warm.clear();stream.dispose();}).catch(error=>console.warn('Toplama malzemesi hazırlığı:',error));
+  const collector=this.boxGroup.clone(true);collector.visible=true;warm.add(collector);const stream=new T.InstancedMesh(this.spill.geometry,this.spill.material,1);stream.frustumCulled=false;stream.instanceColor=new T.InstancedBufferAttribute(new Float32Array([1,1,1]),3);warm.add(stream);const desk=new T.InstancedMesh(this.tablePool.geometry,this.tablePool.material,1);desk.instanceColor=stream.instanceColor;desk.frustumCulled=false;warm.add(desk);
+  this.renderer.compileAsync(warm,this.camera).then(()=>{warm.clear();stream.dispose();desk.dispose();}).catch(error=>console.warn('Toplama malzemesi hazırlığı:',error));
+ }
+ makeTable(){
+  this.tableTime=0;this.tableActive=0;this.tableLanded=0;this.tableCleared=0;this.tableDrawCount=0;this.tableAdds=[];this.tableUniform={value:0};
+  this.tablePool=this.makeGrains(4096);this.paperGroup.remove(this.tablePool);this.scene.add(this.tablePool);
+  this.tablePool.geometry.setAttribute('tableBirth',new T.InstancedBufferAttribute(new Float32Array(4096),1));
+  const material=this.grainMaterial.clone();material.transparent=false;material.depthWrite=true;material.alphaHash=true;material.customProgramCacheKey=()=> 'desk-grains-v25';
+  material.onBeforeCompile=shader=>{
+   this.grainMaterial.onBeforeCompile(shader);shader.uniforms.uTableTime=this.tableUniform;
+   shader.vertexShader='uniform float uTableTime; attribute float tableBirth; varying float vTableOpacity;\n'+shader.vertexShader;
+   shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nfloat age=uTableTime-tableBirth;vTableOpacity=1.0-smoothstep(.45+flakeSeed*.3,1.10+flakeSeed*.55,age);');
+   shader.fragmentShader='varying float vTableOpacity;\n'+shader.fragmentShader;
+   shader.fragmentShader=shader.fragmentShader.replace('#include <alphahash_fragment>','diffuseColor.a*=vTableOpacity;\n#include <alphahash_fragment>');
+  };this.tablePool.material=material;
+ }
+ reserveTable(required){
+  if(required<=this.tablePool.instanceMatrix.count)return;
+  const birth=this.tablePool.geometry.attributes.tableBirth.array;this.ensureGrainCapacity('tablePool',required);
+  const data=new Float32Array(this.tablePool.instanceMatrix.count);data.set(birth);this.tablePool.geometry.setAttribute('tableBirth',new T.InstancedBufferAttribute(data,1));
+ }
+ resetTable(){this.tableTime=0;this.tableActive=0;this.tableLanded=0;this.tableCleared=0;this.tableDrawCount=0;this.tableAdds.length=0;this.tablePool.count=0;this.tableUploadBytes=0;}
+ landOnTable(p){this.tableActive++;this.tableLanded+=p.mass||1;p.tableBirth=this.tableTime;this.tableAdds.push(p);}
+ syncTable(){
+  this.tableUniform.value=this.tableTime;this.tableUploadBytes=0;
+  if(!this.tableAdds.length){if(!this.tableActive){this.tablePool.count=0;this.tableDrawCount=0;}return;}
+  const start=this.tableDrawCount,n=this.tableAdds.length;this.reserveTable(start+n);
+  const mesh=this.tablePool,a=mesh.instanceMatrix.array,c=mesh.instanceColor.array,seeds=mesh.geometry.attributes.flakeSeed,birth=mesh.geometry.attributes.tableBirth,size=grainScale(this.settings);
+  for(let k=0;k<n;k++){
+   const p=this.tableAdds[k],i=start+k,j=i*16,seed=p.seed,angle=seed*79,cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.8+seed)*size*(p.tiny?FINISH_DUST_SCALE:1);
+   a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*.25*scale;a[j+3]=0;a[j+4]=-sn*scale;a[j+5]=cs*scale;a[j+6]=(seed*31%1-.5)*.25*scale;a[j+7]=0;a[j+8]=a[j+9]=0;a[j+10]=scale*.35;a[j+11]=0;a[j+12]=p.x;a[j+13]=p.y;a[j+14]=p.z;a[j+15]=1;
+   c[i*3]=p.color.r;c[i*3+1]=p.color.g;c[i*3+2]=p.color.b;seeds.array[i]=seed;birth.array[i]=p.tableBirth;
+  }
+  for(const attr of [mesh.instanceMatrix,mesh.instanceColor,seeds,birth]){attr.clearUpdateRanges();attr.addUpdateRange(start*attr.itemSize,n*attr.itemSize);attr.needsUpdate=true;}
+  this.tableDrawCount+=n;mesh.count=this.tableDrawCount;this.tableUploadBytes=n*84;this.tableAdds.length=0;
  }
  makeGrains(capacity){
   const g=flakeGeometry(),seeds=new Float32Array(capacity);for(let i=0;i<capacity;i++)seeds[i]=((i*16807)%2147483647)/2147483647;
@@ -344,6 +378,9 @@ export class AtelierScene {
  makeHint(){const map=canvasTexture((c,s)=>{c.strokeStyle='#ffffee';c.lineWidth=5;c.beginPath();c.arc(s/2,s/2,48,0,TAU);c.stroke();c.fillStyle='#fffef0';c.beginPath();c.arc(s/2,s/2,7,0,TAU);c.fill()},256);const sp=new T.Sprite(new T.SpriteMaterial({map,transparent:true,depthTest:false}));sp.scale.set(90,90,1);return sp}
  applySettings(settings){
   const old=this.settings,ratioOfGrains=grainScale(settings)/grainScale(old);this.settings={...settings};
+  if(settings.recovery==='table'&&old?.recovery!=='table'&&this.tablePool){
+   for(const p of this.spills)if(!p.table){p.recoveryMass=p.recovery==='transfer';startTable(p);}this.reserveTable(Math.max(48000,this.spills.length+this.tableDrawCount));
+  }
   if(this.collectedCount&&ratioOfGrains!==1){const matrices=this.collected.instanceMatrix.array;for(let i=0;i<this.collected.count;i++)for(const axis of [0,1,2,4,5,6,8,9,10])matrices[i*16+axis]*=ratioOfGrains;this.collected.instanceMatrix.needsUpdate=true;}
   const ratio=Math.max(.5,Math.min(2.75,this.baseDpr*settings.renderScale));this.renderer.setPixelRatio(ratio);
   const shadowSize={off:0,low:512,medium:1024,high:1536}[settings.shadow];
@@ -373,7 +410,7 @@ export class AtelierScene {
   this.playCameraPosition=this.camera.position.clone();this.playCameraQuaternion=this.camera.quaternion.clone();
   const overlay=getComputedStyle(document.querySelector('#complete'));this.heroFrame=completionLayout(w,h,parseFloat(overlay.paddingTop)||0,parseFloat(overlay.paddingBottom)||0);
  }
- metrics(){const info=this.renderer.info;return{antialias:!!this.renderer.getContext().getContextAttributes()?.antialias,width:this.canvas.width,height:this.canvas.height,draws:info.render.calls,triangles:info.render.triangles,visible:this.current.count+this.spill.count+(this.boxGroup.visible?this.collected.count:0)};}
+ metrics(){const info=this.renderer.info;return{antialias:!!this.renderer.getContext().getContextAttributes()?.antialias,width:this.canvas.width,height:this.canvas.height,draws:info.render.calls,triangles:info.render.triangles,visible:this.current.count+this.spill.count+(this.tablePool?.count||0)+(this.boxGroup.visible?this.collected.count:0)};}
  posePour(pour){
   const jar=this.jars[this.activeColor%6];if(!jar)return;
   for(const other of this.jars)other.visible=other===jar&&!!pour;
@@ -400,7 +437,7 @@ export class AtelierScene {
   return{x:this.hit.x+300,y:400-this.hit.y};
  }
 
- setStage(index){this.recovery?.reset();this.catchSamples=[];this.catchSampleCursor=0;this.collectedCount=0;this.collected.count=0;this.contactData.fill(0);this.contactSeen.fill(0);this.contactTexture.needsUpdate=true;this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;if(this.recoveryColor)this.recoveryColor.set(this.colors[index]);this.current.count=0;this.currentInitialized=0;this.currentColorDirty=true;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.heapShadow.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
+ setStage(index){this.resetTable();this.recovery?.reset();this.catchSamples=[];this.catchSampleCursor=0;this.collectedCount=0;this.collected.count=0;this.contactData.fill(0);this.contactSeen.fill(0);this.contactTexture.needsUpdate=true;this.updateBend(0);this.heapGeo.attributes.heapAmount.array.fill(0);this.current.visible=true;this.activeColor=index;if(this.recoveryColor)this.recoveryColor.set(this.colors[index]);this.current.count=0;this.currentInitialized=0;this.currentColorDirty=true;this.heapMat.color.set(this.colors[index]);for(const variant of Object.values(this.brushVariants))variant.mat.color.set('#b58b55');this.heap.visible=true;this.heapShadow.visible=true;this.hint.visible=true;for(const v of Object.values(this.jars[index%6].userData.variants))v.fill.material.color.set(this.colors[index]);}
  initInstance(mesh,i,seed,color){
   const mat=new T.Matrix4(),q=new T.Quaternion().setFromEuler(new T.Euler((seed*17%1-.5)*1.3,(seed*31%1-.5)*1.3,seed*79)),scale=1.15+(seed*197%1)*.9;
   mat.compose(new T.Vector3(0,0,-1000),q,new T.Vector3(scale,scale,scale));mesh.instanceMatrix.array.set(mat.elements,i*16);
@@ -478,7 +515,7 @@ export class AtelierScene {
    const tangent=exit?exitVelocity(exit,sand.vx[i],sand.vy[i],this.draining):{vx:sand.vx[i],vy:sand.vy[i]};
    const speed=surfaceVelocity(x-300,tangent.vx,tangent.vy,this.bend,this.pitch);speed.z+=Math.min(-15,sand.vz[i]);
    const vx=m[0]*speed.x+m[4]*speed.y+m[8]*speed.z,vy=m[1]*speed.x+m[5]*speed.y+m[9]*speed.z,vz=m[2]*speed.x+m[6]*speed.y+m[10]*speed.z;
-   const detached={x:wx,y:wy,z:wz,vx,vy,vz,seed:sand.seed[i],dust:!!sand.dust?.[i],tiny:!!sand.finishDust?.[i],fadeOnExit:!this.draining,fadeAge:0,edge:exit?.edge||'bottom',color};if(this.settings?.recovery&&this.settings.recovery!=='classic'){detached.fadeOnExit=false;startRecovery(detached);}this.spills.push(detached);sand.state[i]=LOST;sand.lost++;
+   const detached={x:wx,y:wy,z:wz,vx,vy,vz,seed:sand.seed[i],dust:!!sand.dust?.[i],tiny:!!sand.finishDust?.[i],fadeOnExit:!this.draining,fadeAge:0,edge:exit?.edge||'bottom',color};if(this.settings?.recovery==='table')startTable(detached);else if(this.settings?.recovery&&this.settings.recovery!=='classic'){detached.fadeOnExit=false;startRecovery(detached);}this.spills.push(detached);sand.state[i]=LOST;sand.lost++;
   }
  }
  beginCleanup(){this.draining=true;this.recovery?.open();if((!this.settings.recovery||this.settings.recovery==='classic')&&!this.recovery?.deposited){this.collectedCount=0;this.collected.count=0;this.catchSamples=[];this.catchSampleCursor=0;}this.trayBins.fill(0);this.jarFill.material.color.set(this.colors[this.activeColor]);}
@@ -498,9 +535,13 @@ export class AtelierScene {
  }
 
  updateSpill(dt,sync=true){
-  let out=0;const recovery=this.recovery;
+  let out=0;const recovery=this.recovery;this.tableTime=(this.tableTime||0)+dt;
   for(const p of this.spills){
-   if(p.recovery){
+   if(p.table){
+    const wasRest=p.tableRest;
+    if(stepTable(p,dt)){this.tableActive--;this.tableCleared+=p.mass||1;if(p.recoveryMass)recovery.clear(p.mass);continue;}
+    if(!wasRest&&p.tableRest)this.landOnTable(p);
+   }else if(p.recovery){
     if(stepRecovery(p,dt)){
      if(p.recovery==='intake')recovery.deposit(p.mass||1);
      else{recovery.catch(p.mass);this.catchGrain(p);}continue;
@@ -512,15 +553,16 @@ export class AtelierScene {
    this.spills[out++]=p;
   }
   this.spills.length=out;
-  if(recovery?.pending)recovery.step(dt,packet=>this.spills.push(transferPacket(packet,recovery.style,this.recoveryColor)));
+  if(recovery?.pending)recovery.step(dt,packet=>{const p=transferPacket(packet,recovery.style,this.recoveryColor);if(recovery.style==='table'){p.recoveryMass=true;startTable(p);}this.spills.push(p);});
   if(sync)this.syncSpills();
  }
  syncSpills(){
   if(this.spills.length>this.spill.instanceMatrix.count)this.ensureGrainCapacity('spill',this.spills.length);
   const matrix=this.spill.instanceMatrix.array,colours=this.spill.instanceColor.array,alpha=this.spill.geometry.attributes.grainOpacity,seeds=this.spill.geometry.attributes.flakeSeed,projected=this.spillProjection||(this.spillProjection=new T.Vector3()),size=grainScale(this.settings),cx=Math.cos(.2),sx=Math.sin(.2),cy=Math.cos(.1),sy=Math.sin(.1);let out=0,kept=0,fading=false;
   for(const p of this.spills){
+   if(p.tableRest){this.spills[kept++]=p;continue;}
    projected.set(p.x,p.y,p.z).project(this.camera);
-   if(projected.y>1.3||projected.y< -1.15||Math.abs(projected.x)>1.3||projected.z>1){if(p.recovery)this.spills[kept++]=p;continue;}this.spills[kept++]=p;
+   if(projected.y>1.3||projected.y< -1.15||Math.abs(projected.x)>1.3||projected.z>1){if(p.recovery||p.table)this.spills[kept++]=p;continue;}this.spills[kept++]=p;
    const cs=p.cs??(p.cs=Math.cos(p.seed*79)),sn=p.sn??(p.sn=Math.sin(p.seed*79)),scale=(1.8+p.seed)*size*(p.tiny?FINISH_DUST_SCALE:1),j=out*16,k=out*3;
    matrix[j]=cy*cs*scale;matrix[j+1]=(cx*sn+sx*sy*cs)*scale;matrix[j+2]=(sx*sn-cx*sy*cs)*scale;matrix[j+3]=0;
    matrix[j+4]=-cy*sn*scale;matrix[j+5]=(cx*cs-sx*sy*sn)*scale;matrix[j+6]=(sx*cs+cx*sy*sn)*scale;matrix[j+7]=0;
@@ -545,7 +587,7 @@ export class AtelierScene {
   }
  }
 
- reset(){this.recovery?.reset();if(this.recoveryVisual)this.recoveryVisual.group.visible=false;this.catchSamples=[];this.catchSampleCursor=0;this.collectedDirty=false;this.galleryFrame.visible=this.gallerySides.visible=false;this.floor.material.color.copy(this.floorRestColor);this.finishClock=0;this.heroProgress=0;this.celebration.visible=false;this.coatUniforms.uCelebrate.value=0;this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);this.stand.visible=false;for(const jar of this.jars)jar.visible=false;this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}
+ reset(){this.resetTable();this.recovery?.reset();if(this.recoveryVisual)this.recoveryVisual.group.visible=false;this.catchSamples=[];this.catchSampleCursor=0;this.collectedDirty=false;this.galleryFrame.visible=this.gallerySides.visible=false;this.floor.material.color.copy(this.floorRestColor);this.finishClock=0;this.heroProgress=0;this.celebration.visible=false;this.coatUniforms.uCelebrate.value=0;this.camera.position.copy(this.playCameraPosition);this.camera.quaternion.copy(this.playCameraQuaternion);this.stand.visible=false;for(const jar of this.jars)jar.visible=false;this.savedCount=0;this.current.count=0;this.spills.length=0;this.spill.count=0;this.currentInitialized=0;this.collectedCount=0;this.collected.count=0;this.boxMotion=0;this.boxGroup.visible=false;this.updateBend(0);}
  setPeelPiece(image,piece){
   this.peelPiece=piece;this.peelAnchor=piece.grip;
   const {w,h}=piece.bounds,step=this.settings.profile==='economy'?14:10;
@@ -563,7 +605,7 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,cleanupPose=null,finished=false}){
-  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;if(!finished&&!this.galleryActive&&!this.entry)this.updateGrains(sand);this.syncSpills();
+  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;if(!finished&&!this.galleryActive&&!this.entry)this.updateGrains(sand);this.syncSpills();this.syncTable();this.tablePool.visible=!(finished||this.galleryActive||this.entry);
   const showHeap=this.settings.relief&&!finished&&!this.galleryActive&&!this.entry&&phase!=='shake'&&sand.surfaceCount>0;
   this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=sand.granular?.10:.23;if(showHeap)this.updateHeap(sand,dt);
   if(this.settings.movingLight){

@@ -64,10 +64,17 @@ export class Sand {
       if(!point)return false;this.x[i]=point.x;this.y[i]=point.y;k=point.k;
     }
     this.state[i]=BOUND;this.z[i]=1.7+this.seed[i]*.8;this.vx[i]=this.vy[i]=this.vz[i]=0;
-    // One finite material packet coats the mask pixels inside one 5 mm cell.
-    // Its visible grain texture is dense; no thousands of static meshes remain.
+    // The first packet claims the mask pixels of this 5 px cell.
+    // Hold-mode surface layers consume further packets without double-counting coverage.
     this.coveredWeight+=this.target[k]/(CELL*CELL);
     this.bound[k]++;return true;
+  }
+  bindLayer(i){
+    // Hold-mode overcoat consumes a real touching grain without claiming the
+    // same adhesive pixels a second time or increasing coverage past 100%.
+    const k=this.cell(this.x[i],this.y[i]);
+    if(this.state[i]!==FREE||this.z[i]>4.5||k<0||!this.bound[k]||!this.onGlue(this.x[i],this.y[i]))return false;
+    this.state[i]=BOUND;this.z[i]=1.7+this.seed[i]*.8;this.vx[i]=this.vy[i]=this.vz[i]=0;this.bound[k]++;return true;
   }
   setBehavior(settings){this.behavior=materialResponse(settings);this.heapDepth=settings.heapDepth||1.25}
   brush(from,to,radius=34,seconds=1/60){
@@ -97,6 +104,11 @@ export class Sand {
     this.lastMoved=moved;return moved;
   }
   step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false,granular=contactAdhesion,refreshOnly=false,pinned=null}={}){
+    if(shaking&&!granular&&!refreshOnly){
+      let airborne=false;for(let i=0;i<this.count;i++)if(this.state[i]===AIR){airborne=true;break;}
+      if(!airborne){this.drainStep(dt,bend,tilt,pinned);return;}
+    }
+    this.drainActive=false;
     this.time+=dt;this.granular=granular;this.ground.fill(-1);this.top.fill(0);this.surfaceCount=0;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
     for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){if(granular&&(this.ground[k]<0||this.z[i]<this.z[this.ground[k]]))this.ground[k]=i;this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundDensity[k]+=.95;this.freshCount++;}else if(this.z[i]>6){this.moundDensity[k]+=.65;}this.top[k]=Math.max(this.top[k],this.z[i]);this.surfaceCount++;}}
     for(let k=0;k<this.height.length;k++){
@@ -185,6 +197,23 @@ export class Sand {
       if(shaking&&this.y[i]>H-3&&Math.abs(this.x[i]-W/2)>102){this.y[i]=H-3;this.vy[i]=0;}
       if(granular)this.roll[i]+=Math.hypot(this.vx[i],this.vy[i])*dt*.065;
       if(!shaking&&(!granular||s===AIR)){const drag=s===AIR?Math.exp(-.7*dt):friction;this.vx[i]*=drag;this.vy[i]*=drag;}
+      if(this.x[i]<-3000||this.x[i]>W+3000||this.y[i]<-3000||this.y[i]>H+3000){this.state[i]=LOST;this.lost++;}
+    }
+  }
+  drainStep(dt,bend,tilt,pinned){
+    this.time+=dt;this.granular=false;
+    if(!this.drainActive){this.height.fill(0);this.density.fill(0);this.moundHeight.fill(0);this.moundDensity.fill(0);this.surfaceCount=0;this.freshCount=0;this.drainActive=true;}
+    const dx=Math.exp(-4.5*dt),dy=Math.exp(-.65*dt),downhill=1150*Math.sin(tilt);
+    for(let i=0;i<this.count;i++)if(this.state[i]===FREE&&!pinned?.[i]){
+      const k=this.cell(this.x[i],this.y[i]);
+      if(k<0){this.vz[i]-=900*dt;this.z[i]+=this.vz[i]*dt;}
+      else{
+        const offset=this.x[i]-W/2,channel=Math.max(.05,1-(Math.abs(offset)/140)**2);
+        this.vx[i]-=1150*Math.sin(offset/300*1.22*bend)*dt;this.vy[i]+=downhill*channel*dt;
+        this.vx[i]*=dx;this.vy[i]*=dy;this.z[i]+=(2.5+this.seed[i]*1.1-this.z[i])*Math.min(1,dt*14);
+      }
+      this.previousX[i]=this.x[i];this.previousY[i]=this.y[i];this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
+      if(this.y[i]>H-3&&Math.abs(this.x[i]-W/2)>102){this.y[i]=H-3;this.vy[i]=0;}
       if(this.x[i]<-3000||this.x[i]>W+3000||this.y[i]<-3000||this.y[i]>H+3000){this.state[i]=LOST;this.lost++;}
     }
   }

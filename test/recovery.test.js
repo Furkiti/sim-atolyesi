@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as T from 'three';
 import {Recovery,RECOVERY_STYLES,startRecovery,stepRecovery,transferPacket} from '../src/recovery.js';import {DEFAULTS,normalizeSettings,loadSettings,saveSettings} from '../src/settings.js';import {AtelierScene} from '../src/scene.js';import {FUNNEL,stepFunnel} from '../src/funnel.js';
 const color=new T.Color('#bc1234');
-test('three experimental collectors persist without changing the established preset or hold preferences',()=>{
+test('collection modes persist without changing the established preset or hold preferences',()=>{
  assert.equal(DEFAULTS.recovery,'classic');let value;const storage={getItem:()=>value,setItem:(k,v)=>value=v};for(const recovery of RECOVERY_STYLES){const s=normalizeSettings({recovery,holdDensity:7,holdPlacement:'local'});saveSettings(storage,s);const saved=loadSettings(storage);assert.equal(saved.recovery,recovery);assert.equal(saved.holdDensity,7);assert.equal(saved.holdPlacement,'local');}assert.equal(normalizeSettings({recovery:'bad'}).recovery,'classic');
 });
 test('stored glitter and final fold glitter reach the same jar with exact finite mass at 1x and 4x',()=>{

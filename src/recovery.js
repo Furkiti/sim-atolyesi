@@ -1,15 +1,15 @@
 // Finite material ledger. Visible transfer packets may represent several grains;
 // their summed mass is removed from the reservoir and added once to the jar.
-export const RECOVERY_STYLES=['classic','trough','rills','bowl'];
+export const RECOVERY_STYLES=['classic','trough','rills','bowl','table'];
 export class Recovery {
  constructor(style='classic'){this.style=style;this.reset();}
- reset(){this.deposited=0;this.stored=0;this.inTransit=0;this.jar=0;this.opened=false;this.age=0;this.releaseCredit=0;this.serial=0;}
+ reset(){this.deposited=0;this.stored=0;this.inTransit=0;this.jar=0;this.cleared=0;this.opened=false;this.age=0;this.releaseCredit=0;this.serial=0;}
  deposit(mass=1){this.deposited+=mass;this.stored+=mass;}
  open(){if(!this.opened){this.opened=true;this.age=0;}}
  get pending(){return this.stored+this.inTransit;}
  step(dt,emit){
   if(this.opened)this.age+=dt;
-  const continuous=this.style==='rills'||this.style==='classic',ready=continuous||(this.opened&&this.age>.55);
+  const continuous=this.style==='rills'||this.style==='classic'||this.style==='table',ready=continuous||(this.opened&&this.age>.55);
   if(!ready||!this.stored)return;
   const pulse=this.style==='bowl'?.5+.5*Math.sin(Math.min(1,(this.age-.55)/1.7)*Math.PI):1;
   const rate=Math.max(2800,this.stored*3.2)*pulse;this.releaseCredit+=rate*dt;
@@ -18,6 +18,7 @@ export class Recovery {
   const packet=Math.max(1,Math.ceil(budget/48));
   while(budget>0){const mass=Math.min(packet,budget),seed=(++this.serial* .61803398875)%1;this.stored-=mass;this.inTransit+=mass;budget-=mass;emit({mass,seed});}
  }
+ clear(mass){this.inTransit-=mass;this.cleared+=mass;}
  catch(mass){this.inTransit-=mass;this.jar+=mass;}
 }
 const smooth=t=>t*t*(3-2*t),mix=(a,b,t)=>a+(b-a)*t;

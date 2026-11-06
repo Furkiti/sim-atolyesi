@@ -35,7 +35,7 @@ export class RecoveryVisual {
   this.gate=plate(58,12,'#789b86',23);this.gate.position.y=-34;this.group.add(this.gate);
  }
  update(style,model,size,color,visible,jarCount=model.jar){
-  this.group.visible=visible&&style!=='classic';if(!this.group.visible)return;
+  this.group.visible=visible&&style!=='classic'&&style!=='table';if(!this.group.visible)return;
   for(const [key,g] of Object.entries(this.styles))g.visible=style===key;
   const stored=model.stored,fill=Math.min(68,Math.cbrt(jarCount)*1.1*Math.pow(size,.65)),height=Math.min(22,Math.cbrt(stored)*.62),open=model.opened?Math.min(1,Math.max(0,(model.age-.35)/.4)):style==='rills'?1:0;
   this.gate.position.x=open*49;this.gate.visible=style==='trough';this.styles.bowl.rotation.x=style==='bowl'?open*.22:0;

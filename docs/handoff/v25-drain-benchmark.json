@@ -1,0 +1,21 @@
+{
+  "runtime": "v22.23.4",
+  "method": "median of 3, 140 measured frames; paper drainage physics only; half the population bound; GPU excluded",
+  "results": [
+    {
+      "count": 12000,
+      "beforeMs": 0.8446196500000009,
+      "afterMs": 0.21150533571429345
+    },
+    {
+      "count": 48000,
+      "beforeMs": 1.7361937500000035,
+      "afterMs": 0.634225642857122
+    },
+    {
+      "count": 96000,
+      "beforeMs": 2.8721381142857063,
+      "afterMs": 1.2663982357142718
+    }
+  ]
+}
