@@ -1,3 +1,5 @@
+> v27: Basılı tut modunda alan doğal akışla %100 dolunca parmağı bırakmadan temizlik ve renk geçişi başlar. Erken tamamlama kaldırıldı.
+
 > v26: Basılı tut modunda %96’ya ulaşınca kalan gerçek hedef taneleri yerleşir; parmağı bırakmadan temizlik ve renk geçişi başlar.
 
 > v25: Yapışan gerçek taneler hareketli stoğu tüketir. Yeni **Masada kalsın** modunda erken ve son döküntüler masa düzleminde durup söner; son bükme fiziği hafifletildi. [Notlar ve ölçümler](docs/v25-adhesion-and-desk.md).
@@ -14,7 +16,7 @@
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=26&mod=basili&giris=direct)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=27&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 

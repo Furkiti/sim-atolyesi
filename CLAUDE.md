@@ -4,9 +4,9 @@ Bu repo mevcut, çalışan oyundur. Devam etmeden önce **[docs/CLAUDE_HANDOFF.m
 
 ## Mevcut checkpoint
 
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=26&mod=basili&giris=direct
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=27&mod=basili&giris=direct
 - Repo: https://github.com/Furkiti/sim-atolyesi
-- Güncel geliştirme: v26 — basılı tut modunda otomatik tamamlama eşiği %96. v25: gerçek yapışan ek tanelerle akış azalması, yeni masada bekleyip sönme modu ve daha hafif son bükme. Ayrıntı: [docs/v25-adhesion-and-desk.md](docs/v25-adhesion-and-desk.md). Önceki modlar korunur.
+- Güncel geliştirme: v27 — basılı tut modunda alan %100 dolunca otomatik bitiş. v25: gerçek yapışan ek tanelerle akış azalması, yeni masada bekleyip sönme modu ve daha hafif son bükme. Ayrıntı: [docs/v25-adhesion-and-desk.md](docs/v25-adhesion-and-desk.md). Önceki modlar korunur.
 - Önceki sabit nokta: `v19-handoff` Git etiketi. Bu etiket tarihsel v19 sürümüdür.
 - Kaynak proje bu klasördür; derlenmiş giriş `game.js`, asıl uygulama `src/main.js`.
 - Son doğrulama: `npm run build` başarılı, 153 test başarılı; mobil bitiş, gerçek sergi sürükleme, 8× yoğunluk ve aynı belge içinde bölüm geçişi denendi.
@@ -30,7 +30,7 @@ npm test
 - Kullanıcı Türkçe konuşuyor ve telefonu üzerinden, ChatGPT gerektirmeyen GitHub Pages bağlantısından deniyor. Rutin uygulama kararlarında sürekli teyit isteyerek işi bölme.
 - Sim sonlu malzemedir. Fırça boş alana boya basmamalı; sim bırakınca çoğalmamalı.
 - Basılı tut modu bilinçli olarak yönlendirilmiş bir akıştır; tam serbest fizik gibi yeniden yazılması istenmiş değil.
-- Fırça/eğim son rötuş toleransı çok düşüktür. Kullanıcının v26 isteğiyle basılı tut modunda %96’ya ulaşıldığında kalan gerçek hedef paketleri .30 saniye içinde ilerleyip .18 saniyede yapışır; parmak bırakılmadan temizlik başlar.
+- Fırça/eğim son rötuş toleransı çok düşüktür. Kullanıcının v27 isteğiyle basılı tut modunda alan doğal akışla %100 dolunca, bekleyen gerçek yapışma hareketleri de bitirilip parmak bırakılmadan temizlik başlar. Erken alan tamamlama yoktur.
 - Katalogda altı bölüm var; oyuncu ilkinden sırayla açar. Kapatılan dört eski bölümü kendiliğinden açma.
 - Çalışma kamerası sabittir; sergi, geri dönüş ve tablonun içine girerek bölüm geçişinde hareket eder. İlk parmak kontrol eder; ikinci parmak devralmaz.
 - Oyun hızı 1x–4x’tir. Hızı çarptıktan sonra fiziği küçük adımlara böl; FPS ve fırça hareketlerini tekrar tekrar hızlandırma.

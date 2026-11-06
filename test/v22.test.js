@@ -11,11 +11,11 @@ test('hold mode disables brush, motion and old tolerance controls but retains me
  for(const key of HOLD_INACTIVE){assert.equal(settingAvailable(key,'hold'),false,key);assert.equal(settingAvailable(key,'brush'),true,key);}
  for(const key of ['heapDepth','holdDensity','holdGrainSize','holdRows','holdPlacement','entryMode','gameSpeed','surface','jarShape','extraFinish','renderScale','shadow'])assert.equal(settingAvailable(key,'hold'),true,key);
 });
-test('at 96 percent remaining real target packets finish without releasing the held input or adding material',()=>{
- for(const value of [.9,.95,.95999])assert.equal(shouldFinishHeld(value,'hold'),false);for(const value of [.96,.96001,1])assert.equal(shouldFinishHeld(value,'hold'),true);for(const mode of ['brush','tilt'])assert.equal(shouldFinishHeld(.99,mode),false);for(const value of [NaN,Infinity])assert.equal(shouldFinishHeld(value,'hold'),false);
+test('full coverage automatically finishes held flow without releasing input or adding material',()=>{
+ for(const value of [.9,.95,.96,.99,.99999])assert.equal(shouldFinishHeld(value,'hold'),false);assert.equal(shouldFinishHeld(1,'hold'),true);for(const mode of ['brush','tilt'])assert.equal(shouldFinishHeld(1,mode),false);for(const value of [NaN,Infinity])assert.equal(shouldFinishHeld(value,'hold'),false);
  const s=new Sand({random:random()}),mask=new Uint8Array(480000);for(let y=180;y<380;y++)for(let x=100;x<420;x++)mask[y*600+x]=1;s.setMask(mask);const c=new HoldCascade(s,{...DEFAULTS,holdDensity:.5});c.pour(1,0);const total=s.emitted;
- for(let f=0;f<2000&&!shouldFinishHeld(s.coverage,'hold');f++)c.step(1/60,true);assert.ok(s.coverage>=.96&&s.coverage<1);c.requestFinish();const before=s.coverage;c.step(1/60,true);assert.ok(s.coverage>=before&&s.coverage<1,'no instant mask fill');
- for(let f=0;f<40;f++)c.step(1/60,true);assert.equal(s.coverage,1);assert.equal(s.emitted,total);for(let i=0;i<s.count;i++)if(s.state[i]===BOUND)assert.equal(s.onGlue(s.x[i],s.y[i]),true);
+ for(let f=0;f<2000&&!shouldFinishHeld(s.coverage,'hold');f++){assert.ok(s.coverage<1);assert.ok(!c.finishing);c.step(1/60,true);}assert.equal(s.coverage,1);c.requestFinish();
+ for(let f=0;f<40;f++)c.step(1/60,true);assert.equal(c.pendingLayerCount,0);assert.equal(s.coverage,1);assert.equal(s.emitted,total);for(let i=0;i<s.count;i++)if(s.state[i]===BOUND)assert.equal(s.onGlue(s.x[i],s.y[i]),true);
 });
 test('optional final tap keeps very few particles and only shrinks them after the normal fold',()=>{
  const s=new Sand({capacity:1000,random:random()});s.emit(300,350,1000,{spread:150,height:0});s.state.fill(FREE);s.state[0]=BOUND;const c=new CleanupCycle(s,[],s.random);assert.ok(c.heldCount>0&&c.heldCount<=24);assert.equal(s.finishDust.some(Boolean),false);c.transition('unfold');assert.equal(s.finishDust.reduce((a,b)=>a+b,0),c.heldCount);assert.equal(s.finishDust[0],0);assert.ok(FINISH_DUST_SCALE<.5);

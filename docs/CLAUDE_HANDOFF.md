@@ -1,15 +1,15 @@
 # Sim Atölyesi — Claude devir belgesi
 
-Tarih: 6 Kasım 2026. Ürün/cache sürümü **v26**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
+Tarih: 6 Kasım 2026. Ürün/cache sürümü **v27**. Bu belge mevcut oyunu devralmak içindir; yeni bir oyun tasarlama talebi değildir.
 
 ## 1. Repo, kayıt noktası ve yayın
 
 - Repo: https://github.com/Furkiti/sim-atolyesi
 - Dal: `main`
-- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=26&mod=basili
+- Canlı oyun: https://furkiti.github.io/sim-atolyesi/?v=27&mod=basili
 - Bu makinedeki Git kökü: `/Users/furkanbedir/Documents/ChatGPT/batman/github-pages`
 - Üstteki `batman` klasörü Git kökü değildir. Claude’u doğrudan `github-pages` klasöründe aç.
-- Güncel geliştirme: **v26**, basılı tut modunda %96 otomatik tamamlama eşiği. v25: gerçek katman yapışması, masa modu ve hafif son bükme; önceki davranışlar/seçenekler korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
+- Güncel geliştirme: **v27**, basılı tut modunda %100 kaplamadan sonra otomatik bitiş. v25: gerçek katman yapışması, masa modu ve hafif son bükme; önceki davranışlar/seçenekler korunur. Son SHA için `git log -1` kullan. Önceki runtime `bec29b5` (v19).
 - Tarihsel checkpoint: **`v19-handoff`** etiketi; güncel v20 ile karıştırma.
 - v20 araştırma/önceki teknik kararlar: [v20-ui-references.md](v20-ui-references.md). Referans araştırması, üç UI yönü ve ölçüm sınırları burada.
 
@@ -89,10 +89,10 @@ Toplam **51 renk aşaması**. Oyuncu ilk bölümden başlar; önceki tamamlanın
 
 URL örnekleri:
 
-- `?v=26&mod=basili&bolum=barcelona`
-- `?v=26&mod=egim&bolum=naruto`
-- `?v=26&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
-- `?v=26&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
+- `?v=27&mod=basili&bolum=barcelona`
+- `?v=27&mod=egim&bolum=naruto`
+- `?v=27&bolum=gotham` — kaydedilmiş moda göre açılır; mod ayarlardan da seçilir.
+- `?v=27&mod=basili&bolum=barcelona&devam=7` — önceki renkleri hazır çizip son rengi oynatır.
 
 `devam` **1 tabanlıdır**; sınır dışı değer ilk renge döner. Bu, aşama ilerlemesinin otomatik kaydı değildir; test/yeniden başlama kısayoludur. `v` bir cache kırma parametresidir, ayrı eski oyun sürümlerini yönlendirmez.
 
@@ -131,7 +131,7 @@ Sergi girişi: `entryMode:classic` eski kamera yolunu korur. `direct` / `?giris=
 - Basılı tutarak soyma hızlandırması v22’de kaldırıldı. Küçük parçalar .62–1.39 saniye, büyük parçalar önceki yavaş rulo temposuyla açılır; genel oyun hızı geçerlidir.
 - Açılmadan hemen önce beyaz bir yapışkan parlaması eklenmez. Açılan alan kontrastlı taralı yüzeydir.
 - Son rötuş sınırı `min(8 piksel, alanın %0,02’si)`; Titiz modda `min(2 piksel, alanın %0,02’si)`.
-- Basılı akışta %96’ya ulaşıldığında kalan gerçek hedef paketleri .30 saniyede hedefe ilerleyip .18 saniyede oturur. Sonra parmak tutulsa da temizlik/renk geçişi başlar. Fırça ve eğim toleransı değişmedi.
+- Basılı akışta alan doğal akışla %100 dolunca ve bekleyen gerçek yapışma hareketleri tamamlanınca parmak tutulsa da temizlik/renk geçişi başlar. %96’da erken tamamlama kaldırıldı. Fırça ve eğim toleransı değişmedi.
 - Temizleme iki yandan oluk oluşturup ortadaki simi aşağıdaki huni ve küçük cam kavanoza boşaltır. `extraFinish` açıksa `CleanupCycle` fold → unfold → tap → settle → done alt sekansını yönetir. Drenajın bitmesi kontrol edilmeden renk değiştirilmez.
 - Temizleme sonrasında kâğıt tam düzleşir; küçük bükülme değerlerinde kararlı geometri önemlidir.
 
@@ -263,7 +263,7 @@ Gerçek UI ile 390×844 tarayıcı görünümünde doğrulananlar: bütün hız 
 
 DOM’daki `#art.dataset`, salt okunur tanılama için yararlıdır: `version`, `phase`, `stage` (0 tabanlı), `coverage`, `gameSpeed`, `gameTime`, `emitted`, `bound`, `free`, `air`, `detached`, `holding`, `advances`, `peelPart`, `peelParts`, `galleryPrevious`, `galleryNext`, `galleryCount`, `heroProgress` vb. Oyun durumunu dışarıdan enjekte edip bunu oynanış testi gibi raporlama.
 
-Klavye testi: `hold-control` görünürken **Enter**, basılı tutmayı açıp kapatan erişilebilir alternatiftir. Soyma bittiğinde latch temizlenir; brush fazında tekrar Enter ile akış başlatılır. %96’ya ulaşıldığında bitiş ve boşaltma parmak kaldırılmadan tamamlanır. `?devam=sonRenk` ile yalnızca son akış test edilebilir; bu tüm renklerin elle oynandığı anlamına gelmez.
+Klavye testi: `hold-control` görünürken **Enter**, basılı tutmayı açıp kapatan erişilebilir alternatiftir. Soyma bittiğinde latch temizlenir; brush fazında tekrar Enter ile akış başlatılır. %100’e ulaşıldığında bitiş ve boşaltma parmak kaldırılmadan tamamlanır. `?devam=sonRenk` ile yalnızca son akış test edilebilir; bu tüm renklerin elle oynandığı anlamına gelmez.
 
 ### Görsel referanslar (bu repo içinde)
 
@@ -316,4 +316,4 @@ Kimlik bilgisi/token depoya yazma veya loga basma. Bu makinenin mevcut Git crede
 
 Başlangıç için Claude’a verilebilecek metin:
 
-> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v26 eşiği ile v25 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.
+> Bu projeye devam edeceğiz. Önce CLAUDE.md ve docs/CLAUDE_HANDOFF.md dosyalarını oku. v19-handoff tarihsel checkpoint; güncel main ve v27 eşiği ile v25 notlarını esas al, oyunu yeniden tasarlama. Sonraki isteğimi bu yapı üzerinde uygula. Kaynak değişirse bundle’ı da üret ve mevcut testleri koru.

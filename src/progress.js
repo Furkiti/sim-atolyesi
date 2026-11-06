@@ -13,4 +13,4 @@ export function resumeIndex(search,stageCount){
  return Number.isSafeInteger(stage)&&stage>=1&&stage<=stageCount?stage-1:0;
 }
 
-export function shouldFinishHeld(coverage,mode){return mode==='hold'&&Number.isFinite(coverage)&&coverage>=.96;}
+export function shouldFinishHeld(coverage,mode){return mode==='hold'&&Number.isFinite(coverage)&&coverage>=1;}
