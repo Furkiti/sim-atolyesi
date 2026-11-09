@@ -103,3 +103,24 @@ test('point hold flows above and below a middle ribbon, pauses, and coats only b
   assert.equal(stats.bound+stats.free,stats.emitted);
   for(let i=0;i<sand.count;i++)if(sand.state[i]===BOUND)assert.ok(sand.onGlue(sand.x[i],sand.y[i]));
 });
+
+test('loose point flow continues past a held touch instead of piling up around it',()=>{
+  let seed=517;
+  const sand=new Sand({random:()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/2**32)});
+  sand.setMask(new Uint8Array(480000));
+  const flow=new HoldCascade(sand,{holdExperiment:'point',holdPointPlacement:'middle',holdDensity:.5});
+  flow.pour(1,0);
+  for(let frame=0;frame<50;frame++)flow.step(1/60,false,false);
+  const point={x:300,y:535};
+  for(let frame=0;frame<200;frame++)flow.step(1/60,true,false,{point});
+  let nearTouch=0,downstream=0,stillMoving=0;
+  for(let i=0;i<sand.count;i++){
+    if((sand.x[i]-point.x)**2+(sand.y[i]-point.y)**2<45**2)nearTouch++;
+    if(sand.y[i]>point.y+40)downstream++;
+    if(Math.abs(sand.vx[i])+Math.abs(sand.vy[i])>1)stillMoving++;
+  }
+  assert.ok(nearTouch<sand.count*.2);
+  assert.ok(downstream>sand.count*.5);
+  assert.ok(stillMoving>sand.count*.4);
+  assert.equal(sand.stats().free,sand.emitted);
+});

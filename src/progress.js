@@ -1,7 +1,7 @@
 export function completionStatus(coverage,pace='fast',targetPixels=480000,mode='brush'){
  const value=Number.isFinite(coverage)?Math.max(0,Math.min(1,coverage)):0;
- if(mode==='tilt'){
-  const ready=value+1e-9>=.95;
+ if(mode==='tilt'||mode==='hold'){
+  const ready=value+1e-9>=.98;
   return {ready,percent:ready?100:Math.floor(value*100)};
  }
  // Other modes use only the tolerance for invisible raster remnants.
@@ -16,5 +16,3 @@ export function resumeIndex(search,stageCount){
  const stage=Number(value);
  return Number.isSafeInteger(stage)&&stage>=1&&stage<=stageCount?stage-1:0;
 }
-
-export function shouldFinishHeld(coverage,mode){return mode==='hold'&&Number.isFinite(coverage)&&coverage>=1;}

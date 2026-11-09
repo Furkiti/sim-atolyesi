@@ -20,13 +20,15 @@ test('a visually complete first colour can clean up and advance exactly once',()
  assert.equal(flow.tick(5.1),'advance');assert.equal(flow.tick(2),null);
 });
 
-test('tilt finishes at 95 percent for any target size and does not round up before it',()=>{
+test('tilt and hold finish at 98 percent for any target size without rounding up before it',()=>{
  for(const pace of ['fast','relaxed'])for(const pixels of [595,86834,275476]){
-  assert.deepEqual(completionStatus(.94999,pace,pixels,'tilt'),{ready:false,percent:94});
-  assert.deepEqual(completionStatus(.95,pace,pixels,'tilt'),{ready:true,percent:100});
-  assert.equal(completionStatus(.97,pace,pixels,'tilt').ready,true);
-  assert.equal(completionStatus(.95,pace,pixels,'brush').ready,false);
-  assert.equal(completionStatus(.95,pace,pixels,'hold').ready,false);
+  for(const mode of ['tilt','hold']){
+   assert.deepEqual(completionStatus(.97999,pace,pixels,mode),{ready:false,percent:97});
+   assert.deepEqual(completionStatus(.98,pace,pixels,mode),{ready:true,percent:100});
+   assert.equal(completionStatus(.95,pace,pixels,mode).ready,false);
+   for(const value of [NaN,Infinity])assert.equal(completionStatus(value,pace,pixels,mode).ready,false);
+  }
+  assert.equal(completionStatus(.98,pace,pixels,'brush').ready,false);
  }
 });
 

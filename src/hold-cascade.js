@@ -4,6 +4,12 @@ import {holdLayout,holdSourceBand} from './hold-layout.js';
 import {residuePlan} from './cleanup.js';
 export const HOLD_MAX_CAPACITY=112000;
 export function holdLooseCount(settings={}){return Math.round(10500*(settings.holdDensity??settings.pourAmount??1));}
+function reflectOnSheet(value,extent){
+ const margin=6;
+ if(value<margin)return 2*margin-value;
+ if(value>extent-margin)return 2*(extent-margin)-value;
+ return value;
+}
 // Directed material choreography for the hold interaction. Each coating cell
 // consumes an actual packet that travels from the top reservoir to that cell.
 export class HoldCascade {
@@ -12,6 +18,7 @@ export class HoldCascade {
   const plannedLoose=Math.round(holdLooseCount(settings)*layout.doseScale);
   sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+plannedLoose)));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.activeRoutes=[];this.retainedIndices=[];this.dustAssigned=0;
   this.directional=this.placement==='point';this.exits=[];this.airborne=0;this.revision=0;this.surfaceRevision=-1;this.wasHeld=false;
+  this.pointEpoch=0;this.runoffX=Infinity;this.runoffY=Infinity;
   const counts=new Uint32Array(this.bands.length);
   this.layerCapacity=Uint8Array.from(sand.target,pixels=>Math.min(24,Math.max(1,Math.ceil(pixels/(1.25*(settings.holdGrainSize||1)**2)))));this.pendingLayers=new Uint8Array(sand.target.length);this.pendingLayerCount=0;this.adheredLayers=0;
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
@@ -56,6 +63,10 @@ export class HoldCascade {
     route.startY=band.y+(seed-.5)*25;
     route.offsetX=(seed*137%1-.5)*66;
     route.offsetY=(seed*173%1-.5)*54;
+    route.runoffEpoch=-1;
+    route.runoffDistance=44+(seed*199%1)*124;
+    route.runoffSpread=(seed*149%1-.5)*150;
+    route.runoffSpeed=.46+(seed*211%1)*.44;
    }
    // A small fine fraction stops independently along its real travel path.
    // Fresh random samples per pour replace the old fixed mound destinations.
@@ -77,6 +88,9 @@ export class HoldCascade {
   if(!held&&!this.airborne&&!released){if(refresh)this.refresh();return;}
   const previousTime=this.elapsed;if(held)this.elapsed+=dt*(this.finishing?1:power);
   if(this.directional&&held&&this.pointIdle&&!this.airborne&&point?.x===this.pointX&&point?.y===this.pointY)return;
+  if(this.directional&&held&&point&&((point.x-this.runoffX)**2+(point.y-this.runoffY)**2>12**2)){
+   this.runoffX=point.x;this.runoffY=point.y;this.pointEpoch++;
+  }
   const travelTime=this.elapsed-previousTime,depth=this.depth/1.25;
   let moved=this.airborne>0||(!this.directional&&held);
   let active=0;for(let at=0;at<this.activeRoutes.length;at++){
@@ -131,17 +145,28 @@ export class HoldCascade {
   // fill when the player aims at that area.
   const target=route.target&&!s.bound[route.cell];
   const guided=target&&((route.x-point.x)**2+(route.y-point.y)**2<105**2);
-  const tx=guided?route.x:Math.max(.5,Math.min(W-.5,point.x+route.offsetX));
-  const ty=guided?route.y:Math.max(.5,Math.min(H-.5,point.y+route.offsetY));
+  const runningOff=!guided&&route.runoffEpoch===this.pointEpoch;
+  const tx=guided?route.x:runningOff?route.runoffX:Math.max(.5,Math.min(W-.5,point.x+route.offsetX));
+  const ty=guided?route.y:runningOff?route.runoffY:Math.max(.5,Math.min(H-.5,point.y+route.offsetY));
   const dx=tx-x,dy=ty-y,distance=Math.sqrt(dx*dx+dy*dy);
-  const length=Math.min(distance,travel*(guided?1.35:Math.min(1.48,.28+distance/75)));
-  if(length<.001&&!guided)return false;
+  const speed=guided?1.35:runningOff?route.runoffSpeed*Math.min(1,.32+distance/65):Math.min(1.48,.78+distance/110);
+  const length=Math.min(distance,travel*speed);
+  if(length<.001&&runningOff)return false;
   const reached=length>=distance,ratio=reached?1:length/distance;
   s.x[i]=reached?tx:x+dx*ratio;s.y[i]=reached?ty:y+dy*ratio;
   s.vx[i]=dx*ratio/dt;s.vy[i]=dy*ratio/dt;
   route.distance+=length;s.roll[i]+=length*.075;
   s.z[i]=2.2+route.height*(4+18*Math.exp(-route.distance/240))*depth;
   if(guided&&reached){route.contactZ=s.z[i];route.landing=0;return true;}
+  // Carry momentum through the touch. Each flake loses speed on a different
+  // downstream path, so the loose layer keeps rolling instead of converging.
+  if(reached&&!runningOff){
+   const angle=s.seed[i]*Math.PI*2;
+   const ux=distance>.001?dx/distance:Math.cos(angle),uy=distance>.001?dy/distance:Math.sin(angle);
+   route.runoffX=reflectOnSheet(tx+ux*route.runoffDistance-uy*route.runoffSpread,W);
+   route.runoffY=reflectOnSheet(ty+uy*route.runoffDistance+ux*route.runoffSpread,H);
+   route.runoffEpoch=this.pointEpoch;
+  }
   if(target)return true;
   const cell=s.cell(s.x[i],s.y[i]);
   if(!s.target[cell]||s.bound[cell]+this.pendingLayers[cell]>=this.layerCapacity[cell]||!s.onGlue(s.x[i],s.y[i]))return true;
