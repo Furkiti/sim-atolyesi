@@ -18,7 +18,7 @@ export class Sand {
     this.neighbors=new Int32Array(COLS*ROWS*8);
     for(let k=0;k<COLS*ROWS;k++){const c=k%COLS,r=(k/COLS)|0;this.neighbors.set([c>0?k-1:k,c<COLS-1?k+1:k,r>0?k-COLS:k,r<ROWS-1?k+COLS:k,r>0&&c>0?k-COLS-1:k,r>0&&c<COLS-1?k-COLS+1:k,r<ROWS-1&&c>0?k+COLS-1:k,r<ROWS-1&&c<COLS-1?k+COLS+1:k],k*8);}
     this.flowSum=new Float32Array(COLS*ROWS);this.flowCDF=new Float32Array(COLS*ROWS*8);this.flowForce=new Float32Array(COLS*ROWS*8);
-    this.bound=new Uint8Array(COLS*ROWS);this.target=new Uint8Array(COLS*ROWS);
+    this.bound=new Uint8Array(COLS*ROWS);this.target=new Uint8Array(COLS*ROWS);this.tiltCapacity=new Uint8Array(COLS*ROWS);
     this.mask=new Uint8Array(W*H);this.targetCount=0;this.coveredWeight=0;this.lost=0;
   }
   reserve(capacity){
@@ -27,10 +27,13 @@ export class Sand {
     this.capacity=capacity;
   }
   setMask(mask) {
-    this.mask.set(mask);this.target.fill(0);this.bound.fill(0);this.targetCount=0;this.coveredWeight=0;
+    this.mask.set(mask);this.bound.fill(0);this.targetCount=0;this.coveredWeight=0;
     for(let y=0;y<H;y+=CELL)for(let x=0;x<W;x+=CELL){
       let hits=0;for(let dy=0;dy<CELL;dy++)for(let dx=0;dx<CELL;dx++)hits+=!!mask[(y+dy)*W+x+dx];
-      if(hits>=1){this.target[(y/CELL)*COLS+x/CELL]=hits;this.targetCount+=hits/(CELL*CELL);}
+      const cell=(y/CELL)*COLS+x/CELL;
+      this.target[cell]=hits;
+      this.tiltCapacity[cell]=Math.ceil(hits*.32);
+      this.targetCount+=hits/(CELL*CELL);
     }
   }
   cell(x,y){return x>=0&&x<W&&y>=0&&y<H?Math.floor(y/CELL)*COLS+Math.floor(x/CELL):-1}
@@ -128,6 +131,7 @@ export class Sand {
     const airDrag=Math.exp(-.7*dt),gravity=980*(granular?2.4:1);
     const gravityX=gravity*Math.sin(tiltX),gravityY=gravity*Math.sin(tiltY);
     const frictionFeel=this.behavior.drag/13,settle=Math.min(1,dt*6);
+    const adhesive=contactAdhesion&&tiltLayers&&!shaking;
     for(let i=0;i<this.count;i++){
       const s=this.state[i];if(s===BOUND||s===LOST||pinned?.[i])continue;
       let k=this.cell(this.x[i],this.y[i]);
@@ -166,10 +170,11 @@ export class Sand {
             speed=Math.sqrt(this.vx[i]**2+this.vy[i]**2);const resistance=(75+(1-layer)*120+rough*75)*frictionFeel*dt,drag=Math.exp(-(3.2+(1-layer)*4.5+rough*2)*frictionFeel*dt);
             const scale=speed>0?Math.max(0,Math.min(400,speed-resistance))/speed*drag:0;this.vx[i]*=scale;this.vy[i]*=scale;
           }
-          // Every occupied cell has an actual bottom grain. A permanent random
-          // layer must never hold all material above exposed adhesive.
-          const floor=this.ground[k]===i?1.7:1.7+h*(.03+this.seed[i]*.97);
-          if(this.z[i]>floor){this.vz[i]=Math.min(0,this.vz[i])-900*dt;this.z[i]=Math.max(floor,this.z[i]+this.vz[i]*dt);if(this.z[i]===floor)this.vz[i]=0;}
+          // Where the adhesive still has room, the moving pile sinks as its
+          // lower grains stop supporting it. A grain still has to land to stick.
+          const sinks=adhesive&&this.canCatchTilt(k,i)&&this.onGlue(this.x[i],this.y[i]);
+          const floor=sinks||this.ground[k]===i?1.7:1.7+h*(.03+this.seed[i]*.97);
+          if(this.z[i]>floor){this.vz[i]=Math.min(0,this.vz[i])-(sinks?1900:900)*dt;this.z[i]=Math.max(floor,this.z[i]+this.vz[i]*dt);if(this.z[i]===floor)this.vz[i]=0;}
           else {this.z[i]+=(floor-this.z[i])*settle;this.vz[i]=0;}
         }else{
           this.vx[i]+=fx*dt;this.vy[i]+=fy*dt;
@@ -181,7 +186,8 @@ export class Sand {
       if(this.state[i]===BOUND)continue;
       const oldX=this.x[i],oldY=this.y[i];this.previousX[i]=oldX;this.previousY[i]=oldY;this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
       if(contactAdhesion&&!shaking&&this.state[i]===FREE&&this.z[i]<=4.5){
-        this.sweepAdhesive(i,oldX,oldY,tiltLayers);
+        this.sweepAdhesive(i,oldX,oldY,adhesive);
+        if(this.state[i]===BOUND)continue;
       }
       if(shaking&&this.y[i]>H-3&&Math.abs(this.x[i]-W/2)>102){this.y[i]=H-3;this.vy[i]=0;}
       if(granular)this.roll[i]+=Math.sqrt(this.vx[i]**2+this.vy[i]**2)*dt*.065;
@@ -259,8 +265,8 @@ export class Sand {
     let nearby=false;
     scan:for(let row=minRow;row<=maxRow;row++){
       for(let col=minCol;col<=maxCol;col++){
-        const cell=row*COLS+col,pixels=this.target[cell];
-        if(pixels&&this.bound[cell]<(layers?1+(pixels>>3):1)){nearby=true;break scan;}
+        const cell=row*COLS+col;
+        if(this.target[cell]&&(layers?this.canCatchTilt(cell,i):!this.bound[cell])){nearby=true;break scan;}
       }
     }
     if(!nearby)return;
@@ -268,13 +274,23 @@ export class Sand {
     for(let n=0;n<=samples;n++){
       const fraction=samples?n/samples:0;
       const x=Math.fround(oldX+dx*fraction),y=Math.fround(oldY+dy*fraction);
-      const cell=this.cell(x,y),pixels=this.target[cell];
-      if(!pixels||this.bound[cell]>=(layers?1+(pixels>>3):1)||!this.onGlue(x,y))continue;
+      const cell=this.cell(x,y);
+      if(!this.target[cell]||(layers?!this.canCatchTilt(cell,i):this.bound[cell])||!this.onGlue(x,y))continue;
       this.x[i]=x;this.y[i]=y;
       const bound=this.bound[cell]?this.bindLayer(i):this.bind(i,true);
       if(bound)return;
     }
     this.x[i]=endX;this.y[i]=endY;
+  }
+
+  canCatchTilt(cell,i){
+    const capacity=this.tiltCapacity[cell],bound=this.bound[cell];
+    if(bound>=capacity)return false;
+    if(!bound)return true;
+    // A bare patch catches on contact. A coated patch still catches some of
+    // the stream, according to the flake and where it lands on the rough coat.
+    const contact=this.seed[i]*397+cell*.61803399;
+    return contact-(contact|0)<.2;
   }
 
   drainStep(dt,bend,tilt,pinned){

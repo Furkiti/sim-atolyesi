@@ -22,16 +22,16 @@ test('only the matching cartridge fires and the other slot survives for the next
 });
 
 test('tilt consumes extra real contact grains without double counting coverage',()=>{
-  const sand=new Sand({capacity:6});
+  const sand=new Sand({capacity:12,random:()=>.5});
   const mask=new Uint8Array(480000);
   for(let y=300;y<305;y++)for(let x=200;x<205;x++)mask[y*600+x]=1;
   sand.setMask(mask);
-  sand.emit(202,302,6,{spread:0,height:0,fan:0});
+  sand.emit(202,302,12,{spread:0,height:0,fan:0});
   sand.state.fill(FREE);sand.z.fill(2);sand.vz.fill(0);
   for(let frame=0;frame<30;frame++)sand.step(1/60,{contactAdhesion:true,tiltLayers:true});
   assert.equal(sand.coverage,1);
-  assert.equal(sand.stats().bound,4);
-  assert.equal(sand.stats().free,2);
+  assert.equal(sand.stats().bound,8);
+  assert.equal(sand.stats().free,4);
   for(let i=0;i<sand.count;i++){
     if(sand.state[i]===BOUND)assert.ok(sand.onGlue(sand.x[i],sand.y[i]));
   }

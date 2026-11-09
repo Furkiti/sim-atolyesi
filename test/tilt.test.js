@@ -47,7 +47,29 @@ test('a fast-moving surface grain cannot tunnel through a one-pixel adhesive str
  const s=new Sand();s.setMask(maskRect(250,390,251,410));s.emit(248.2,400,1,{spread:0,height:0});s.state[0]=FREE;s.z[0]=2;s.vx[0]=500;s.step(1/30,{contactAdhesion:true});assert.equal(s.state[0],BOUND);assert.ok(s.x[0]>=250&&s.x[0]<251);
 });
 test('airborne glitter cannot colour a target before physically landing',()=>{
- const s=new Sand({random:rng()});s.setMask(maskRect(290,390,310,410));s.emit(300,400,100,{height:139,spread:0,fan:0});for(let i=0;i<5;i++)s.step(1/60,{contactAdhesion:true});assert.equal(s.coverage,0);assert.equal(s.stats().bound,0);
+ const s=new Sand({random:rng()});s.setMask(maskRect(290,390,310,410));s.emit(300,400,100,{height:139,spread:0,fan:0});for(let i=0;i<5;i++)s.step(1/60,{contactAdhesion:true,tiltLayers:true});assert.equal(s.coverage,0);assert.equal(s.stats().bound,0);
+});
+
+test('the loose tilt stream visibly thins downstream of adhesive and every missing grain stays on the mask',()=>{
+ const random=rng(),s=new Sand({random}),count=3000;
+ s.setMask(maskRect(90,200,300,250));
+ for(let i=0;i<count;i++){
+  const x=140+random()*120,y=100+random()*60,z=1.7+random()*2.5;
+  for(const lane of [x,x+220]){
+   const j=s.count;s.emit(lane,y,1,{spread:0,height:0,fan:0});
+   s.state[j]=FREE;s.z[j]=z;s.vz[j]=0;s.vy[j]=180;
+  }
+ }
+ for(let i=0;i<90;i++)s.step(1/60,{contactAdhesion:true,tiltLayers:true,tiltY:.46});
+ const downstream=[0,0],stats=s.stats();
+ for(let i=0;i<s.count;i++){
+  if(s.state[i]===BOUND){assert.equal(i%2,0);assert.ok(s.onGlue(s.x[i],s.y[i]));}
+  if(s.state[i]===FREE&&s.y[i]>250)downstream[i%2]++;
+ }
+ assert.ok(downstream[0]<downstream[1]*.4,downstream.join(' / '));
+ assert.ok(downstream[1]>count*.8);
+ assert.ok(s.coverage>.7,s.coverage);
+ assert.equal(stats.free,count*2-stats.bound);
 });
 
 test('all corners stay above the table when the card tilts in either direction',()=>{

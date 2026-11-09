@@ -27,6 +27,12 @@ test('automatic supply chooses a curtain for large backgrounds and one above-tar
  const mouth=supplyPlan({x:312,y:420},null,null,24,{supply:'auto'});assert.equal(mouth.spots.length,1);assert.ok(mouth.spots[0].y<350);
 });
 
+test('tilt pours scale down for small details and keep the full dose for wide targets',()=>{
+ const tilt={...DEFAULTS,controlMode:'tilt'},brush={...DEFAULTS,controlMode:'brush'};
+ assert.ok(supplyDose(24,tilt,48000)<supplyDose(24,brush,48000)*.4);
+ assert.equal(supplyDose(11000,tilt,48000),supplyDose(11000,brush,48000));
+});
+
 test('a refill for a low unfinished area moves the supply down instead of repeating the original top band',()=>{
  const m=new Uint8Array(480000);for(let y=600;y<800;y++)for(let x=0;x<600;x++)m[y*600+x]=1;
  const p=supplyPlan({x:300,y:740},m,null,11000,{supply:'auto',refill:true});assert.equal(p.kind,'curtain');assert.ok(p.spots.every(s=>s.y>=600&&s.y<740));

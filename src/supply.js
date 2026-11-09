@@ -6,7 +6,8 @@ export const SUPPLIES={
 };
 export function supplyDose(areaCells,settings,remaining){
  const chosen=settings.supply==='auto'&&areaCells>9000?'curtain':settings.supply;const preset=SUPPLIES[chosen]||SUPPLIES.generous;
- const base=Math.max(650,Math.min(14500,areaCells*1.6+180));
+ const minimum=settings.controlMode==='tilt'?180:650;
+ const base=Math.max(minimum,Math.min(14500,areaCells*1.6+180));
  return Math.min(remaining,Math.ceil(base*preset.scale*(settings.pourAmount||1)));
 }
 // Quantiles of unfinished adhesive place supplies near each group, always above it.
