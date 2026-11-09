@@ -96,3 +96,42 @@ body[data-loading] #app{visibility:hidden}
 #hold-pulse-label{white-space:nowrap}#hold-pulse{width:100%;height:5px;background:#60794e2a;border-radius:8px;overflow:hidden}#hold-pulse i{display:block;height:100%;background:#789363;transform-origin:left center}
 
 body[data-exhibition=true] :is(#cartridge-rack,#hold-assist),body[data-transition] :is(#cartridge-rack,#hold-assist){visibility:hidden;pointer-events:none}
+
+/* The spray bench keeps five sockets above four stacks of pigment bottles. */
+body[data-control="spray"]{background:#555778}
+body[data-control="spray"] .topbar,body[data-control="spray"] #perf-hud{color:#f6f2ff}
+body[data-control="spray"] .studio-actions button{color:#ede8fa}
+body[data-control="spray"] .studio-actions button svg{stroke:currentColor}
+body[data-control="spray"] .topbar small,body[data-control="spray"] #coverage{color:#dedbf1}
+body[data-control="spray"] .bottom-ui,body[data-control="spray"] #tool-dock{display:none}
+#spray-panel{position:absolute;z-index:6;bottom:max(26px,calc(env(safe-area-inset-bottom) + 11px));left:50%;width:min(94%,560px);transform:translateX(-50%);display:grid;gap:clamp(8px,1.2vh,13px);color:#fff8ff;padding:8px 2px 0;touch-action:manipulation}
+body[data-exhibition] #spray-panel,body[data-transition] #spray-panel{display:none}
+.spray-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-inline:2px;font-size:13px;line-height:1.2}
+.spray-heading b{letter-spacing:.035em}.spray-heading small{font-size:10px;color:#e2dff6;min-width:0;text-align:right}
+#spray-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:clamp(7px,2vw,14px)}
+.spray-pocket,.spray-tray-bottle{position:relative;display:grid;place-items:center;border:0;padding:0;min-width:0;appearance:none;isolation:isolate;background:none;color:white}
+.spray-pocket{aspect-ratio:1.06;max-height:74px;border-radius:24%;background:#2c2f45;box-shadow:inset 0 4px 3px #15172555,inset 0 -1px 1px #8c8daf72}
+.spray-pocket:disabled{opacity:1}
+.spray-pocket .spray-bottle{width:min(99%,71px);transform:translateY(-8%);height:auto}
+.spray-pocket[data-firing="true"] .spray-bottle{animation:spray-recoil .14s ease-in-out infinite alternate}
+#spray-trays{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(3px,1.4vw,11px);width:min(72%,362px);margin:0 auto}
+.spray-column{display:grid;justify-items:center;position:relative}
+.spray-tray-bottle{width:100%;height:clamp(32px,6vh,55px)}
+.spray-tray-bottle::before{content:"";position:absolute;z-index:-1;width:76%;height:29%;bottom:-1px;border-radius:70% 70% 40% 40%;background:#a7abc9;box-shadow:0 3px 0 #28283e80}
+.spray-tray-bottle[data-occupied="false"]{visibility:hidden}
+.spray-tray-bottle:first-child{z-index:3}
+.spray-tray-bottle[data-ready="true"]:enabled::before{background:#d8d8ee;box-shadow:0 3px 0 #28283e80,0 0 10px color-mix(in srgb,var(--pigment) 55%,transparent)}
+.spray-tray-bottle:not(:first-child){opacity:.76;pointer-events:none}
+.spray-tray-bottle:not(:first-child) .spray-bottle{scale:.89}
+.spray-bottle{display:block;position:relative;width:min(100%,65px);aspect-ratio:62/77;filter:drop-shadow(0 3px 2px #1a193450);pointer-events:none}
+.spray-bottle svg{width:100%;height:100%;overflow:visible;display:block}
+.spray-glass{fill:var(--pigment,#a77af7);stroke:#161323;stroke-width:2.7;stroke-linejoin:round}
+.spray-neck{fill:var(--pigment,#a77af7);stroke:#1e1730;stroke-width:2.25}
+.spray-count{position:absolute;left:50%;top:61%;transform:translate(-50%,-50%);font-size:clamp(15px,4.7vw,27px);font-weight:950;letter-spacing:-.045em;line-height:1;white-space:nowrap;paint-order:stroke fill;-webkit-text-stroke:3px #171624;color:white;text-shadow:0 2px #241f32}
+.spray-pocket[data-occupied="false"] .spray-bottle{visibility:hidden}
+.spray-tray-bottle:enabled:hover .spray-bottle,.spray-tray-bottle:enabled:focus-visible .spray-bottle{translate:0 -3px}
+.spray-pocket:enabled:focus-visible,.spray-tray-bottle:enabled:focus-visible{outline:2px solid #f7d58a;outline-offset:2px}
+.spray-docking{position:fixed;z-index:25;display:grid;place-items:center;pointer-events:none}
+@keyframes spray-recoil{from{transform:translateY(-8%) rotate(-4deg)}to{transform:translateY(-5%) rotate(2deg)}}
+@media(max-height:540px){#spray-panel{width:min(70%,438px);gap:5px;bottom:max(9px,env(safe-area-inset-bottom))}.spray-pocket{max-height:48px}.spray-tray-bottle{height:28px}.spray-bottle{max-width:44px}}
+@media(prefers-reduced-motion:reduce){.spray-pocket[data-firing="true"] .spray-bottle{animation:none}}
