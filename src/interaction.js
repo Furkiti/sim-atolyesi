@@ -37,7 +37,7 @@ export class Flow {
  setRollDuration(seconds){if(Number.isFinite(seconds)&&seconds>0)this.rollDuration=seconds;}
  get busy(){return ['rolling','pour','shake'].includes(this.phase)}
  roll(){if(this.phase!=='peel')return false;this.phase='rolling';this.elapsed=0;this.serial++;return true;}
- pour(){if(!['brush','peel'].includes(this.phase))return false;this.phase='pour';this.elapsed=0;this.serial++;return true;}
+ pour(){if(!['brush','peel','load'].includes(this.phase))return false;this.phase='pour';this.elapsed=0;this.serial++;return true;}
  shake(advance=false){if(this.phase!=='brush')return false;this.phase='shake';this.elapsed=0;this.advance=advance;this.drainDoneAt=null;this.serial++;return true;}
  tick(dt,{drainComplete=true,peelHeld=false}={}){
   if(!this.busy)return null;this.elapsed+=dt;

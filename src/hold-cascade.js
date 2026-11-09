@@ -1,3 +1,4 @@
+import {aimSpeed} from './workshop.js';
 import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS} from './sand.js';
 import {holdLayout,holdSourceBand} from './hold-layout.js';
 import {residuePlan} from './cleanup.js';
@@ -32,7 +33,7 @@ export class HoldCascade {
    const t=p*this.units;let b=this.bands.at(-1);for(const candidate of this.bands)if(t<candidate.clock+candidate.travel+candidate.seconds){b=candidate;break;}
    const local=t-b.clock,index=this.bands.indexOf(b),previous=this.bands[Math.max(0,index-1)];
    if(local<b.travel){const u=local/b.travel,e=u*u*(3-2*u),fromX=this.routes[Math.max(0,previous.end-1)]?.x||previous.x1,toX=this.routes[b.start]?.x||b.x0;return{desired:b.start,x:fromX+(toX-fromX)*e,y:previous.y+(b.y-previous.y)*e,flow:0,spot:index};}
-   const u=Math.max(0,Math.min(1,(local-b.travel)/b.seconds)),desired=Math.min(this.routes.length,Math.floor(b.start+(b.end-b.start)*u)),route=this.routes[Math.min(b.end-1,desired)];return {desired,x:route?.x||b.x0,y:b.y,flow:1,spot:index};
+   const u=p===1?1:Math.max(0,Math.min(1,(local-b.travel)/b.seconds)),desired=Math.min(this.routes.length,Math.floor(b.start+(b.end-b.start)*u)),route=this.routes[Math.min(b.end-1,desired)];return {desired,x:route?.x||b.x0,y:b.y,flow:1,spot:index};
   }
   let desired=Math.floor(p*this.routes.length),flow=1;
   if(this.rows===2){
@@ -60,10 +61,10 @@ export class HoldCascade {
  }
  releaseLayer(route){if(route.layerCell===undefined)return;this.pendingLayers[route.layerCell]--;this.pendingLayerCount--;delete route.layerCell;}
  requestFinish(){this.finishing=true;this.sealing=true;this.finishElapsed??=0;}
- step(dt,held=false,refresh=true){
+ step(dt,held=false,refresh=true,{aim=null,power=1}={}){
   held=held||!!this.finishing;if(this.finishing)this.finishElapsed+=dt;
   const s=this.sand;this.press+=(Number(held)-this.press)*(1-Math.exp(-dt*(held?8:11)));
-  const previousTime=this.elapsed;if(held)this.elapsed+=dt;
+  const previousTime=this.elapsed;if(held)this.elapsed+=dt*(this.finishing?1:power);
   let active=0;for(let at=0;at<this.activeRoutes.length;at++){
    const route=this.activeRoutes[at],i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST){this.releaseLayer(route);continue;}this.activeRoutes[active++]=route;
    if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+(s.seed[i]*127%1)*25*this.depth/1.25;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;}continue;}
@@ -74,12 +75,16 @@ export class HoldCascade {
     s.z[i]=route.contactZ+(2.2-route.contactZ)*ease;s.roll[i]+=dt*2;
     if(progress===1){s.z[i]=2.2;const layer=route.layerCell!==undefined;this.releaseLayer(route);const bound=layer?s.bindLayer(i):s.bind(i,true);if(layer&&bound)this.adheredLayers++;if(!bound){delete route.landing;delete route.contactZ;}}continue;
    }
-   const travel=route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
+   const guidedSpeed=aim===null||this.finishing?1:aimSpeed(route.x,aim);
+   const travel=guidedSpeed*route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
    const old=s.y[i],next=this.finishing&&route.target?old+(route.y-old)*Math.min(1,dt/Math.max(.001,.30-this.finishElapsed)):old+travel;route.distance+=travel;
    // A dense rolling front becomes a thinner trail. The motion is tied only to
    // held time: releasing cannot grow, paint or advance the stream.
    s.z[i]=2.2+(s.seed[i]*127%1)*(4+23*Math.exp(-route.distance/300))*this.depth/1.25;
-   s.x[i]=route.x+(route.target?0:Math.sin(route.distance*.035+s.seed[i]*31)*2.2);
+   const steer=aim===null?0:Math.max(-1,Math.min(1,(aim-route.x)/150));
+   const approach=route.target?Math.max(0,Math.min(1,(route.y-next)/75)):1;
+   const sway=steer*approach*24*Math.min(1,route.distance/42);
+   s.x[i]=route.x+sway+(route.target?0:Math.sin(route.distance*.035+s.seed[i]*31)*2.2);
    s.x[i]=Math.max(.2,Math.min(W-.2,s.x[i]));s.y[i]=next;s.vy[i]=route.speed;s.roll[i]+=travel*.075;
    if(route.rest&&next>=route.rest.y){s.x[i]=route.rest.x;s.y[i]=route.rest.y;s.vy[i]=0;route.parked=true;this.retainedIndices.push(i);continue;}
    if(!route.target&&!route.rest&&!this.sealing){

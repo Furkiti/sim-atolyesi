@@ -52,10 +52,10 @@ export class AtelierScene {
   this.contactData=new Uint8Array(COLS*ROWS*4);this.contactSeen=new Uint8Array(COLS*ROWS);this.contactTexture=new T.DataTexture(this.contactData,COLS,ROWS);this.contactTexture.magFilter=T.NearestFilter;this.contactTexture.minFilter=T.NearestFilter;this.contactTexture.needsUpdate=true;
   const noise=new Uint8Array(W*H*4);for(let i=0;i<W*H;i++){noise[i*4]=Math.random()*255;noise[i*4+1]=Math.random()>.988?90+Math.random()*165:0;noise[i*4+3]=255;}
   this.sparkleField=new T.DataTexture(noise,W,H);this.sparkleField.generateMipmaps=true;this.sparkleField.minFilter=T.LinearMipmapLinearFilter;this.sparkleField.magFilter=T.LinearFilter;this.sparkleField.needsUpdate=true;
-  this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uActiveAlpha:{value:1},uRadiant:{value:settings.posterShine==='radiant'?1:0},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
+  this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uTiltGrip:{value:settings.controlMode==='tilt'?1:0},uActiveAlpha:{value:1},uRadiant:{value:settings.posterShine==='radiant'?1:0},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
   this.paper.material.onBeforeCompile=shader=>{
    Object.assign(shader.uniforms,this.coatUniforms);
-   shader.fragmentShader='uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uActiveAlpha; uniform float uRadiant; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
+   shader.fragmentShader='uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uTiltGrip; uniform float uActiveAlpha; uniform float uRadiant; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
     vec4 contactInk=texture2D(uContact,vec2(vMapUv.x,1.0-vMapUv.y));
     float activeMask=texture2D(uActiveMask,vMapUv).a;
@@ -76,12 +76,14 @@ export class AtelierScene {
     float lightPass=pow(max(0.0,cos((vMapUv.x*.6+vMapUv.y*.85-uTime*.11)*6.28318)),32.0);
     float breath=pow(max(0.0,sin(uTime*.69)),6.0);
     gl_FragColor.rgb+=coat*uSparkle*uRadiant*(field.g*shimmer*.9+lightPass*breath*(.035+field.g*.6))*vec3(1.0,.96,.83);
-    vec4 contact=texture2D(uContact,vec2(vMapUv.x,1.0-vMapUv.y));
+    vec4 contact=contactInk;
     float birth=floor(contact.g*255.0+.5)+floor(contact.b*255.0+.5)*256.0;
     float age=mod(uTime*60.0-birth+65536.0,65536.0);
     float seated=contact.r*(1.0-smoothstep(0.0,19.0,age))*coat*uSparkle;
     // Brief, faceted seating sheen, confined to newly coated mask pixels.
-    gl_FragColor.rgb+=seated*(.035+step(.73,rnd)*.14)*vec3(1.0,.93,.76);`);
+    gl_FragColor.rgb+=seated*(.035+step(.73,rnd)*.14)*vec3(1.0,.93,.76);
+    float tack=liveCoat*uTiltGrip*(1.0-smoothstep(0.0,12.0,age));
+    gl_FragColor.rgb+=tack*(.10+.29*step(.75,rnd))*vec3(1.0,.91,.69);`);
   };
   this.shaders=[];this.sparkLight=new T.Vector3(-.35,.45,1);
   this.grainMaterial=new T.MeshStandardMaterial({color:'#ffffff',metalness:.95,roughness:.43,envMapIntensity:.5,side:T.DoubleSide,alphaHash:true});
@@ -505,9 +507,10 @@ export class AtelierScene {
   this.cardTapRoll=bendPose.roll||0;this.paperGroup.rotation.x=phase==='shake'?(bendPose.tiltY||0):paperPose.y;this.paperGroup.rotation.y=phase==='shake'?(bendPose.tiltX||0):paperPose.x;this.paperGroup.rotation.z=.018+this.cardTapRoll;this.paperGroup.position.z=phase==='shake'?(bendPose.lift||0):paperLift(paperPose);this.paperGroup.updateMatrixWorld(true);
  }
  markContacts(bound){
-  const frame=Math.floor((this.time||0)*.06)%65536;let changed=false;
-  for(let k=0;k<bound.length;k++)if(bound[k]&&!this.contactSeen[k]){this.contactSeen[k]=1;const i=k*4;this.contactData[i]=255;this.contactData[i+1]=frame%256;this.contactData[i+2]=Math.floor(frame/256);this.contactData[i+3]=255;changed=true;}
+  const frame=Math.floor((this.time||0)*.06)%65536;let changed=0;
+  for(let k=0;k<bound.length;k++)if(bound[k]&&!this.contactSeen[k]){this.contactSeen[k]=1;const i=k*4;this.contactData[i]=255;this.contactData[i+1]=frame%256;this.contactData[i+2]=Math.floor(frame/256);this.contactData[i+3]=255;changed++;}
   if(changed)this.contactTexture.needsUpdate=true;
+  return changed;
  }
  setActiveCoat(mask,glitter,lines){
   for(const [key,image] of [['uActiveMask',mask],['uActiveGlitter',glitter],['uLineArt',lines]]){
@@ -620,7 +623,7 @@ export class AtelierScene {
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
  render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,cleanupPose=null,finished=false}){
-  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTime.value=time*.001;this.workAlpha=finished?0:workOpacity(this.heroProgress,this.entry,this.reducedMotion.matches);this.workUniform.value=this.workAlpha;this.coatUniforms.uActiveAlpha.value=finished?1:this.workAlpha;
+  this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTiltGrip.value=this.settings.controlMode==='tilt'?1:0;this.coatUniforms.uTime.value=time*.001;this.workAlpha=finished?0:workOpacity(this.heroProgress,this.entry,this.reducedMotion.matches);this.workUniform.value=this.workAlpha;this.coatUniforms.uActiveAlpha.value=finished?1:this.workAlpha;
   if(this.entry?.stage==='out'){const p=entryProgress(this.entry.age*1.3,this.reducedMotion.matches);this.updateBend(pose.bend*p,pose.pitch*p);this.paperGroup.rotation.x=paperPose.y*p;this.paperGroup.rotation.y=paperPose.x*p;}
   if(this.workAlpha>.001&&!finished)this.updateGrains(sand);this.current.visible=this.workAlpha>.001&&!finished;this.syncSpills();this.syncTable();this.tablePool.visible=this.workAlpha>.001;
   const showHeap=this.settings.relief&&this.workAlpha>.001&&!finished&&phase!=='shake'&&sand.surfaceCount>0;

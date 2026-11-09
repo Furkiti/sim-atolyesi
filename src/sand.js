@@ -11,6 +11,9 @@ export class Sand {
     for (const name of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll']) this[name]=new Float32Array(capacity);
     this.finishDust=new Uint8Array(capacity);this.dust=new Uint8Array(capacity);this.pressed=new Uint8Array(capacity);this.freshCount=0;this.state=new Uint8Array(capacity);this.bin=new Int32Array(capacity);
     this.density=new Float32Array(COLS*ROWS);this.height=new Float32Array(COLS*ROWS);this.pressure=new Float32Array(COLS*ROWS);this.top=new Float32Array(COLS*ROWS);this.moundDensity=new Float32Array(COLS*ROWS);this.moundHeight=new Float32Array(COLS*ROWS);
+    this.surfaceCells=new Uint16Array(COLS*ROWS);
+    this.surfaceHalo=new Uint16Array(COLS*ROWS);
+    this.surfaceSeen=new Uint8Array(COLS*ROWS);
     this.ground=new Int32Array(COLS*ROWS);this.slopeX=new Float32Array(COLS*ROWS);this.slopeY=new Float32Array(COLS*ROWS);
     this.neighbors=new Int32Array(COLS*ROWS*8);
     for(let k=0;k<COLS*ROWS;k++){const c=k%COLS,r=(k/COLS)|0;this.neighbors.set([c>0?k-1:k,c<COLS-1?k+1:k,r>0?k-COLS:k,r<ROWS-1?k+COLS:k,r>0&&c>0?k-COLS-1:k,r>0&&c<COLS-1?k-COLS+1:k,r<ROWS-1&&c>0?k+COLS-1:k,r<ROWS-1&&c<COLS-1?k+COLS+1:k],k*8);}
@@ -103,40 +106,28 @@ export class Sand {
     }
     this.lastMoved=moved;return moved;
   }
-  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false,granular=contactAdhesion,refreshOnly=false,pinned=null}={}){
+  step(dt,{shaking=false,bend=shaking?1:0,tilt=bend*.58,tiltX=0,tiltY=0,cup=0,contactAdhesion=false,granular=contactAdhesion,refreshOnly=false,reuseSurface=false,tiltLayers=false,pinned=null}={}){
     if(shaking&&!granular&&!refreshOnly){
       let airborne=false;for(let i=0;i<this.count;i++)if(this.state[i]===AIR){airborne=true;break;}
       if(!airborne){this.drainStep(dt,bend,tilt,pinned);return;}
     }
     this.drainActive=false;
-    this.time+=dt;this.granular=granular;this.ground.fill(-1);this.top.fill(0);this.surfaceCount=0;this.density.fill(0);this.moundDensity.fill(0);this.moundHeight.fill(0);this.freshCount=0;
-    for(let i=0;i<this.count;i++)if(this.state[i]===FREE){const k=this.cell(this.x[i],this.y[i]);this.bin[i]=k;if(k>=0){if(granular&&(this.ground[k]<0||this.z[i]<this.z[this.ground[k]]))this.ground[k]=i;this.density[k]+=this.pressed[i]?.45:1;if(!this.pressed[i]){this.moundDensity[k]+=.95;this.freshCount++;}else if(this.z[i]>6){this.moundDensity[k]+=.65;}this.top[k]=Math.max(this.top[k],this.z[i]);this.surfaceCount++;}}
-    for(let k=0;k<this.height.length;k++){
-      this.pressure[k]=this.density[k]*.95;
-      let load=this.density[k]*4,fresh=this.moundDensity[k]*4;
-      for(let j=0;j<8;j++){const n=this.neighbors[k*8+j],weight=j<4?2:1;load+=this.density[n]*weight;fresh+=this.moundDensity[n]*weight;}
-      load*=.95/16;fresh/=16;
-      // Pressure can be large; the physical sheet of glitter cannot become a tower.
-      this.height[k]=load>0?MAX_HEAP_HEIGHT*(1-Math.exp(-load*2.15*this.heapDepth/MAX_HEAP_HEIGHT)):0;
-      let top=this.top[k];for(let j=0;j<8;j++)top=Math.max(top,this.top[this.neighbors[k*8+j]]);
-      this.moundHeight[k]=fresh>0?Math.min(top,MAX_HEAP_HEIGHT*(1-Math.exp(-fresh*2.15*this.heapDepth/MAX_HEAP_HEIGHT))):0;
-    }
+    this.time+=dt;
+    if(!granular||!reuseSurface||!this.granular)this.rebuildSurface(granular,!refreshOnly);
+    this.granular=granular;
     if(refreshOnly)return;
     // Pressure is a property of a cell, computed once rather than allocating
     // neighbour lists for every flake on every frame.
-    for(let k=0;k<this.height.length;k++){
-      if(granular){
-        // A height gradient produces avalanches; the same force cannot translate
-        // an entire mound as one disk. Only slopes above repose yield.
-        const n=k*8,dx=(this.height[this.neighbors[n+1]]-this.height[this.neighbors[n]])/(2*CELL),dy=(this.height[this.neighbors[n+3]]-this.height[this.neighbors[n+2]])/(2*CELL);
-        this.slopeX[k]=Math.sign(dx)*Math.min(.8,Math.max(0,Math.abs(dx)-.14));this.slopeY[k]=Math.sign(dy)*Math.min(.8,Math.max(0,Math.abs(dy)-.14));continue;
-      }
+    if(!granular)for(let k=0;k<this.height.length;k++){
       const h=this.pressure[k],repose=this.behavior.repose;this.flowSum[k]=0;if(h<=repose)continue;
       let sum=0;
       for(let j=0;j<8;j++){const force=Math.max(0,Math.min((h-this.pressure[this.neighbors[k*8+j]])/(j<4?1:1.414)-repose,45))*55*this.behavior.pressure;this.flowForce[k*8+j]=force;sum+=force;this.flowCDF[k*8+j]=sum;}
       this.flowSum[k]=sum;
     }
-    const friction=Math.exp(-this.behavior.drag*(granular?.58:1)*dt);
+    const friction=Math.exp(-this.behavior.drag*dt);
+    const airDrag=Math.exp(-.7*dt),gravity=980*(granular?2.4:1);
+    const gravityX=gravity*Math.sin(tiltX),gravityY=gravity*Math.sin(tiltY);
+    const frictionFeel=this.behavior.drag/13,settle=Math.min(1,dt*6);
     for(let i=0;i<this.count;i++){
       const s=this.state[i];if(s===BOUND||s===LOST||pinned?.[i])continue;
       let k=this.cell(this.x[i],this.y[i]);
@@ -156,7 +147,7 @@ export class Sand {
       }else if(k<0&&!shaking){
         this.vz[i]-=900*dt;this.z[i]=Math.max(-9,this.z[i]+this.vz[i]*dt);if(this.z[i]<=-9)this.vz[i]=0;
       }else if(k>=0&&!shaking){
-        const h=this.height[k];let fx=980*(granular?2.4:1)*Math.sin(tiltX)-220*Math.sin((this.x[i]-300)/300*cup),fy=980*(granular?2.4:1)*Math.sin(tiltY);
+        const h=this.height[k];let fx=gravityX-(cup?220*Math.sin((this.x[i]-300)/300*cup):0),fy=gravityY;
         if(!granular&&this.flowSum[k]>0){
           const choice=((this.seed[i]+this.time*.17)%1)*this.flowSum[k];let j=0;
           while(j<7&&choice>this.flowCDF[k*8+j])j++;
@@ -165,22 +156,21 @@ export class Sand {
         if(granular){
           const layer=Math.min(1,Math.max(0,(this.z[i]-1.7)/(h+1))),rough=this.seed[i]*137%1;
           fx-=760*this.slopeX[k];fy-=760*this.slopeY[k];
-          const frictionFeel=this.behavior.drag/13;
-          let speed=Math.hypot(this.vx[i],this.vy[i]);const force=Math.hypot(fx,fy),staticFriction=(150+(1-layer)*170+rough*100)*frictionFeel;
-          if(speed<2&&force<staticFriction){this.vx[i]=this.vy[i]=0;}
+          let speed=Math.sqrt(this.vx[i]**2+this.vy[i]**2);const staticFriction=(120+(1-layer)*135+rough*80)*frictionFeel;
+          if(speed<2&&fx*fx+fy*fy<staticFriction*staticFriction){this.vx[i]=this.vy[i]=0;}
           else {
             // Grain-scale friction and depth shear make upper grains overtake
             // lower grains. Rolling collisions deflect moving grains only.
             const jitter=(this.seed[i]*197%1-.5)*Math.min(1,speed/35)*95,ux=speed>1?this.vx[i]/speed:0,uy=speed>1?this.vy[i]/speed:0;
             this.vx[i]+=(fx-uy*jitter)*dt;this.vy[i]+=(fy+ux*jitter)*dt;
-            speed=Math.hypot(this.vx[i],this.vy[i]);const resistance=(75+(1-layer)*120+rough*75)*frictionFeel*dt,drag=Math.exp(-(3.2+(1-layer)*4.5+rough*2)*frictionFeel*dt);
+            speed=Math.sqrt(this.vx[i]**2+this.vy[i]**2);const resistance=(75+(1-layer)*120+rough*75)*frictionFeel*dt,drag=Math.exp(-(3.2+(1-layer)*4.5+rough*2)*frictionFeel*dt);
             const scale=speed>0?Math.max(0,Math.min(400,speed-resistance))/speed*drag:0;this.vx[i]*=scale;this.vy[i]*=scale;
           }
           // Every occupied cell has an actual bottom grain. A permanent random
           // layer must never hold all material above exposed adhesive.
           const floor=this.ground[k]===i?1.7:1.7+h*(.03+this.seed[i]*.97);
           if(this.z[i]>floor){this.vz[i]=Math.min(0,this.vz[i])-900*dt;this.z[i]=Math.max(floor,this.z[i]+this.vz[i]*dt);if(this.z[i]===floor)this.vz[i]=0;}
-          else {this.z[i]+=(floor-this.z[i])*Math.min(1,dt*6);this.vz[i]=0;}
+          else {this.z[i]+=(floor-this.z[i])*settle;this.vz[i]=0;}
         }else{
           this.vx[i]+=fx*dt;this.vy[i]+=fy*dt;
           const resting=1.7+h*(.10+this.seed[i]*.90),floor=this.pressed[i]?Math.min(this.z[i],resting):resting;
@@ -191,15 +181,102 @@ export class Sand {
       if(this.state[i]===BOUND)continue;
       const oldX=this.x[i],oldY=this.y[i];this.previousX[i]=oldX;this.previousY[i]=oldY;this.x[i]+=this.vx[i]*dt;this.y[i]+=this.vy[i]*dt;
       if(contactAdhesion&&!shaking&&this.state[i]===FREE&&this.z[i]<=4.5){
-        const endX=this.x[i],endY=this.y[i],steps=Math.max(1,Math.ceil(Math.hypot(endX-oldX,endY-oldY)));
-        for(let n=1;n<=steps;n++){this.x[i]=oldX+(endX-oldX)*n/steps;this.y[i]=oldY+(endY-oldY)*n/steps;if(this.bind(i,true))break;}
+        this.sweepAdhesive(i,oldX,oldY,tiltLayers);
       }
       if(shaking&&this.y[i]>H-3&&Math.abs(this.x[i]-W/2)>102){this.y[i]=H-3;this.vy[i]=0;}
-      if(granular)this.roll[i]+=Math.hypot(this.vx[i],this.vy[i])*dt*.065;
-      if(!shaking&&(!granular||s===AIR)){const drag=s===AIR?Math.exp(-.7*dt):friction;this.vx[i]*=drag;this.vy[i]*=drag;}
+      if(granular)this.roll[i]+=Math.sqrt(this.vx[i]**2+this.vy[i]**2)*dt*.065;
+      if(!shaking&&(!granular||s===AIR)){const drag=s===AIR?airDrag:friction;this.vx[i]*=drag;this.vy[i]*=drag;}
       if(this.x[i]<-3000||this.x[i]>W+3000||this.y[i]<-3000||this.y[i]>H+3000){this.state[i]=LOST;this.lost++;}
     }
   }
+  rebuildSurface(granular,needSlopes){
+    const {ground,top,density,moundDensity,height,moundHeight,pressure,neighbors}=this;
+    ground.fill(-1);top.fill(0);density.fill(0);moundDensity.fill(0);
+    this.surfaceCount=0;this.freshCount=0;
+    let occupied=0;
+    for(let i=0;i<this.count;i++){
+      if(this.state[i]!==FREE)continue;
+      const cell=this.cell(this.x[i],this.y[i]);
+      this.bin[i]=cell;
+      if(cell<0)continue;
+      if(granular){
+        if(density[cell]===0)this.surfaceCells[occupied++]=cell;
+        if(ground[cell]<0||this.z[i]<this.z[ground[cell]])ground[cell]=i;
+      }
+      density[cell]+=this.pressed[i]?.45:1;
+      if(!this.pressed[i]){moundDensity[cell]+=.95;this.freshCount++;}
+      else if(this.z[i]>6)moundDensity[cell]+=.65;
+      top[cell]=Math.max(top[cell],this.z[i]);
+      this.surfaceCount++;
+    }
+
+    let cells=height.length;
+    if(granular){
+      this.surfaceSeen.fill(0);height.fill(0);moundHeight.fill(0);
+      cells=0;
+      for(let i=0;i<occupied;i++){
+        const cell=this.surfaceCells[i];
+        for(let j=-1;j<8;j++){
+          const nearby=j<0?cell:neighbors[cell*8+j];
+          if(this.surfaceSeen[nearby])continue;
+          this.surfaceSeen[nearby]=1;
+          this.surfaceHalo[cells++]=nearby;
+        }
+      }
+    }
+    const heapFactor=2.15*this.heapDepth/MAX_HEAP_HEIGHT;
+    for(let i=0;i<cells;i++){
+      const cell=granular?this.surfaceHalo[i]:i;
+      if(!granular)pressure[cell]=density[cell]*.95;
+      let load=density[cell]*4,fresh=moundDensity[cell]*4,peak=top[cell];
+      for(let j=0;j<8;j++){
+        const nearby=neighbors[cell*8+j],weight=j<4?2:1;
+        load+=density[nearby]*weight;fresh+=moundDensity[nearby]*weight;
+        peak=Math.max(peak,top[nearby]);
+      }
+      height[cell]=load>0?MAX_HEAP_HEIGHT*(1-Math.exp(-load*.95/16*heapFactor)):0;
+      moundHeight[cell]=fresh>0?Math.min(peak,MAX_HEAP_HEIGHT*(1-Math.exp(-fresh/16*heapFactor))):0;
+    }
+
+    if(granular&&needSlopes){
+      this.slopeX.fill(0);this.slopeY.fill(0);
+      for(let i=0;i<cells;i++){
+        const cell=this.surfaceHalo[i],n=cell*8;
+        const dx=(height[neighbors[n+1]]-height[neighbors[n]])/(2*CELL);
+        const dy=(height[neighbors[n+3]]-height[neighbors[n+2]])/(2*CELL);
+        this.slopeX[cell]=Math.sign(dx)*Math.min(.8,Math.max(0,Math.abs(dx)-.14));
+        this.slopeY[cell]=Math.sign(dy)*Math.min(.8,Math.max(0,Math.abs(dy)-.14));
+      }
+    }
+  }
+
+  sweepAdhesive(i,oldX,oldY,layers){
+    const endX=this.x[i],endY=this.y[i],dx=endX-oldX,dy=endY-oldY;
+    const minCol=Math.max(0,Math.floor(Math.min(oldX,endX)/CELL));
+    const maxCol=Math.min(COLS-1,Math.floor(Math.max(oldX,endX)/CELL));
+    const minRow=Math.max(0,Math.floor(Math.min(oldY,endY)/CELL));
+    const maxRow=Math.min(ROWS-1,Math.floor(Math.max(oldY,endY)/CELL));
+    let nearby=false;
+    scan:for(let row=minRow;row<=maxRow;row++){
+      for(let col=minCol;col<=maxCol;col++){
+        const cell=row*COLS+col,pixels=this.target[cell];
+        if(pixels&&this.bound[cell]<(layers?1+(pixels>>3):1)){nearby=true;break scan;}
+      }
+    }
+    if(!nearby)return;
+    const samples=Math.ceil(Math.sqrt(dx*dx+dy*dy)*1.6);
+    for(let n=0;n<=samples;n++){
+      const fraction=samples?n/samples:0;
+      const x=Math.fround(oldX+dx*fraction),y=Math.fround(oldY+dy*fraction);
+      const cell=this.cell(x,y),pixels=this.target[cell];
+      if(!pixels||this.bound[cell]>=(layers?1+(pixels>>3):1)||!this.onGlue(x,y))continue;
+      this.x[i]=x;this.y[i]=y;
+      const bound=this.bound[cell]?this.bindLayer(i):this.bind(i,true);
+      if(bound)return;
+    }
+    this.x[i]=endX;this.y[i]=endY;
+  }
+
   drainStep(dt,bend,tilt,pinned){
     this.time+=dt;this.granular=false;
     if(!this.drainActive){this.height.fill(0);this.density.fill(0);this.moundHeight.fill(0);this.moundDensity.fill(0);this.surfaceCount=0;this.freshCount=0;this.drainActive=true;}
