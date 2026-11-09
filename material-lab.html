@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sim Atölyesi · Malzeme Denemeleri</title>
+<style>
+:root{color-scheme:dark;--bg:#151715;--text:#f2eee3;--muted:#c1bbaf;--gold:#e8c477;--line:#45433a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,sans-serif}
+main{width:min(100% - 32px,1100px);margin:auto;padding:32px 0 50px}
+header{max-width:740px;margin-bottom:22px}
+.eyebrow{font-size:.74rem;color:var(--gold);text-transform:uppercase;letter-spacing:.22em}
+h1,h2,p{margin:0}h1{font:clamp(2rem,6vw,3.65rem)/1.08 Georgia,serif;margin:.3em 0}header p,.method{color:var(--muted)}
+.controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+button,select{appearance:none;border:1px solid var(--line);border-radius:9px;background:#252720;color:inherit;font:inherit;padding:8px 12px;min-height:42px}
+button{cursor:pointer}button:hover,select:hover{border-color:var(--gold)}button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+#play{background:var(--gold);color:#261c0f;min-width:94px}#clock{font-variant-numeric:tabular-nums;color:var(--gold);min-width:125px}.view-choice{display:flex;align-items:center;gap:8px;margin-left:auto}
+.timeline{display:flex;align-items:center;gap:10px}#frame{flex:1;min-width:0;accent-color:var(--gold);height:25px}
+.beats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 16px}.beats button{font-size:.8rem;min-height:32px;padding:4px 8px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.cards.single{grid-template-columns:minmax(0,440px);justify-content:center}
+.card{min-width:0;border:1px solid var(--line);padding:12px;border-radius:14px;background:#1d201b}
+h2{font:clamp(1.04rem,2.5vw,1.55rem)/1.2 Georgia,serif}
+.desc{color:var(--muted);font-size:.87rem;min-height:3.6em;margin-top:6px}
+canvas{display:block;width:100%;aspect-ratio:3/4;border-radius:8px;background:#737369;margin:8px 0}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:0;font-size:.73rem;color:var(--muted)}
+.stats dt{order:1}.stats div{display:flex;flex-direction:column}.stats dd{margin:0;color:var(--text);font-size:.98rem;font-variant-numeric:tabular-nums}
+a{color:var(--gold)}.open{display:inline-block;padding:8px 0 0}.method{margin-top:16px;max-width:74ch}
+@media(max-width:530px){main{width:calc(100% - 20px);padding-top:18px}.cards{gap:5px}.card{padding:5px}.desc{display:none}.cards.single .desc{display:block}.stats{grid-template-columns:1fr}.cards.single .stats{grid-template-columns:repeat(4,1fr)}h2{font-size:1rem;min-height:2.4em}.cards.single h2{min-height:0}.open{font-size:.78rem}.cards.single .card{padding:12px}.timeline{flex-wrap:wrap}.view-choice{margin-left:0}}
+</style>
+</head>
+<body><main>
+<header><div class="eyebrow">Sim Atölyesi · Kare Kare</div><h1>Aynı hareket, üç akış</h1>
+<p>Şerit dökülür. El önce üstteki yapışkana gider, kalkar ve alttaki parçaya yönelir. Üçünde de renk, sim miktarı, hareket ve kâğıt aynı.</p></header>
+<div class="controls">
+ <button id="play" type="button">Oynat</button><button id="back" type="button" aria-label="Bir önceki kare">−1</button><button id="next" type="button" aria-label="Bir sonraki kare">+1</button>
+ <label for="view" class="view-choice">Görünüm <select id="view"><option value="all">Yan yana</option><option value="classic">Mevcut akış</option><option value="shear">Katmanlı Kayış</option><option value="avalanche">Minik Çığlar</option></select></label>
+</div>
+<div class="timeline"><label for="frame">Kare</label><input id="frame" type="range" min="0" max="480" value="156" step="1"><output id="clock" for="frame"></output></div>
+<div id="beats" class="beats" aria-label="Sekanstaki anlar"></div>
+<section id="cards" class="cards" aria-label="Akış karşılaştırması"></section>
+<p class="method">Bu görünüm oyundaki sim hareketini sade bir açıdan gösterir. Yükseklik, yapışmamış yüzey tanelerinin yüzde 90’ının altında kaldığı kâğıt üzeri mesafedir. Renk yüzdesi yapışkanın kaplanan kısmıdır. Her kartın altındaki bağlantı, aynı akışı asıl oyunda açar.</p>
+<p class="method"><a href="./?v=38">Sergiye dön</a> · <a href="https://github.com/Furkiti/sim-atolyesi/blob/main/docs/v38-research.md">Rakipler, oyuncu araştırmaları ve ölçümler</a></p>
+</main><script type="module" src="material-lab.js?v=38"></script></body></html>

@@ -1,7 +1,8 @@
 import {aimSpeed} from './workshop.js';
-import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS} from './sand.js';
+import {AIR,FREE,BOUND,LOST,W,H,CELL,COLS,MAX_HEAP_HEIGHT} from './sand.js';
 import {holdLayout,holdSourceBand} from './hold-layout.js';
 import {residuePlan} from './cleanup.js';
+import {HOLD_MATERIALS,avalanchePulse,configureHoldGrain} from './hold-material.js';
 export const HOLD_MAX_CAPACITY=112000;
 export function holdLooseCount(settings={}){return Math.round(10500*(settings.holdDensity??settings.pourAmount??1));}
 function reflectOnSheet(value,extent){
@@ -18,16 +19,22 @@ export class HoldCascade {
   const plannedLoose=Math.round(holdLooseCount(settings)*layout.doseScale);
   sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+plannedLoose)));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.activeRoutes=[];this.retainedIndices=[];this.dustAssigned=0;
   this.directional=this.placement==='point';this.exits=[];this.airborne=0;this.revision=0;this.surfaceRevision=-1;this.wasHeld=false;
+  this.material=this.directional&&Object.hasOwn(HOLD_MATERIALS,settings.holdMaterial)?settings.holdMaterial:'classic';
+  this.waveSpeed=this.material==='avalanche'?new Float32Array(5):null;
   this.pointEpoch=0;this.runoffX=Infinity;this.runoffY=Infinity;
   const counts=new Uint32Array(this.bands.length);
   this.layerCapacity=Uint8Array.from(sand.target,pixels=>Math.min(24,Math.max(1,Math.ceil(pixels/(1.25*(settings.holdGrainSize||1)**2)))));this.pendingLayers=new Uint8Array(sand.target.length);this.pendingLayerCount=0;this.adheredLayers=0;
-  for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
+  let left=W,top=H,right=0,bottom=0;
+  for(let k=0;k<sand.target.length;k++)if(sand.target[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
+   left=Math.min(left,x0);top=Math.min(top,y0);right=Math.max(right,x0+CELL);bottom=y0+CELL;
+   if(sand.bound[k])continue;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
    if(pixel){
     const row=this.rows===2&&(['local','joined'].includes(this.placement)||pixel.y>104)?(k*37%101)%2:0,band=['local','joined'].includes(this.placement)?holdSourceBand(this.bands,pixel.x,pixel.y,row):Math.min(this.bands.length-1,row);this.routes.push({...pixel,target:true,row,band,cell:k});counts[band]++;
    }
   }
+  this.glueBounds={left,top,right,bottom};
   const available=sand.capacity-sand.count,loose=Math.min(plannedLoose,Math.max(0,available-this.routes.length)),totalWidth=this.bands.reduce((sum,b)=>sum+b.x1-b.x0,0);let assigned=0;
   this.bands.forEach((b,band)=>{const n=band===this.bands.length-1?loose-assigned:Math.floor(loose*(b.x1-b.x0)/totalWidth);for(let j=0;j<n;j++)this.routes.push({x:b.x0+(j+.5)/Math.max(1,n)*(b.x1-b.x0),target:false,row:b.row,band});counts[band]+=n;assigned+=n;});
   this.residue=residuePlan(sand.random,loose);this.dustChance=this.residue.chance;
@@ -75,6 +82,7 @@ export class HoldCascade {
    }
    route.delay=(seed*97%1)*1.1;route.speed=105+(seed*197%1)*43;route.distance=0;
    route.height=seed*127%1;route.wave=seed*31;
+   if(this.material!=='classic')configureHoldGrain(route,this.material,seed);
    s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.airborne++;this.activeRoutes.push(route);
   }
  }
@@ -92,10 +100,11 @@ export class HoldCascade {
    this.runoffX=point.x;this.runoffY=point.y;this.pointEpoch++;
   }
   const travelTime=this.elapsed-previousTime,depth=this.depth/1.25;
+  if(this.waveSpeed&&held)for(let wave=0;wave<this.waveSpeed.length;wave++)this.waveSpeed[wave]=avalanchePulse(this.elapsed,wave);
   let moved=this.airborne>0||(!this.directional&&held);
   let active=0;for(let at=0;at<this.activeRoutes.length;at++){
    const route=this.activeRoutes[at],i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST){this.releaseLayer(route);continue;}this.activeRoutes[active++]=route;
-   if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+route.height*25*depth;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;this.airborne--;if(s.y[i]<0)this.exits.push(i);}continue;}
+   if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=route.bed===undefined?5+route.height*25*depth:Math.min(MAX_HEAP_HEIGHT,2.2+route.height*(route.bed+route.rise)*depth);if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;this.airborne--;if(s.y[i]<0)this.exits.push(i);}continue;}
    if(!held&&!released)continue;
    s.previousX[i]=s.x[i];s.previousY[i]=s.y[i];s.vx[i]=s.vy[i]=0;if(!held)continue;
    if(route.parked){s.z[i]+=(route.rest.z-s.z[i])*Math.min(1,dt*14);continue;}
@@ -106,7 +115,8 @@ export class HoldCascade {
     if(progress===1){s.z[i]=2.2;const cell=route.layerCell,layer=cell!==undefined&&!!s.bound[cell];this.releaseLayer(route);const bound=layer?(!this.directional||s.bound[cell]<this.layerCapacity[cell])&&s.bindLayer(i):s.bind(i,true);if(layer&&bound)this.adheredLayers++;if(!bound){delete route.landing;delete route.contactZ;}}continue;
    }
    const guidedSpeed=aim===null||this.finishing?1:aimSpeed(route.x,aim);
-   const travel=guidedSpeed*route.speed*(route.delay<=previousTime?travelTime:Math.max(0,this.elapsed-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
+   const waveSpeed=this.waveSpeed?.[route.packet]??1;
+   const travel=guidedSpeed*route.speed*waveSpeed*(route.delay<=previousTime?travelTime:Math.max(0,this.elapsed-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
    if(this.directional){moved=this.moveTowardPoint(route,point,travel,dt,depth)||moved;continue;}
    const old=s.y[i],next=this.finishing&&route.target?old+(route.y-old)*Math.min(1,dt/Math.max(.001,.30-this.finishElapsed)):old+travel;route.distance+=travel;
    // A dense rolling front becomes a thinner trail. The motion is tied only to
@@ -146,6 +156,7 @@ export class HoldCascade {
   const target=route.target&&!s.bound[route.cell];
   const guided=target&&((route.x-point.x)**2+(route.y-point.y)**2<105**2);
   const runningOff=!guided&&route.runoffEpoch===this.pointEpoch;
+  if(runningOff&&route.restEpoch===this.pointEpoch)return false;
   const tx=guided?route.x:runningOff?route.runoffX:Math.max(.5,Math.min(W-.5,point.x+route.offsetX));
   const ty=guided?route.y:runningOff?route.runoffY:Math.max(.5,Math.min(H-.5,point.y+route.offsetY));
   const dx=tx-x,dy=ty-y,distance=Math.sqrt(dx*dx+dy*dy);
@@ -156,7 +167,13 @@ export class HoldCascade {
   s.x[i]=reached?tx:x+dx*ratio;s.y[i]=reached?ty:y+dy*ratio;
   s.vx[i]=dx*ratio/dt;s.vy[i]=dy*ratio/dt;
   route.distance+=length;s.roll[i]+=length*.075;
-  s.z[i]=2.2+route.height*(4+18*Math.exp(-route.distance/240))*depth;
+  if(route.bed===undefined)s.z[i]=2.2+route.height*(4+18*Math.exp(-route.distance/240))*depth;
+  else {
+   const runout=runningOff?Math.max(0,route.distance-route.runoffAt):0;
+   const decay=this.waveSpeed?195:138;
+   const rolling=this.waveSpeed?1+(this.waveSpeed[route.packet]-1)*.23/(1+runout/24):1;
+   s.z[i]=Math.min(MAX_HEAP_HEIGHT,2.2+route.height*(route.bed+route.rise*rolling/(1+(route.distance+runout*.8)/decay)**2)*depth);
+  }
   if(guided&&reached){route.contactZ=s.z[i];route.landing=0;return true;}
   // Carry momentum through the touch. Each flake loses speed on a different
   // downstream path, so the loose layer keeps rolling instead of converging.
@@ -166,10 +183,14 @@ export class HoldCascade {
    route.runoffX=reflectOnSheet(tx+ux*route.runoffDistance-uy*route.runoffSpread,W);
    route.runoffY=reflectOnSheet(ty+uy*route.runoffDistance+ux*route.runoffSpread,H);
    route.runoffEpoch=this.pointEpoch;
+   route.runoffAt=route.distance;
   }
+  if(reached&&runningOff)route.restEpoch=this.pointEpoch;
   if(target)return true;
-  const cell=s.cell(s.x[i],s.y[i]);
-  if(!s.target[cell]||s.bound[cell]+this.pendingLayers[cell]>=this.layerCapacity[cell]||!s.onGlue(s.x[i],s.y[i]))return true;
+  const nextX=s.x[i],nextY=s.y[i],{left,top,right,bottom}=this.glueBounds;
+  if(nextX<left||nextX>=right||nextY<top||nextY>=bottom)return true;
+  const cell=s.cell(nextX,nextY);
+  if(!s.target[cell]||s.bound[cell]+this.pendingLayers[cell]>=this.layerCapacity[cell]||!s.onGlue(nextX,nextY))return true;
   route.layerCell=cell;route.contactZ=s.z[i];route.landing=0;this.pendingLayers[cell]++;
   this.pendingLayerCount++;
   return true;

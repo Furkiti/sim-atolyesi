@@ -25,7 +25,7 @@ jobs:
       - name: Prepare tested static files
         run: |
           mkdir -p _site
-          cp index.html style.css game.js .nojekyll _site/
+          cp index.html style.css game.js material-lab.html material-lab.js .nojekyll _site/
           cp -R assets _site/assets
           cp -R audio _site/audio
           mkdir -p _site/docs/handoff

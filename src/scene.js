@@ -1,6 +1,6 @@
 import {SprayParticles} from './spray-particles.js';
 import {CoverageGuide} from './coverage-guide.js';
-import {ADHESION_STYLES,COVERAGE_GUIDES,PAPER_EFFECT_UNIFORMS,PAPER_EFFECT_FRAGMENT} from './paper-effects.js';
+import {ADHESION_STYLES,COVERAGE_GUIDES,POSTER_SHINES,FACET_GLSL,PAPER_EFFECT_UNIFORMS,PAPER_EFFECT_FRAGMENT} from './paper-effects.js';
 import {startTable,stepTable,TABLE_Z} from './table-spill.js';
 import {Recovery,startRecovery,stepRecovery,transferPacket} from './recovery.js';
 import {RecoveryVisual} from './recovery-visual.js';
@@ -56,13 +56,14 @@ export class AtelierScene {
   this.contactData=new Uint8Array(COLS*ROWS*4);this.contactSeen=new Uint8Array(COLS*ROWS);this.contactTexture=new T.DataTexture(this.contactData,COLS,ROWS);this.contactTexture.magFilter=T.NearestFilter;this.contactTexture.minFilter=T.NearestFilter;this.contactTexture.needsUpdate=true;
   const noise=new Uint8Array(W*H*4);for(let i=0;i<W*H;i++){noise[i*4]=Math.random()*255;noise[i*4+1]=Math.random()>.988?90+Math.random()*165:0;noise[i*4+3]=255;}
   this.sparkleField=new T.DataTexture(noise,W,H);this.sparkleField.generateMipmaps=true;this.sparkleField.minFilter=T.LinearMipmapLinearFilter;this.sparkleField.magFilter=T.LinearFilter;this.sparkleField.needsUpdate=true;
-  this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uTiltGrip:{value:settings.controlMode==='tilt'?1:0},uActiveAlpha:{value:1},uRadiant:{value:settings.posterShine==='radiant'?1:0},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
+  this.sparkLight=new T.Vector3(-.35,.45,1);
+  this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uTiltGrip:{value:settings.controlMode==='tilt'?1:0},uActiveAlpha:{value:1},uRadiant:{value:POSTER_SHINES.indexOf(settings.posterShine)},uPaperLight:{value:this.sparkLight},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
   Object.assign(this.coatUniforms,{uGuide:{value:0},uAdhesion:{value:0},uReduced:{value:Number(this.reducedMotion.matches)},
    uSprayEnabled:{value:0},uSprayFront:{value:1},uSprayClock:{value:0},uSprayOwner:{value:null},uSprayTiles:{value:null},
    uSprayPalette:{value:Array.from({length:16},()=>new T.Color())}});
   this.paper.material.onBeforeCompile=shader=>{
    Object.assign(shader.uniforms,this.coatUniforms);
-   shader.fragmentShader=PAPER_EFFECT_UNIFORMS+'uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uTiltGrip; uniform float uActiveAlpha; uniform float uRadiant; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
+   shader.fragmentShader=PAPER_EFFECT_UNIFORMS+FACET_GLSL+'uniform sampler2D uSparkleField; uniform sampler2D uActiveMask; uniform sampler2D uActiveGlitter; uniform sampler2D uLineArt; uniform float uTiltGrip; uniform float uActiveAlpha; uniform float uRadiant; uniform float uCelebrate; uniform float uTime; uniform float uSparkle; uniform sampler2D uCoat; uniform sampler2D uContact;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
     vec4 contactInk=texture2D(uContact,vec2(vMapUv.x,1.0-vMapUv.y));
     float activeMask=texture2D(uActiveMask,vMapUv).a;
@@ -76,13 +77,12 @@ export class AtelierScene {
     vec2 cell=floor(vMapUv*vec2(600.0,800.0));
     vec2 field=texture2D(uSparkleField,vMapUv).rg;
     float rnd=field.r;
-    float flicker=pow(max(0.0,sin(uTime*1.4+rnd*197.0)),32.0);
     float coat=max(texture2D(uCoat,vMapUv).a*(1.0-activeMask),liveCoat);
-    gl_FragColor.rgb+=coat*uSparkle*field.g*flicker*.24;
-    float shimmer=pow(max(0.0,sin(uTime*.83+rnd*173.0)),38.0);
-    float lightPass=pow(max(0.0,cos((vMapUv.x*.6+vMapUv.y*.85-uTime*.11)*6.28318)),32.0);
-    float breath=pow(max(0.0,sin(uTime*.69)),6.0);
-    gl_FragColor.rgb+=coat*uSparkle*uRadiant*(field.g*shimmer*.9+lightPass*breath*(.035+field.g*.6))*vec3(1.0,.96,.83);
+    if(uRadiant>1.5)gl_FragColor.rgb+=coat*uSparkle*facetGlint(vMapUv,field)*1.3*vec3(1.0,.95,.80);
+    else {
+     gl_FragColor.rgb+=coat*uSparkle*field.g*classicFlicker(rnd,uTime)*.24;
+     if(uRadiant>.5)gl_FragColor.rgb+=coat*uSparkle*radiantGlint(vMapUv,field,uTime)*vec3(1.0,.96,.83);
+    }
     vec4 contact=contactInk;
     float birth=floor(contact.g*255.0+.5)+floor(contact.b*255.0+.5)*256.0;
     float age=mod(uTime*60.0-birth+65536.0,65536.0);
@@ -93,7 +93,7 @@ export class AtelierScene {
     gl_FragColor.rgb+=tack*.06*vec3(1.0,.91,.69);
     ${PAPER_EFFECT_FRAGMENT}`);
   };
-  this.shaders=[];this.sparkLight=new T.Vector3(-.35,.45,1);
+  this.shaders=[];
   this.grainMaterial=new T.MeshStandardMaterial({color:'#ffffff',metalness:.95,roughness:.43,envMapIntensity:.5,side:T.DoubleSide,alphaHash:true});
   this.grainMaterial.onBeforeCompile=shader=>{
    shader.uniforms.uWorkAlpha=this.workUniform;shader.uniforms.uSparkLight={value:this.sparkLight};shader.uniforms.uSparkEnabled={value:this.settings.sparkles?1:0};shader.vertexShader='attribute float flakeSeed; varying float vFlakeSeed;\n'+shader.vertexShader;
@@ -341,8 +341,10 @@ export class AtelierScene {
    const group=this.frameFactory();group.position.set(galleryOffset(index,current,GALLERY.spacing),0,110);this.gallerySides.add(group);
    const map=new T.CanvasTexture(entry.image);map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
    const picture=new T.Mesh(new T.PlaneGeometry(W,H),new T.MeshBasicMaterial({map,toneMapped:false}));picture.position.z=3;group.add(picture);
-   if(entry.completed){picture.material.onBeforeCompile=shader=>{Object.assign(shader.uniforms,{uTime:this.coatUniforms.uTime,uRadiant:this.coatUniforms.uRadiant,uSparkle:this.coatUniforms.uSparkle,uSparkleField:this.coatUniforms.uSparkleField});shader.fragmentShader='uniform float uTime; uniform float uRadiant; uniform float uSparkle; uniform sampler2D uSparkleField;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
-    vec2 field=texture2D(uSparkleField,vMapUv).rg;float flash=pow(max(0.0,sin(uTime*.83+field.r*173.0)),38.0);float pass=pow(max(0.0,cos((vMapUv.x*.6+vMapUv.y*.85-uTime*.11)*6.28318)),32.0);float breath=pow(max(0.0,sin(uTime*.69)),6.0);gl_FragColor.rgb+=uSparkle*uRadiant*(field.g*flash*.9+pass*breath*(.035+field.g*.6))*vec3(1.0,.96,.83);`);};picture.material.customProgramCacheKey=()=> 'gallery-radiant-v28';}
+   if(entry.completed){picture.material.onBeforeCompile=shader=>{Object.assign(shader.uniforms,{uTime:this.coatUniforms.uTime,uRadiant:this.coatUniforms.uRadiant,uPaperLight:this.coatUniforms.uPaperLight,uSparkle:this.coatUniforms.uSparkle,uSparkleField:this.coatUniforms.uSparkleField});shader.fragmentShader=FACET_GLSL+'uniform float uTime; uniform float uRadiant; uniform float uSparkle; uniform sampler2D uSparkleField;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
+    vec2 field=texture2D(uSparkleField,vMapUv).rg;
+    if(uRadiant>1.5)gl_FragColor.rgb+=uSparkle*facetGlint(vMapUv,field)*1.3*vec3(1.0,.95,.80);
+    else if(uRadiant>.5)gl_FragColor.rgb+=uSparkle*radiantGlint(vMapUv,field,uTime)*vec3(1.0,.96,.83);`);};picture.material.customProgramCacheKey=()=> 'gallery-shine-v38';}
    this.renderer.initTexture(map);
    const labelCanvas=document.createElement('canvas');labelCanvas.width=512;labelCanvas.height=96;const c=labelCanvas.getContext('2d');c.fillStyle='#e4dccb';c.fillRect(0,0,512,96);c.fillStyle='#4e493e';c.font='500 24px sans-serif';c.fillText(String(index+1).padStart(2,'0')+'   '+entry.name,22,39);c.fillStyle='#8c806a';c.font='14px sans-serif';c.fillText(entry.completed?'SİM ÜZERİNE IŞIK · KOLEKSİYONUN':'YENİ BİR PARILTI SENİ BEKLİYOR',22,70);
    const labelMap=new T.CanvasTexture(labelCanvas);labelMap.colorSpace=T.SRGBColorSpace;const label=new T.Mesh(new T.PlaneGeometry(300,56),new T.MeshBasicMaterial({map:labelMap,toneMapped:false,transparent:true}));label.position.set(140,-488,-20);group.add(label);
@@ -430,7 +432,7 @@ export class AtelierScene {
   this.key.shadow.needsUpdate=true;
   this.scene.environmentIntensity=settings.reflections?.55:0;
   this.grainMaterial.envMapIntensity=settings.reflections?.5:0;this.grainMaterial.metalness=settings.reflections?.95:.85;this.grainMaterial.roughness=settings.sparkles?.43:.6;for(const key of ['metalness','roughness','envMapIntensity'])this.current.material[key]=this.grainMaterial[key];
-  this.coatUniforms.uRadiant.value=settings.posterShine==='radiant'?1:0;this.heapMat.envMapIntensity=settings.reflections?.25:0;this.coatUniforms.uSparkle.value=settings.sparkles?1:0;
+  this.coatUniforms.uRadiant.value=POSTER_SHINES.indexOf(settings.posterShine);this.heapMat.envMapIntensity=settings.reflections?.25:0;this.coatUniforms.uSparkle.value=settings.sparkles?1:0;
   for(const shader of this.shaders)shader.uniforms.uSparkEnabled.value=settings.sparkles?1:0;
   if(old?.shadow!==settings.shadow)this.scene.traverse(o=>{if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material])m.needsUpdate=true;}});
   for(const sp of this.glints)if(!settings.sparkles)sp.visible=false;

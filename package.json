@@ -4,7 +4,7 @@
   "description": "Taray\u0131c\u0131da oynanan sim sanat\u0131 prototipi.",
   "main": "game.js",
   "scripts": {
-    "build": "node scripts/build-reference-levels.mjs && node scripts/build-peels.mjs && esbuild src/main.js --bundle --minify --format=esm --outfile=game.js",
+    "build": "node scripts/build-reference-levels.mjs && node scripts/build-peels.mjs && esbuild src/main.js --bundle --minify --format=esm --outfile=game.js && esbuild src/material-lab.js --bundle --minify --format=esm --outfile=material-lab.js",
     "test": "node --test test/*.test.js",
     "dev": "node scripts/serve.mjs"
   },
