@@ -26,4 +26,4 @@ export function profileSettings(current,name){return normalizeSettings({...curre
 export const doseFor=supplyDose;
 
 export const HOLD_INACTIVE=['layout','autoAdvance','pace','feel','supply','pourAmount','paperMotion','mobility','response','brushShape','brushWidth','grainSize','pourStyle','tiltSensitivity'];
-export function settingAvailable(key,mode){return !(mode==='hold'&&HOLD_INACTIVE.includes(key)||mode==='tilt'&&key==='supply');}
+export function settingAvailable(key,mode){return !(mode==='hold'&&HOLD_INACTIVE.includes(key)||mode==='tilt'&&['supply','pace','autoAdvance'].includes(key));}

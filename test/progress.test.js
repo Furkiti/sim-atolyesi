@@ -20,6 +20,16 @@ test('a visually complete first colour can clean up and advance exactly once',()
  assert.equal(flow.tick(5.1),'advance');assert.equal(flow.tick(2),null);
 });
 
+test('tilt finishes at 95 percent for any target size and does not round up before it',()=>{
+ for(const pace of ['fast','relaxed'])for(const pixels of [595,86834,275476]){
+  assert.deepEqual(completionStatus(.94999,pace,pixels,'tilt'),{ready:false,percent:94});
+  assert.deepEqual(completionStatus(.95,pace,pixels,'tilt'),{ready:true,percent:100});
+  assert.equal(completionStatus(.97,pace,pixels,'tilt').ready,true);
+  assert.equal(completionStatus(.95,pace,pixels,'brush').ready,false);
+  assert.equal(completionStatus(.95,pace,pixels,'hold').ready,false);
+ }
+});
+
 test('resume links select only a valid numbered colour',()=>{
  assert.equal(resumeIndex('?v=4.1&devam=2',11),1);assert.equal(resumeIndex('?devam=11',11),10);
  for(const value of ['','0','12','-1','NaN','2.5','Infinity','2x'])assert.equal(resumeIndex('?devam='+value,11),0);
