@@ -19,7 +19,7 @@ export class Sand {
     for(let k=0;k<COLS*ROWS;k++){const c=k%COLS,r=(k/COLS)|0;this.neighbors.set([c>0?k-1:k,c<COLS-1?k+1:k,r>0?k-COLS:k,r<ROWS-1?k+COLS:k,r>0&&c>0?k-COLS-1:k,r>0&&c<COLS-1?k-COLS+1:k,r<ROWS-1&&c>0?k+COLS-1:k,r<ROWS-1&&c<COLS-1?k+COLS+1:k],k*8);}
     this.flowSum=new Float32Array(COLS*ROWS);this.flowCDF=new Float32Array(COLS*ROWS*8);this.flowForce=new Float32Array(COLS*ROWS*8);
     this.bound=new Uint8Array(COLS*ROWS);this.target=new Uint8Array(COLS*ROWS);this.tiltCapacity=new Uint8Array(COLS*ROWS);
-    this.mask=new Uint8Array(W*H);this.targetCount=0;this.coveredWeight=0;this.lost=0;
+    this.mask=new Uint8Array(W*H);this.targetCount=0;this.coveredWeight=0;this.lost=0;this.archivedBound=0;
   }
   reserve(capacity){
     if(capacity<=this.capacity)return;
@@ -32,7 +32,7 @@ export class Sand {
       let hits=0;for(let dy=0;dy<CELL;dy++)for(let dx=0;dx<CELL;dx++)hits+=!!mask[(y+dy)*W+x+dx];
       const cell=(y/CELL)*COLS+x/CELL;
       this.target[cell]=hits;
-      this.tiltCapacity[cell]=Math.ceil(hits*.32);
+      this.tiltCapacity[cell]=Math.ceil(hits*.4);
       this.targetCount+=hits/(CELL*CELL);
     }
   }
@@ -290,7 +290,7 @@ export class Sand {
     // A bare patch catches on contact. A coated patch still catches some of
     // the stream, according to the flake and where it lands on the rough coat.
     const contact=this.seed[i]*397+cell*.61803399;
-    return contact-(contact|0)<.2;
+    return contact-(contact|0)<.34;
   }
 
   drainStep(dt,bend,tilt,pinned){
@@ -312,14 +312,17 @@ export class Sand {
   }
   hasLoose(){for(let i=0;i<this.count;i++)if(this.state[i]===AIR||this.state[i]===FREE)return true;return false}
   removeLoose(){for(let i=0;i<this.count;i++)if(this.state[i]!==BOUND&&this.state[i]!==LOST){this.state[i]=LOST;this.lost++;}this.height.fill(0);this.density.fill(0);this.moundHeight.fill(0);this.freshCount=0}
-  compact(){
+  compact({archiveBound=false}={}){
     let out=0;
-    for(let i=0;i<this.count;i++)if(this.state[i]!==LOST){
+    for(let i=0;i<this.count;i++){
+      if(this.state[i]===LOST)continue;
+      // The coat grid already represents these settled grains on the paper.
+      if(archiveBound&&this.state[i]===BOUND){this.archivedBound++;continue;}
       if(out!==i){for(const key of ['x','y','z','vx','vy','vz','seed','contactTime','previousX','previousY','roll','dust','finishDust','pressed','state','bin'])this[key][out]=this[key][i];}
       out++;
     }
     this.count=out;
   }
   get coverage(){if(!this.targetCount)return 0;const ratio=this.coveredWeight/this.targetCount;return ratio>1-1e-9?1:ratio}
-  stats(){let air=0,free=0,bound=0,pressedFree=0;for(let i=0;i<this.count;i++){if(this.state[i]===AIR)air++;else if(this.state[i]===FREE){free++;if(this.pressed[i])pressedFree++;}else if(this.state[i]===BOUND)bound++;}return{air,free,bound,pressedFree,freshFree:free-pressedFree,maxMoundHeight:Math.max(...this.moundHeight),lost:this.lost,emitted:this.emitted,coverage:this.coverage,maxHeight:Math.max(...this.height)}}
+  stats(){let air=0,free=0,bound=this.archivedBound,pressedFree=0;for(let i=0;i<this.count;i++){if(this.state[i]===AIR)air++;else if(this.state[i]===FREE){free++;if(this.pressed[i])pressedFree++;}else if(this.state[i]===BOUND)bound++;}return{air,free,bound,pressedFree,freshFree:free-pressedFree,maxMoundHeight:Math.max(...this.moundHeight),lost:this.lost,emitted:this.emitted,coverage:this.coverage,maxHeight:Math.max(...this.height)}}
 }

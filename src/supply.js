@@ -5,14 +5,19 @@ export const SUPPLIES={
  curtain:{name:'Üstten şelale',scale:2.8,spots:2}
 };
 export function supplyDose(areaCells,settings,remaining){
- const chosen=settings.supply==='auto'&&areaCells>9000?'curtain':settings.supply;const preset=SUPPLIES[chosen]||SUPPLIES.generous;
+ const chosen=settings.controlMode==='tilt'?'generous':settings.supply==='auto'&&areaCells>9000?'curtain':settings.supply;const preset=SUPPLIES[chosen]||SUPPLIES.generous;
  const minimum=settings.controlMode==='tilt'?180:650;
  const base=Math.max(minimum,Math.min(14500,areaCells*1.6+180));
  return Math.min(remaining,Math.ceil(base*preset.scale*(settings.pourAmount||1)));
 }
 // Quantiles of unfinished adhesive place supplies near each group, always above it.
 export function supplyPlan(target,mask,bound,areaCells,settings={}){
- const kind=settings.supply==='auto'?(areaCells>9000?'curtain':areaCells>500&&settings.pieces?.length>=3?'islands':'generous'):settings.supply||'generous',small=areaCells<300;
+ const small=areaCells<300;
+ if(settings.controlMode==='tilt'){
+  const x=areaCells>9000&&!settings.refill?300:target.x;
+  return {kind:'single',spots:[{x:clamp(x,65,535),y:clamp(target.y-(small?90:60),60,680)}],duration:small?2.6:3.5,small};
+ }
+ const kind=settings.supply==='auto'?(areaCells>9000?'curtain':areaCells>500&&settings.pieces?.length>=3?'islands':'generous'):settings.supply||'generous';
  const points=[];
  if(!small&&mask){
   for(let y=45;y<770;y+=5)for(let x=20;x<580;x+=5){const k=Math.floor(y/5)*120+Math.floor(x/5);if(mask[y*600+x]&&!bound?.[k])points.push({x,y});}
@@ -33,6 +38,7 @@ export function supplyPlan(target,mask,bound,areaCells,settings={}){
 }
 export function supplyPose(plan,progress){
  const p=clamp(progress,0,1),n=plan.spots.length;
+ if(plan.kind==='single')return {...plan.spots[0],flow:1,spot:0};
  if(plan.kind==='curtain'&&!plan.small){return {x:150+300*p,y:plan.spots[0].y+Math.sin(p*Math.PI)*7,flow:1,spot:0};}
  const slot=Math.min(n-1,Math.floor(p*n)),u=Math.min(1,p*n-slot),current=plan.spots[slot],previous=plan.spots[Math.max(0,slot-1)];
  const travel=slot>0&&u<.24,t=travel?u/.24:1,ease=t*t*(3-2*t);

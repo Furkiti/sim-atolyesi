@@ -30,11 +30,17 @@ test('tilt consumes extra real contact grains without double counting coverage',
   sand.state.fill(FREE);sand.z.fill(2);sand.vz.fill(0);
   for(let frame=0;frame<30;frame++)sand.step(1/60,{contactAdhesion:true,tiltLayers:true});
   assert.equal(sand.coverage,1);
-  assert.equal(sand.stats().bound,8);
-  assert.equal(sand.stats().free,4);
+  assert.equal(sand.stats().bound,10);
+  assert.equal(sand.stats().free,2);
   for(let i=0;i<sand.count;i++){
     if(sand.state[i]===BOUND)assert.ok(sand.onGlue(sand.x[i],sand.y[i]));
   }
+  sand.compact({archiveBound:true});
+  assert.equal(sand.count,2);
+  assert.equal(sand.coverage,1);
+  assert.equal(sand.stats().bound,10);
+  assert.equal(sand.emit(205,302,10),10);
+  assert.equal(sand.stats().bound+sand.stats().free+sand.stats().air,sand.emitted);
 });
 
 test('directional hold favors one side and still reaches the exact mask without more material',()=>{

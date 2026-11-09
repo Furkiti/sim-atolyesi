@@ -66,7 +66,7 @@ test('the loose tilt stream visibly thins downstream of adhesive and every missi
   if(s.state[i]===BOUND){assert.equal(i%2,0);assert.ok(s.onGlue(s.x[i],s.y[i]));}
   if(s.state[i]===FREE&&s.y[i]>250)downstream[i%2]++;
  }
- assert.ok(downstream[0]<downstream[1]*.4,downstream.join(' / '));
+ assert.ok(downstream[0]<downstream[1]*.12,downstream.join(' / '));
  assert.ok(downstream[1]>count*.8);
  assert.ok(s.coverage>.7,s.coverage);
  assert.equal(stats.free,count*2-stats.bound);

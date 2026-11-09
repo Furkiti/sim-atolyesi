@@ -22,7 +22,7 @@
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=32&mod=basili&giris=direct)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=33&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 

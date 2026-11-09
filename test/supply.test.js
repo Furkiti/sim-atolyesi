@@ -27,10 +27,23 @@ test('automatic supply chooses a curtain for large backgrounds and one above-tar
  const mouth=supplyPlan({x:312,y:420},null,null,24,{supply:'auto'});assert.equal(mouth.spots.length,1);assert.ok(mouth.spots[0].y<350);
 });
 
-test('tilt pours scale down for small details and keep the full dose for wide targets',()=>{
+test('tilt pours scale down for small details and keep a full single pile for wide targets',()=>{
  const tilt={...DEFAULTS,controlMode:'tilt'},brush={...DEFAULTS,controlMode:'brush'};
  assert.ok(supplyDose(24,tilt,48000)<supplyDose(24,brush,48000)*.4);
- assert.equal(supplyDose(11000,tilt,48000),supplyDose(11000,brush,48000));
+ assert.equal(supplyDose(11000,tilt,48000),supplyDose(11000,{...brush,supply:'generous'},48000));
+});
+
+test('every tilt pour and refill keeps one fixed source for small and wide targets',()=>{
+ const target={x:430,y:620},tilt={...DEFAULTS,controlMode:'tilt'};
+ for(const area of [24,3200,11000])for(const supply of ['auto',...Object.keys(SUPPLIES)])for(const refill of [false,true]){
+  const plan=supplyPlan(target,null,null,area,{...tilt,supply,refill});
+  assert.equal(plan.spots.length,1);
+  assert.deepEqual(plan.spots[0],{x:area>9000&&!refill?300:430,y:area<300?530:560});
+  for(const p of [0,.13,.45,.86,1]){
+   assert.deepEqual(supplyPose(plan,p),{...plan.spots[0],flow:1,spot:0});
+   assert.equal(supplyQuota(plan,p),p);
+  }
+ }
 });
 
 test('a refill for a low unfinished area moves the supply down instead of repeating the original top band',()=>{
