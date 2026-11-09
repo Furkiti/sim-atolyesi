@@ -1,4 +1,4 @@
-export const HOLD_EXPERIMENTS=['classic','aim','pulse','slots'];
+export const HOLD_EXPERIMENTS=['classic','aim','point','pulse','slots'];
 export const AMMO=12;
 
 export class CartridgeRack {

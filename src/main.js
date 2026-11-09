@@ -42,8 +42,10 @@ if(new URLSearchParams(location.search).get('mod')==='egim')settings={...setting
 if(new URLSearchParams(location.search).get('mod')==='basili')settings={...settings,controlMode:'hold'};
 const experimentQuery=new URLSearchParams(location.search).get('akis');
 if(HOLD_EXPERIMENTS.includes(experimentQuery))settings={...settings,controlMode:'hold',holdExperiment:experimentQuery};
+if(new URLSearchParams(location.search).get('serit')==='orta')settings={...settings,holdPointPlacement:'middle'};
 let cascade=null,holdLatched=false,holdSupplyPending=false;
 let rack=new CartridgeRack(),rackKey='',holdAim=300,holdCharge=1,tiltGrip=0;
+const holdPoint={x:W/2,y:H/2};
 const rackMode=()=>settings.controlMode==='hold'&&settings.holdExperiment==='slots';
 let tiltAutoStart=false,tiltFrame={x:0,y:0,active:false};
 const deviceTilt=new DeviceTilt({onChange:()=>{updateTiltUI();if(deviceTilt.status==='active'&&tiltAutoStart&&!dialog.open&&view&&flow.phase==='peel'){tiltAutoStart=false;beginRoll();}}});
@@ -162,9 +164,12 @@ function closeSettings(){dialog.close();pointer.visible=false;readySince=0;
 $('#settings-open').onclick=()=>{releaseAll();pointer.visible=false;syncSettings();dialog.showModal()};
 $('#settings-close').onclick=closeSettings;$('#settings-done').onclick=closeSettings;dialog.addEventListener('cancel',event=>{event.preventDefault();releaseAll();closeSettings();});
 function applySettings(next){
- const previousSurface=settings?.surface,previousControl=settings?.controlMode,previousHoldSize=settings?.holdGrainSize;settings=next;document.body.dataset.control=settings.controlMode;document.body.dataset.recovery=settings.recovery;const recoveryURL=new URL(location.href);if(recoveryURL.searchParams.has('toplama')&&recoveryURL.searchParams.get('toplama')!==settings.recovery){recoveryURL.searchParams.set('toplama',settings.recovery);history.replaceState(history.state,'',recoveryURL);}document.body.dataset.layout=settings.controlMode==='hold'?'flow':settings.layout;$('#perf-hud').hidden=!settings.showStats;
+ const previousSurface=settings?.surface,previousControl=settings?.controlMode,previousHoldSize=settings?.holdGrainSize,wasPoint=settings?.holdExperiment==='point';settings=next;document.body.dataset.control=settings.controlMode;document.body.dataset.recovery=settings.recovery;const recoveryURL=new URL(location.href);if(recoveryURL.searchParams.has('toplama')&&recoveryURL.searchParams.get('toplama')!==settings.recovery){recoveryURL.searchParams.set('toplama',settings.recovery);history.replaceState(history.state,'',recoveryURL);}document.body.dataset.layout=settings.controlMode==='hold'?'flow':settings.layout;$('#perf-hud').hidden=!settings.showStats;
  try{saveSettings(localStorage,settings)}catch{}
  if(previousControl!==settings.controlMode){releaseAll();paperMotion.reset();if(previousControl==='hold'&&pour?.kind==='hold'){rack.finish();pour=null;view?.posePour(null);flow.phase='brush';}cascade=null;holdSupplyPending=settings.controlMode==='hold';if(settings.controlMode!=='tilt'){deviceTilt.stop();tiltAutoStart=false;}}
+ if(cascade&&wasPoint!==(settings.holdExperiment==='point')&&['pour','brush'].includes(flow.phase)){
+  rack.finish();pour=null;view.posePour(null);flow.phase='brush';holdSupplyPending=true;
+ }
  if(partLayers.length&&(previousControl!==settings.controlMode||settings.controlMode==='hold'&&previousHoldSize!==settings.holdGrainSize)){makeGlitter(stages[index].color);updateCoat(true);}
  sand?.setBehavior(settings);if(cascade)cascade.depth=settings.heapDepth;view?.applySettings(settings);
  if(partLayers.length&&previousSurface!==settings.surface){for(const layer of partLayers)paintGlue(layer);gc.clearRect(0,0,W,H);const count=revealedParts;revealedParts=0;revealUntil(count);repaintPaper();}pacer.setLimit(settings.frameLimit);if(!settings.autoAdvance&&settings.controlMode!=='tilt')autoKick=0;syncSettings();readySince=0;updateUI();updateTiltUI();
@@ -173,7 +178,7 @@ function syncSettings(){
  $('#finish-style').disabled=!settings.extraFinish;$('#poster-shine').disabled=!settings.sparkles;
  document.querySelectorAll('input[name="layout"]').forEach(e=>e.checked=e.value===settings.layout);
  for(const [id,key] of Object.entries({'auto-advance':'autoAdvance','extra-finish':'extraFinish','gallery-music':'galleryMusic','show-stats':'showStats',sparkles:'sparkles',reflections:'reflections',relief:'relief','moving-light':'movingLight'}))$('#'+id).checked=settings[key];
- for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','control-mode':'controlMode','tilt-sensitivity':'tiltSensitivity','heap-depth':'heapDepth','surface-style':'surface','hold-density':'holdDensity','hold-grain-size':'holdGrainSize','hold-rows':'holdRows','hold-placement':'holdPlacement','hold-experiment':'holdExperiment','entry-mode':'entryMode','finish-style':'finishStyle','poster-shine':'posterShine','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
+ for(const [id,key] of Object.entries({'quality-profile':'profile','render-scale':'renderScale','shadow-quality':'shadow','frame-limit':'frameLimit','pour-amount':'pourAmount',pace:'pace','brush-shape':'brushShape','jar-shape':'jarShape','pour-style':'pourStyle','supply-style':'supply','paper-motion':'paperMotion','control-mode':'controlMode','tilt-sensitivity':'tiltSensitivity','heap-depth':'heapDepth','surface-style':'surface','hold-density':'holdDensity','hold-grain-size':'holdGrainSize','hold-rows':'holdRows','hold-placement':'holdPlacement','hold-experiment':'holdExperiment','hold-point-placement':'holdPointPlacement','entry-mode':'entryMode','finish-style':'finishStyle','poster-shine':'posterShine','brush-width':'brushWidth','grain-size':'grainSize',mobility:'mobility',response:'response'}))$('#'+id).value=settings[key];
  document.querySelectorAll('input[name=recovery]').forEach(e=>e.checked=e.value===settings.recovery);
  document.querySelectorAll('input[name=feel]').forEach(e=>e.checked=e.value===settings.feel);
  document.querySelectorAll('input[name=game-speed]').forEach(e=>e.checked=Number(e.value)===settings.gameSpeed);$('#speed-readout').textContent=settings.gameSpeed+'x';
@@ -190,8 +195,8 @@ for(const [id,key,numeric] of [['render-scale','renderScale',true],['pour-amount
 }
 document.querySelectorAll('input[name=game-speed]').forEach(e=>e.onchange=()=>applySettings({...settings,gameSpeed:Number(e.value)}));
 document.querySelectorAll('input[name=feel]').forEach(e=>e.onchange=()=>applySettings(feelSettings(settings,e.value)));
-for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['control-mode','controlMode',false],['tilt-sensitivity','tiltSensitivity',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true],['hold-density','holdDensity',true],['hold-grain-size','holdGrainSize',true],['hold-rows','holdRows',true],['hold-placement','holdPlacement',false],['hold-experiment','holdExperiment',false],['entry-mode','entryMode',false],['finish-style','finishStyle',false],['poster-shine','posterShine',false]]){
- $('#'+id).addEventListener(numeric&&id!=='hold-rows'?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface','supply','paperMotion','heapDepth','controlMode','tiltSensitivity','holdDensity','holdGrainSize','holdRows','holdPlacement','holdExperiment','entryMode'].includes(key)?settings.feel:'custom'}));
+for(const [id,key,numeric] of [['brush-shape','brushShape',false],['jar-shape','jarShape',false],['pour-style','pourStyle',false],['surface-style','surface',false],['supply-style','supply',false],['paper-motion','paperMotion',false],['heap-depth','heapDepth',true],['control-mode','controlMode',false],['tilt-sensitivity','tiltSensitivity',true],['brush-width','brushWidth',true],['grain-size','grainSize',true],['mobility','mobility',true],['response','response',true],['hold-density','holdDensity',true],['hold-grain-size','holdGrainSize',true],['hold-rows','holdRows',true],['hold-placement','holdPlacement',false],['hold-experiment','holdExperiment',false],['hold-point-placement','holdPointPlacement',false],['entry-mode','entryMode',false],['finish-style','finishStyle',false],['poster-shine','posterShine',false]]){
+ $('#'+id).addEventListener(numeric&&id!=='hold-rows'?'input':'change',e=>applySettings({...settings,[key]:numeric?Number(e.target.value):e.target.value,feel:['jarShape','pourStyle','surface','supply','paperMotion','heapDepth','controlMode','tiltSensitivity','holdDensity','holdGrainSize','holdRows','holdPlacement','holdExperiment','holdPointPlacement','entryMode'].includes(key)?settings.feel:'custom'}));
 }
 document.querySelectorAll('input[name=recovery]').forEach(e=>e.onchange=()=>applySettings({...settings,recovery:e.value}));
 const tiltMessages={off:'Telefonu rahat tut, sonra hareketi aç.',requesting:'Hareket izni bekleniyor…',waiting:'Sensör bekleniyor; telefonu hafifçe eğ.',active:'Hareket açık · bu konumu düz sayabilirsin.',demo:'Ekran eğimi açık · sensör kullanılmıyor.',denied:'Hareket izni verilmedi. Yeniden dene veya tarayıcı izinlerini kontrol et.',unsupported:'Bu cihazda hareket sensörü yok. Ekrandaki eğimle deneyebilirsin.',insecure:'Hareket sensörü için oyunu HTTPS bağlantısından aç.',empty:'Hareket verisi gelmedi. Telefonda Safari veya Chrome ile açabilir ya da ekranda deneyebilirsin.',stale:'Hareket verisi durdu; akış güvenli biçimde duraklatıldı.'};
@@ -203,6 +208,10 @@ function updateTiltUI(){
  for(const [id,key] of Object.entries(controls)){const active=settingAvailable(key,settings.controlMode);$('#'+id).disabled=!active;$('#'+id).closest('label').hidden=!active||(enabled&&['response','brush-shape','brush-width','paper-motion'].includes(id));}
  for(const e of document.querySelectorAll('input[name=feel],input[name=layout]'))e.disabled=hold;
  $('#layout-experiments').hidden=hold;for(const id of ['hold-density','hold-grain-size','hold-rows','hold-placement','hold-experiment','hold-repour'])$('#'+id).disabled=!hold;
+ const point=hold&&settings.holdExperiment==='point';
+ for(const id of ['hold-placement','hold-rows']){$('#'+id).closest('label').hidden=point;$('#'+id).disabled=!hold||point;}
+ $('#hold-point-placement').closest('label').hidden=$('#hold-point-placement').disabled=!point;
+ if(point)$('#hold-detail').textContent='Kâğıtta bir yere basılı tut veya parmağını sürükle. Simler o noktaya akar, bırakınca durur. Eksik kalan bölgeleri de aynı şekilde doldur.';
  for(const id of ['tilt-demo-x','tilt-demo-y','tilt-demo-start'])$('#'+id).disabled=hold;
  $('#pour-hint').textContent=hold?'Sonraki yatay şeritteki fazla sim miktarını değiştirir.':enabled?'Sim hedefin üstünde tek bir noktaya dökülür. Telefonu eğerek yapışkana taşı.':'Sim hedefin biraz üstüne dökülür. Fırçayla taşıman gerekir.';
  $('#tilt-panel').hidden=!enabled;$('#tilt-detail').textContent=tiltMessages[deviceTilt.status]||tiltMessages.off;
@@ -232,7 +241,7 @@ async function galleryPictures(){
  const entries=await Promise.all(levels.map(async entry=>{
   const record=gallery.entries.find(item=>item.id===entry.id),locked=!progression.canPlay(entry.id),completed=progression.isComplete(entry.id)&&!locked,key=entry.id+':'+(record?.completedAt||'preview')+':'+locked+':'+completed;
   for(const cached of previewCache.keys())if(cached.startsWith(entry.id+':')&&cached!==key)previewCache.delete(cached);
-  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=34`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
+  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=35`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
   return previewCache.get(key);
  }));galleryArt=entries;view.setGalleryEntries(entries,levels.indexOf(level));return entries;
 }
@@ -268,7 +277,7 @@ async function openLevel(id,replace=false){
    lobby=false;view.hideLobby();level=target;stages=level.stages;installBundle(bundle);view.colors=stages.map(stage=>stage.color);exhibition=false;view.galleryCurrent=levels.indexOf(level);rail.focus=rail.target=levels.indexOf(level);
    reset();levelLabels();document.body.dataset.transition='arriving';delete document.body.dataset.exhibition;
    // Same renderer, same document. Only the local level bundle is replaced.
-   const url=new URL(location.href);url.search='';url.searchParams.set('v','34');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
+   const url=new URL(location.href);url.search='';url.searchParams.set('v','35');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');history[replace?'replaceState':'pushState']({level:level.id},'',url);
    view.setGalleryEntries(galleryArt,levels.indexOf(level));
   },()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
  }catch(error){transitioning=false;delete document.body.dataset.transition;$('#share-status').textContent='Eser yüklenemedi. Yeniden deneyebilirsin.';console.error(error);}
@@ -366,6 +375,12 @@ function updateUI(){
   if(settings.holdExperiment==='aim')messages.brush=['↔','Basılı tut ve yana kaydır.','Parmağının altındaki akış hızlanır.','YÖNLENDİR'];
   if(settings.holdExperiment==='pulse')messages.brush=['◉','Kısa basışlarla hızlan.','Bırakınca güç çubuğu yeniden dolar.','RİTİM'];
  }
+ if(settings.controlMode==='hold'&&settings.holdExperiment==='point'){
+  canvas.setAttribute('aria-label','Kâğıdın üzerinde bir noktaya basılı tutarak simi o yöne akıt');
+  messages.peel[2]='Parçalar açılınca sim tek şerit halinde dökülecek.';
+  messages.pour=['⠿',settings.holdPointPlacement==='middle'?'Ortadan bir şerit sim.':'Üstten bir şerit sim.','Sonra simi akıtmak istediğin yere bas.','DÖK'];
+  messages.brush=['◎','Simleri dokunduğun yere akıt.','Kâğıtta bir noktaya basılı tut. Yön değiştirmek için sürükle.','YÖNLENDİR'];
+ }
  const m=messages[phase]||messages.brush;$('#phase-icon').textContent=m[0];$('#instruction-title').textContent=m[1];$('#instruction-text').textContent=phase==='brush'&&settings.layout!=='flow'&&settings.controlMode==='brush'?'Sim ekle ile açık alanın üstüne yeni bir yığın dökebilirsin.':m[2];$('#phase-label').textContent=m[3];
  const canNext=phase==='brush'&&ready()&&!finished;
  $('#next').hidden=!canNext||settings.controlMode!=='brush';$('#next').disabled=!canNext;$('#next').innerHTML=index===stages.length-1?'Eserini tamamla <span>✧</span>':'Sonraki renk <span>→</span>';
@@ -411,6 +426,7 @@ async function prepareStage(target,bundle){
  await new Promise(resolve=>requestAnimationFrame(resolve));
 }
 function activate(){
+ holdPoint.x=W/2;holdPoint.y=H/2;
  holdCharge=1;tiltGrip=0;cascade=null;cleanup=null;holdLatched=false;holdSupplyPending=false;autoKick=.38;paperMotion.reset();paperPose={x:0,y:0,cup:0,pitch:0};if(preparedStage?.id!==stages[index].id)preparedStage=null;sand=preparedStage?.sand||new Sand();sand.setBehavior(settings);if(!preparedStage)sand.setMask(masks[stages[index].id]);flow.reset();peeled=false;peel=0;pour=null;readySince=0;strokes.length=0;activePart=0;revealedParts=0;
  gc.globalCompositeOperation='source-over';gc.clearRect(0,0,W,H);partLayers=preparedStage?.layers||makePartLayers();flow.setRollDuration(peelDuration(partLayers.map(p=>p.piece)));
  makeGlitter(stages[index].color);lastCoated=-1;cc.clearRect(0,0,W,H);view.setStage(index);updateCoat(true);repaintPaper();view.setPeelPiece(partLayers[0].paper,partLayers[0].piece);preparedStage=null;session.checkpoint(level.id,index,false);updateUI();
@@ -444,7 +460,7 @@ function prepareDose(){
 $('#hold-repour').onclick=()=>{
  if(settings.controlMode!=='hold'||finished)return;rack.finish();releaseAll();view.reset();activate();flow.phase='pour';peeled=true;peel=1;revealUntil(partLayers.length);view.peelProgress(1);prepareDose();repaintPaper();closeSettings();updateUI();
 };
-function addSand(){if(finished||flow.busy)return;sand.compact({archiveBound:settings.controlMode==='tilt'});view.currentInitialized=0;if(sand.capacity-sand.count<200&&sand.hasLoose()){refillAfterShake=true;startShake(false);return;}if(!flow.pour())return;releaseAll();prepareDose();readySince=0;updateUI()}
+function addSand(){if(finished||flow.busy)return;sand.compact({archiveBound:settings.controlMode!=='brush'});view.currentInitialized=0;if(sand.capacity-sand.count<200&&sand.hasLoose()){refillAfterShake=true;startShake(false);return;}if(!flow.pour())return;releaseAll();prepareDose();readySince=0;updateUI()}
 function startShake(advance=false){if(finished||!flow.shake(advance))return;shakeRuns++;releaseAll();cleanup=settings.extraFinish?new CleanupCycle(sand,cascade?.retainedIndices,sand.random,{style:settings.finishStyle}):null;flow.returnDuration=cleanup?.28:1;view.beginCleanup();pour=null;view.posePour(null);readySince=0;updateUI()}
 function nextStage(){
  refillAfterShake=false;nextRuns++;updateCoat(true,true);bakedContext.drawImage(coat,0,0);view.updateGrains(sand);
@@ -474,6 +490,7 @@ function beginPointer(e){
  if(flow.phase==='rolling'){down=false;pointer.visible=false;updateUI();return;}
  if(settings.controlMode==='hold'&&flow.phase==='brush'){
   if(settings.holdExperiment==='aim'&&e.currentTarget===canvas)setHoldAim(e);
+  if(settings.holdExperiment==='point'&&e.currentTarget===canvas)setHoldPoint(pointer);
   down=true;pointer.visible=false;updateUI();return;}
  if(settings.controlMode==='tilt'&&flow.phase==='brush'){pointer.visible=false;return;}
  if(settings.paperMotion==='hands'&&flow.phase==='brush'&&(pointer.x<24||pointer.x>576)){paperMotion.begin(pointer);updateUI();return;}
@@ -481,6 +498,14 @@ function beginPointer(e){
 }
 canvas.addEventListener('pointerdown',beginPointer);$('#hold-control').addEventListener('pointerdown',beginPointer);
 $('#hold-control').onclick=e=>{if(e.detail!==0||!(settings.controlMode==='hold'&&flow.phase==='brush'))return;holdLatched=!holdLatched;if(soundOn)audio();updateUI();};
+$('#hold-control').onkeydown=e=>{
+ if(settings.holdExperiment!=='point')return;
+ const offset={ArrowLeft:[-35,0],ArrowRight:[35,0],ArrowUp:[0,-35],ArrowDown:[0,35]}[e.key];
+ if(offset){e.preventDefault();setHoldPoint({x:holdPoint.x+offset[0],y:holdPoint.y+offset[1]});}
+};
+function setHoldPoint({x,y}){
+ holdPoint.x=Math.max(1,Math.min(W-1,x));holdPoint.y=Math.max(1,Math.min(H-1,y));
+}
 function setHoldAim(e){
  const bounds=canvas.getBoundingClientRect();
  holdAim=Math.max(0,Math.min(600,600*(e.clientX-bounds.left)/bounds.width));
@@ -494,7 +519,8 @@ canvas.addEventListener('pointermove',e=>{
  moveHoldAim(e);
  if((exhibition||finished)&&!transitioning){if(gate.owns(e.pointerId)){rail.move(e.clientX,view.heroFrame.width*810/660,e.timeStamp);galleryLabels();}return;}
  if(transitioning||!view||finished||e.isPrimary===false)return;
- if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons){pointer={...view.mapPointer(e),visible:true};return;}
+ if(down&&gate.owns(e.pointerId)&&settings.controlMode==='hold'&&settings.holdExperiment==='point'){setHoldPoint(view.mapPointer(e));return;}
+ if(gate.active===null&&e.pointerType==='mouse'&&!e.buttons&&settings.controlMode==='brush'){pointer={...view.mapPointer(e),visible:true};return;}
  if(!gate.owns(e.pointerId)||flow.phase!=='brush'||settings.controlMode!=='brush')return;
  if(paperMotion.grip){pointer={...view.mapPointer(e),visible:true};paperMotion.move(pointer);return;}
  if(!down)return;
@@ -511,7 +537,7 @@ canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
  $('#gallery-caption').style.top=(view.heroFrame.y+view.heroFrame.height+16)+'px';
- Object.assign(canvas.dataset,{version:'34',holdExperiment:settings.holdExperiment,holdAim:holdAim.toFixed(1),holdCharge:holdCharge.toFixed(3),cartridgeSlot:rack.active,cartridgeAmmo:rack.active>=0&&pour?Math.ceil(AMMO*Math.max(0,1-pour.emitted/pour.dose)):0,booting:Number(booting),lobby:Number(lobby),activeCoatAlpha:(view.coatUniforms.uActiveAlpha.value).toFixed(3),workAlpha:(view.workAlpha??1).toFixed(3),finishAction:cleanup?.action||'',posterShine:settings.posterShine,phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{version:'35',holdExperiment:settings.holdExperiment,holdAim:holdAim.toFixed(1),holdPointX:holdPoint.x.toFixed(1),holdPointY:holdPoint.y.toFixed(1),holdPointPlacement:settings.holdPointPlacement,holdCharge:holdCharge.toFixed(3),cartridgeSlot:rack.active,cartridgeAmmo:rack.active>=0&&pour?Math.ceil(AMMO*Math.max(0,1-pour.emitted/pour.dose)):0,booting:Number(booting),lobby:Number(lobby),activeCoatAlpha:(view.coatUniforms.uActiveAlpha.value).toFixed(3),workAlpha:(view.workAlpha??1).toFixed(3),finishAction:cleanup?.action||'',posterShine:settings.posterShine,phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#stat-recovery-label').textContent=settings.recovery==='table'?'Masaya inen / sönen':'Toplanan / kavanoz';$('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-table-upload':((view.tableUploadBytes||0)/1024).toFixed(1),'stat-recovery':(settings.recovery==='table'?(view.tableLanded||0):(view.recovery?.deposited||0)).toLocaleString('tr')+' / '+(settings.recovery==='table'?(view.tableCleared||0):view.collectedCount).toLocaleString('tr'),'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.tableActive||0)+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-transfer':((m.visible?view.grainUploadBytes||0:0)/1024).toFixed(0),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
@@ -528,19 +554,26 @@ function advanceGame(dt,reuseSurface=false){
  const tiltPlaying=settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'&&!finished;
  holding=settings.controlMode==='hold'&&(down||holdLatched)&&!dialog.open&&flow.phase==='brush'&&!finished;
  if(flow.phase==='brush'&&!dialog.open&&shouldFinishHeld(sand.coverage,settings.controlMode))cascade?.requestFinish();
- if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.step(dt,holding,false,{
+ const holdFlow=settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase);
+ if(holdFlow)cascade.step(dt,holding,false,{
   aim:settings.holdExperiment==='aim'?holdAim:null,
-  power:settings.holdExperiment==='pulse'?.22+1.38*holdCharge:1
+  power:settings.holdExperiment==='pulse'?.22+1.38*holdCharge:1,
+  point:holdPoint
  });
  paperPose=settings.controlMode==='hold'?(['pour','brush'].includes(flow.phase)?cascade?.pose:null)||{x:0,y:0,cup:0,pitch:0}:settings.controlMode==='tilt'?{x:tiltPlaying?tiltFrame.x*.25:0,y:tiltPlaying?tiltFrame.y*.25:0,cup:0}:paperMotion.step(dt,settings.paperMotion,brushMotion,down);
  if(settings.controlMode==='hold'&&settings.holdExperiment==='aim'&&holding&&cascade){
   paperPose.x=(holdAim-300)/300*cascade.press*.09;
  }
- const drainage=flow.phase==='shake'?(cleanup?.pose||drainPose(flow.progress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};view.setCardPose(paperPose,flow.phase,drainage);
- if(!finished&&!(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase)))sand.step(dt,{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying,tiltLayers:tiltPlaying,reuseSurface,granular:settings.controlMode==='tilt'&&flow.phase!=='shake',pinned:flow.phase==='shake'?cleanup?.pinned:null});
+ if(holdFlow&&cascade.directional){
+  paperPose.x=(holdPoint.x-W/2)/(W/2)*cascade.press*.16;
+  paperPose.y=(holdPoint.y-H/2)/(H/2)*cascade.press*.15;
+ }
+ const drainage=flow.phase==='shake'?(cleanup?.pose||drainPose(flow.progress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};if(!holdFlow||cascade.exits.length)view.setCardPose(paperPose,flow.phase,drainage);
+ if(!finished&&!holdFlow)sand.step(dt,{shaking:flow.phase==='shake',bend:drainage.bend,tilt:drainage.pitch,tiltX:tiltPlaying?tiltFrame.x:paperPose.x,tiltY:tiltPlaying?tiltFrame.y:paperPose.y,cup:paperPose.cup,contactAdhesion:tiltPlaying,tiltLayers:tiltPlaying,reuseSurface,granular:settings.controlMode==='tilt'&&flow.phase!=='shake',pinned:flow.phase==='shake'?cleanup?.pinned:null});
  if(flow.phase==='shake'&&cleanup)cleanup.advance(dt,view.spills.length+(view.recovery?.pending||0));
- if(!finished)view.collectSpill(sand,true);
- view.updateCollector(flow.phase,dt);view.updateSpill(dt,false);
+ if(!finished&&(!holdFlow||cascade.exits.length))view.collectSpill(sand,true,holdFlow?cascade.exits:null);
+ if(!holdFlow)view.updateCollector(flow.phase,dt);
+ view.updateSpill(dt,false);
  const event=flow.tick(dt,{drainComplete:flow.phase!=='shake'||(cleanup?cleanup.done:!sand.hasLoose()&&view.spills.length===0&&!(view.recovery?.pending))});
  if(event==='rolled'){releaseAll();revealUntil(partLayers.length);peeled=true;peel=1;repaintPaper();view.peelProgress(1);prepareDose();updateUI()}
  if(event==='poured'){rack.finish();pour=null;view.posePour(null);updateUI()}
@@ -570,15 +603,15 @@ function frame(t){
   $('#hold-pulse').setAttribute('aria-valuenow',String(Math.round(holdCharge*100)));
  }
 
- const steps=gameSteps(dt,settings.gameSpeed,settings.controlMode==='tilt'?3:Infinity);if(!exhibition&&!transitioning&&!finished)gameTime+=steps.total;else exhibitTime+=dt;
+ const steps=gameSteps(dt,settings.gameSpeed,settings.controlMode==='brush'?Infinity:3);if(!exhibition&&!transitioning&&!finished)gameTime+=steps.total;else exhibitTime+=dt;
  if(!exhibition&&!transitioning&&!finished){for(let i=0;i<steps.count;i++)advanceGame(steps.dt,i>0);
- if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.refresh();}
+ if(settings.controlMode==='hold'&&cascade&&['pour','brush'].includes(flow.phase))cascade.refresh(t);}
  rail.step(dt);view.galleryFocus=rail.focus;
  if(flow.phase==='rolling'&&!exhibition&&!transitioning)animatePeel();
  // Commit new coverage before bound grains leave the moving mesh, avoiding a blank frame.
  updateCoat();simMs=simMs*.85+(performance.now()-simStart)*.15;
  sound(exhibition||transitioning?0:flow.phase==='pour'?.14:flow.phase==='shake'?.15:flow.phase==='rolling'?.06:holding?.035:tiltGrip|| (moved?Math.min(.16,.015+moved*.00003):0));
- const drawStart=performance.now();view.render(sand,{time:(gameTime+exhibitTime)*1000,dt:steps.total,realDt:dt,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip||(settings.controlMode==='hold'&&(cascade?.press||0)>.02),peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,cleanupPose:flow.phase==='shake'?cleanup?.pose:null,finished});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
+ const drawStart=performance.now();view.render(sand,{time:(gameTime+exhibitTime)*1000,dt:steps.total,realDt:dt,phase:flow.phase,down,pointer,brushMotion,paperPose,showBrush:settings.controlMode==='brush',paperHeld:!!paperMotion.grip||(settings.controlMode==='hold'&&(cascade?.press||0)>.02),peeled,pour,shakeProgress:flow.phase==='shake'?flow.progress:0,cleanupPose:flow.phase==='shake'?cleanup?.pose:null,finished,holdFlow:settings.controlMode==='hold'&&['pour','brush'].includes(flow.phase)?cascade:null,holdPoint:holding&&cascade?.directional?holdPoint:null});renderMs=renderMs*.85+(performance.now()-drawStart)*.15;
  if((statClock+=dt)>.2){statClock=0;updateUI();updateStats();}
 }
 function loadingStatus(message,percent){$('#loading-message').textContent=message;$('#loading-progress').style.width=percent+'%';$('#loading-screen').setAttribute('aria-valuenow',String(percent));}

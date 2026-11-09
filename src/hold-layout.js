@@ -11,6 +11,12 @@ function supplied(bounds,sources){
  return false;
 }
 export function holdLayout(mask,settings={}){
+ if(settings.holdExperiment==='point'){
+  const bounds=boundsOf(mask),padding=clamp(bounds.w*.18+18,36,90);
+  const x0=clamp(bounds.x-padding,.5,W-.5),x1=clamp(bounds.x+bounds.w+padding,.5,W-.5);
+  const y=settings.holdPointPlacement==='middle'?clamp(bounds.y+bounds.h*.5,H*.34,H*.66):22;
+  return {placement:'point',rows:1,bands:[{bounds,x0,x1,y,row:0,group:0}],doseScale:(x1-x0)/W};
+ }
  const placement=settings.holdPlacement||'sheet',local=['local','joined'].includes(placement),rows=settings.holdRows===2?2:1,full=boundsOf(mask),parts=local&&settings.pieces?.length?settings.pieces:[{bounds:full}],bands=[];
  let sources=parts.map(({bounds})=>{
   const padding=clamp(bounds.w*.2+14,24,85);

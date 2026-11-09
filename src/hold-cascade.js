@@ -10,14 +10,15 @@ export class HoldCascade {
  constructor(sand,settings={}){
   const layout=holdLayout(sand.mask,settings);Object.assign(this,{placement:layout.placement,rows:layout.rows,bands:layout.bands});
   const plannedLoose=Math.round(holdLooseCount(settings)*layout.doseScale);
-  sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+plannedLoose)));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.byParticle=new Map();this.activeRoutes=[];this.retainedIndices=[];this.dustAssigned=0;
+  sand.reserve(Math.min(HOLD_MAX_CAPACITY,Math.max(sand.capacity,19200+plannedLoose)));this.sand=sand;this.depth=settings.heapDepth||1.25;this.elapsed=0;this.press=0;this.emitted=0;this.routes=[];this.activeRoutes=[];this.retainedIndices=[];this.dustAssigned=0;
+  this.directional=this.placement==='point';this.exits=[];this.airborne=0;this.revision=0;this.surfaceRevision=-1;this.wasHeld=false;
   const counts=new Uint32Array(this.bands.length);
   this.layerCapacity=Uint8Array.from(sand.target,pixels=>Math.min(24,Math.max(1,Math.ceil(pixels/(1.25*(settings.holdGrainSize||1)**2)))));this.pendingLayers=new Uint8Array(sand.target.length);this.pendingLayerCount=0;this.adheredLayers=0;
   for(let k=0;k<sand.target.length;k++)if(sand.target[k]&&!sand.bound[k]){
    const x0=k%COLS*CELL,y0=Math.floor(k/COLS)*CELL;let pixel=null;
    for(let y=y0;y<y0+CELL&&!pixel;y++)for(let x=x0;x<x0+CELL;x++)if(sand.onGlue(x+.5,y+.5)){pixel={x:x+.5,y:y+.5};break;}
    if(pixel){
-    const row=this.rows===2&&(['local','joined'].includes(this.placement)||pixel.y>104)?(k*37%101)%2:0,band=['local','joined'].includes(this.placement)?holdSourceBand(this.bands,pixel.x,pixel.y,row):Math.min(this.bands.length-1,row);this.routes.push({...pixel,target:true,row,band});counts[band]++;
+    const row=this.rows===2&&(['local','joined'].includes(this.placement)||pixel.y>104)?(k*37%101)%2:0,band=['local','joined'].includes(this.placement)?holdSourceBand(this.bands,pixel.x,pixel.y,row):Math.min(this.bands.length-1,row);this.routes.push({...pixel,target:true,row,band,cell:k});counts[band]++;
    }
   }
   const available=sand.capacity-sand.count,loose=Math.min(plannedLoose,Math.max(0,available-this.routes.length)),totalWidth=this.bands.reduce((sum,b)=>sum+b.x1-b.x0,0);let assigned=0;
@@ -48,43 +49,59 @@ export class HoldCascade {
  sourcePose(progress){return this.pourState(progress);}
  pour(progress,height=139){
   const {desired}=this.pourState(progress),s=this.sand;
+  if(this.emitted<desired)this.revision++;
   while(this.emitted<desired){const route=this.routes[this.emitted++],band=this.bands[route.band],i=s.count;if(!s.emit(route.x,band.y,1,{spread:0,height,fan:0}))break;
    const seed=s.seed[i];route.i=i;const top=Math.max(-1.8,band.y-22);route.startY=route.target?Math.max(top+.02,Math.min(route.y-.2,top+2+seed*27)):top+2+seed*28;
+   if(this.directional){
+    route.startY=band.y+(seed-.5)*25;
+    route.offsetX=(seed*137%1-.5)*66;
+    route.offsetY=(seed*173%1-.5)*54;
+   }
    // A small fine fraction stops independently along its real travel path.
    // Fresh random samples per pour replace the old fixed mound destinations.
-   if(!route.target&&this.dustAssigned<this.residue.budget&&s.random()<this.dustChance*(.35+.95*Math.exp(-(((route.x-this.residue.centerX)/this.residue.spreadX)**2)))){
+   if(!this.directional&&!route.target&&this.dustAssigned<this.residue.budget&&s.random()<this.dustChance*(.35+.95*Math.exp(-(((route.x-this.residue.centerX)/this.residue.spreadX)**2)))){
     const yMin=top+48,uniform=yMin+s.random()*(H-42-yMin),cluster=this.residue.centerY+(s.random()-.5)*this.residue.spreadY*2,y=Math.max(yMin,Math.min(H-42,(s.random()<.2?uniform:uniform*(1-this.residue.bias)+cluster*this.residue.bias)));route.rest={x:route.x,y,z:2+s.random()*.5};s.dust[i]=1;this.dustAssigned++;
    }
    route.delay=(seed*97%1)*1.1;route.speed=105+(seed*197%1)*43;route.distance=0;
-   s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.byParticle.set(i,route);this.activeRoutes.push(route);
+   route.height=seed*127%1;route.wave=seed*31;
+   s.y[i]=route.startY;s.previousY[i]=route.startY;s.vx[i]=s.vy[i]=0;s.vz[i]=-85;this.airborne++;this.activeRoutes.push(route);
   }
  }
  releaseLayer(route){if(route.layerCell===undefined)return;this.pendingLayers[route.layerCell]--;this.pendingLayerCount--;delete route.layerCell;}
  requestFinish(){this.finishing=true;this.sealing=true;this.finishElapsed??=0;}
- step(dt,held=false,refresh=true,{aim=null,power=1}={}){
+ step(dt,held=false,refresh=true,{aim=null,power=1,point=null}={}){
   held=held||!!this.finishing;if(this.finishing)this.finishElapsed+=dt;
   const s=this.sand;this.press+=(Number(held)-this.press)*(1-Math.exp(-dt*(held?8:11)));
+  this.exits.length=0;
+  const released=this.wasHeld&&!held;this.wasHeld=held;
+  if(!held&&!this.airborne&&!released){if(refresh)this.refresh();return;}
   const previousTime=this.elapsed;if(held)this.elapsed+=dt*(this.finishing?1:power);
+  if(this.directional&&held&&this.pointIdle&&!this.airborne&&point?.x===this.pointX&&point?.y===this.pointY)return;
+  const travelTime=this.elapsed-previousTime,depth=this.depth/1.25;
+  let moved=this.airborne>0||(!this.directional&&held);
   let active=0;for(let at=0;at<this.activeRoutes.length;at++){
    const route=this.activeRoutes[at],i=route.i;if(s.state[i]===BOUND||s.state[i]===LOST){this.releaseLayer(route);continue;}this.activeRoutes[active++]=route;
-   if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+(s.seed[i]*127%1)*25*this.depth/1.25;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;}continue;}
+   if(s.state[i]===AIR){s.vz[i]-=1050*dt;s.z[i]+=s.vz[i]*dt;const floor=5+route.height*25*depth;if(s.z[i]<=floor){s.z[i]=floor;s.vz[i]=0;s.state[i]=FREE;this.airborne--;if(s.y[i]<0)this.exits.push(i);}continue;}
+   if(!held&&!released)continue;
    s.previousX[i]=s.x[i];s.previousY[i]=s.y[i];s.vx[i]=s.vy[i]=0;if(!held)continue;
    if(route.parked){s.z[i]+=(route.rest.z-s.z[i])*Math.min(1,dt*14);continue;}
    if(route.landing!==undefined){
+    moved=true;
     route.landing+=dt;const progress=Math.min(1,route.landing/.18),ease=progress*progress*(3-2*progress);
     s.z[i]=route.contactZ+(2.2-route.contactZ)*ease;s.roll[i]+=dt*2;
-    if(progress===1){s.z[i]=2.2;const layer=route.layerCell!==undefined;this.releaseLayer(route);const bound=layer?s.bindLayer(i):s.bind(i,true);if(layer&&bound)this.adheredLayers++;if(!bound){delete route.landing;delete route.contactZ;}}continue;
+    if(progress===1){s.z[i]=2.2;const cell=route.layerCell,layer=cell!==undefined&&!!s.bound[cell];this.releaseLayer(route);const bound=layer?(!this.directional||s.bound[cell]<this.layerCapacity[cell])&&s.bindLayer(i):s.bind(i,true);if(layer&&bound)this.adheredLayers++;if(!bound){delete route.landing;delete route.contactZ;}}continue;
    }
    const guidedSpeed=aim===null||this.finishing?1:aimSpeed(route.x,aim);
-   const travel=guidedSpeed*route.speed*(Math.max(0,this.elapsed-route.delay)-Math.max(0,previousTime-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
+   const travel=guidedSpeed*route.speed*(route.delay<=previousTime?travelTime:Math.max(0,this.elapsed-route.delay));if(travel<=0&&!(this.finishing&&route.target))continue;
+   if(this.directional){moved=this.moveTowardPoint(route,point,travel,dt,depth)||moved;continue;}
    const old=s.y[i],next=this.finishing&&route.target?old+(route.y-old)*Math.min(1,dt/Math.max(.001,.30-this.finishElapsed)):old+travel;route.distance+=travel;
    // A dense rolling front becomes a thinner trail. The motion is tied only to
    // held time: releasing cannot grow, paint or advance the stream.
-   s.z[i]=2.2+(s.seed[i]*127%1)*(4+23*Math.exp(-route.distance/300))*this.depth/1.25;
+   s.z[i]=2.2+route.height*(4+23*Math.exp(-route.distance/300))*depth;
    const steer=aim===null?0:Math.max(-1,Math.min(1,(aim-route.x)/150));
    const approach=route.target?Math.max(0,Math.min(1,(route.y-next)/75)):1;
    const sway=steer*approach*24*Math.min(1,route.distance/42);
-   s.x[i]=route.x+sway+(route.target?0:Math.sin(route.distance*.035+s.seed[i]*31)*2.2);
+   s.x[i]=route.x+sway+(route.target?0:Math.sin(route.distance*.035+route.wave)*2.2);
    s.x[i]=Math.max(.2,Math.min(W-.2,s.x[i]));s.y[i]=next;s.vy[i]=route.speed;s.roll[i]+=travel*.075;
    if(route.rest&&next>=route.rest.y){s.x[i]=route.rest.x;s.y[i]=route.rest.y;s.vy[i]=0;route.parked=true;this.retainedIndices.push(i);continue;}
    if(!route.target&&!route.rest&&!this.sealing){
@@ -96,14 +113,52 @@ export class HoldCascade {
     }
    }
    if(route.target&&old<=route.y&&next>=route.y){s.x[i]=route.x;s.y[i]=route.y;s.vy[i]=0;route.contactZ=s.z[i];s.z[i]=route.contactZ;route.landing=0;}
+   if(s.y[i]<0||s.y[i]>=H)this.exits.push(i);
   }
   this.activeRoutes.length=active;if(this.finishing&&s.coverage===1)this.sealing=true;
+  if(moved)this.revision++;
+  if(this.directional&&held){
+   this.pointX=point?.x;this.pointY=point?.y;this.pointIdle=!moved&&this.elapsed>=1.1;
+  }
   // Reuse the existing density/height representation without advancing its
   // independent physics solver. Painting is exclusively the travelling packets.
   if(refresh)this.refresh();
  }
- refresh(){this.sand.step(0,{granular:true,refreshOnly:true});}
+ moveTowardPoint(route,point,travel,dt,depth){
+  if(!point||this.finishing)return false;
+  const s=this.sand,i=route.i,x=s.x[i],y=s.y[i];
+  // Reserve a grain for each empty stencil cell so even a small detail can
+  // fill when the player aims at that area.
+  const target=route.target&&!s.bound[route.cell];
+  const guided=target&&((route.x-point.x)**2+(route.y-point.y)**2<105**2);
+  const tx=guided?route.x:Math.max(.5,Math.min(W-.5,point.x+route.offsetX));
+  const ty=guided?route.y:Math.max(.5,Math.min(H-.5,point.y+route.offsetY));
+  const dx=tx-x,dy=ty-y,distance=Math.sqrt(dx*dx+dy*dy);
+  const length=Math.min(distance,travel*(guided?1.35:Math.min(1.48,.28+distance/75)));
+  if(length<.001&&!guided)return false;
+  const reached=length>=distance,ratio=reached?1:length/distance;
+  s.x[i]=reached?tx:x+dx*ratio;s.y[i]=reached?ty:y+dy*ratio;
+  s.vx[i]=dx*ratio/dt;s.vy[i]=dy*ratio/dt;
+  route.distance+=length;s.roll[i]+=length*.075;
+  s.z[i]=2.2+route.height*(4+18*Math.exp(-route.distance/240))*depth;
+  if(guided&&reached){route.contactZ=s.z[i];route.landing=0;return true;}
+  if(target)return true;
+  const cell=s.cell(s.x[i],s.y[i]);
+  if(!s.target[cell]||s.bound[cell]+this.pendingLayers[cell]>=this.layerCapacity[cell]||!s.onGlue(s.x[i],s.y[i]))return true;
+  route.layerCell=cell;route.contactZ=s.z[i];route.landing=0;this.pendingLayers[cell]++;
+  this.pendingLayerCount++;
+  return true;
+ }
+ refresh(now){
+  if(this.surfaceRevision===this.revision)return;
+  // Only the rendered shadow and glints read this field in hold mode.
+  // The actual grain and contact simulation still runs on every step.
+  if(now!==undefined&&now-(this.lastSurfaceAt??-Infinity)<31)return;
+  this.lastSurfaceAt=now;
+  this.surfaceRevision=this.revision;
+  this.sand.step(0,{granular:true,refreshOnly:true});
+ }
  get retainedCount(){let count=0;for(const i of this.retainedIndices)if(this.sand.state[i]===FREE)count++;return count;}
- get pose(){return {x:0,y:0,cup:this.press*.38,pitch:this.press*.34};}
+ get pose(){return this.directional?{x:0,y:0,cup:this.press*.12,pitch:0}:{x:0,y:0,cup:this.press*.38,pitch:this.press*.34};}
  get front(){return Math.min(H,this.elapsed*125);}
 }

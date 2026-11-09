@@ -3,6 +3,7 @@ import {Recovery,startRecovery,stepRecovery,transferPacket} from './recovery.js'
 import {RecoveryVisual} from './recovery-visual.js';
 import {exitOpacity,FINISH_DUST_SCALE} from './spill-appearance.js';
 const MAX_RENDER_GRAINS=128000;
+const HOLD_DRAW_BUDGET={economy:17000,balanced:30000,quality:42000};
 const grainScale=settings=>settings?.controlMode==='hold'?(settings.holdGrainSize||1):(settings?.grainSize||1);
 import {paperExit,exitVelocity} from './spill.js';
 import * as T from 'three';
@@ -395,6 +396,7 @@ export class AtelierScene {
  makeHint(){const map=canvasTexture((c,s)=>{c.strokeStyle='#ffffee';c.lineWidth=5;c.beginPath();c.arc(s/2,s/2,48,0,TAU);c.stroke();c.fillStyle='#fffef0';c.beginPath();c.arc(s/2,s/2,7,0,TAU);c.fill()},256);const sp=new T.Sprite(new T.SpriteMaterial({map,transparent:true,depthTest:false}));sp.scale.set(90,90,1);return sp}
  applySettings(settings){
   const old=this.settings,ratioOfGrains=grainScale(settings)/grainScale(old);this.settings={...settings};
+  this.holdDrawFlow=null;
   if(settings.recovery==='table'&&old?.recovery!=='table'&&this.tablePool){
    for(const p of this.spills)if(!p.table){p.recoveryMass=p.recovery==='transfer';startTable(p);}this.reserveTable(Math.max(48000,this.spills.length+this.tableDrawCount));
   }
@@ -460,13 +462,17 @@ export class AtelierScene {
   mat.compose(new T.Vector3(0,0,-1000),q,new T.Vector3(scale,scale,scale));mesh.instanceMatrix.array.set(mat.elements,i*16);
   const c=new T.Color(color),v=.60+(seed*47%1)*.7;c.multiplyScalar(v);if(seed*127%1>.965)c.lerp(new T.Color('#c2c8da'),.65);mesh.instanceColor.array.set([c.r,c.g,c.b],i*3);
  }
- updateGrains(sand){
+ updateGrains(sand,drawRate=1){
   if(sand.count>this.current.instanceMatrix.count)this.ensureGrainCapacity('current',sand.count);
   const curve=1.22*this.bend,r=curve>1e-6?300/curve:0,cp=Math.cos(this.pitch),sp=Math.sin(this.pitch);
   const a=this.current.instanceMatrix.array,c=this.current.instanceColor.array,seeds=this.current.geometry.attributes.flakeSeed,color=new T.Color(this.colors[this.activeColor]);let out=0,changedFrom=Infinity,changedTo=0;
+  const scaleFactor=grainScale(this.settings)*(sand.granular?.86:1)*Math.min(1.22,1/Math.sqrt(drawRate));
   for(let i=0;i<sand.count;i++){
    if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
-   const j=out*16,seed=sand.seed[i],angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*grainScale(this.settings)*(sand.finishDust?.[i]?FINISH_DUST_SCALE:1)*(sand.granular?.86:1);
+   const seed=sand.seed[i],dust=sand.finishDust?.[i]||sand.dust?.[i];
+   // Use a fixed selection for this pour so flakes do not pop in and out.
+   if(drawRate<1&&!dust&&seed>=drawRate)continue;
+   const j=out*16,angle=seed*79+(sand.roll?.[i]||0),cs=Math.cos(angle),sn=Math.sin(angle),scale=(1.35+(seed*197%1)*.9)*scaleFactor*(sand.finishDust?.[i]?FINISH_DUST_SCALE:1);
    let px=sand.x[i]-300,py=400-sand.y[i],pz=3+(sand.state[i]===FREE?Math.min(MAX_GRAIN_HEIGHT,sand.z[i]):sand.z[i]);
    if(!this.current.userData?.gpuBend&&py>=-400&&(this.bend||this.pitch)){const theta=px/300*curve,crossZ=curve>1e-6?2*Math.sin(theta/2)**2*r:0,along=py+400;px=curve>1e-6?Math.sin(theta)*r:px;py=-400+along*cp-crossZ*sp;pz+=110*this.bend+along*sp+crossZ*cp;}
    a[j]=cs*scale;a[j+1]=sn*scale;a[j+2]=(seed*17%1-.5)*(sand.pressed[i]?.3:1.2)*scale;a[j+3]=0;
@@ -480,15 +486,17 @@ export class AtelierScene {
  }
  updateHeap(sand,dt=1/60){
   const p=this.heapGeo.attributes.position,cols=COLS/2,rows=ROWS/2;
+  const relief=!sand.granular,blend=Math.min(1,dt*30);
   for(let row=0;row<=rows;row++)for(let col=0;col<=cols;col++){
    const x=Math.min(col*2,COLS-1),y=Math.min(row*2,ROWS-1),k=y*COLS+x;
    const h=Math.min(MAX_HEAP_HEIGHT,(sand.moundHeight[k]+sand.moundHeight[y*COLS+Math.max(x-1,0)]+sand.moundHeight[Math.max(y-1,0)*COLS+x]+sand.moundHeight[Math.max(y-1,0)*COLS+Math.max(x-1,0)])*.25);
-   const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=h>0?old+(h*.8-old)*Math.min(1,dt*30):0;
+   const vertex=row*(cols+1)+col,old=this.heapGeo.attributes.heapAmount.getX(vertex),height=h>0?old+(h*.8-old)*blend:0;
    this.heapGeo.attributes.heapAmount.setX(vertex,height);
-   const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend,this.pitch);p.setXYZ(vertex,q.x,q.y,q.z);
+   if(relief){const q=bentPoint(col/cols*W-300,400-row/rows*H,3+height,this.bend,this.pitch);p.setXYZ(vertex,q.x,q.y,q.z);}
    if(this.heapShadowGeo){const shadow=bentPoint(Math.min(300,col/cols*W-300+height*.14),Math.max(-400,400-row/rows*H-height*.32),4.5,this.bend,this.pitch);this.heapShadowGeo.attributes.position.setXYZ(vertex,shadow.x,shadow.y,shadow.z);this.heapShadowGeo.attributes.heapAmount.setX(vertex,height);}
   }
-  p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.heapShadowGeo){this.heapShadowGeo.attributes.position.needsUpdate=true;this.heapShadowGeo.attributes.heapAmount.needsUpdate=true;}if(this.heap?.visible!==false&&this.renderTick++%4===0)this.heapGeo.computeVertexNormals();
+  if(relief){p.needsUpdate=true;this.heapGeo.attributes.heapAmount.needsUpdate=true;if(this.heap?.visible!==false&&this.renderTick++%4===0)this.heapGeo.computeVertexNormals();}
+  if(this.heapShadowGeo){this.heapShadowGeo.attributes.position.needsUpdate=true;this.heapShadowGeo.attributes.heapAmount.needsUpdate=true;}
  }
  updateBend(amount,pitch=amount*.58){
   if(amount<=1e-6)amount=0;
@@ -498,7 +506,7 @@ export class AtelierScene {
   for(const [mesh,base] of [[this.paper,this.paperBase],[this.edge,this.edgeBase]]){
    const p=mesh.geometry.attributes.position;
    for(let i=0;i<p.count;i++){const q=bentPoint(base[i*3],base[i*3+1],base[i*3+2],amount,pitch);p.setXYZ(i,q.x,q.y,q.z);}
-   p.needsUpdate=true;mesh.geometry.computeVertexNormals();
+   p.needsUpdate=true;if(mesh!==this.paper||this.settings?.controlMode!=='hold')mesh.geometry.computeVertexNormals();
   }
   const outline=this.paperOutline.geometry.attributes.position;for(let i=0;i<outline.count;i++){const q=bentPoint(this.outlineBase[i*3],this.outlineBase[i*3+1],this.outlineBase[i*3+2],amount,pitch);outline.setXYZ(i,q.x,q.y,q.z);}outline.needsUpdate=true;
  }
@@ -519,9 +527,12 @@ export class AtelierScene {
  }
  setCoatMask(canvas){this.coatMask.image=canvas;this.coatMask.needsUpdate=true;}
  preserve(sand){this.collectSpill(sand);}
- collectSpill(sand,outsideOnly=false){
+ collectSpill(sand,outsideOnly=false,indices=null){
   this.paperGroup.updateMatrixWorld(true);const color=new T.Color(this.colors[this.activeColor]);
-  for(let i=0;i<sand.count;i++)if(sand.state[i]!==BOUND&&sand.state[i]!==LOST&&this.spills.length<MAX_RENDER_GRAINS){
+  const count=indices?.length??sand.count;
+  for(let at=0;at<count&&this.spills.length<MAX_RENDER_GRAINS;at++){
+   const i=indices?indices[at]:at;
+   if(sand.state[i]===BOUND||sand.state[i]===LOST)continue;
    if(outsideOnly&&(sand.state[i]!==FREE||sand.cell(sand.x[i],sand.y[i])>=0))continue;
    const outside=sand.cell(sand.x[i],sand.y[i])<0,exit=outside?paperExit(sand.previousX[i],sand.previousY[i],sand.x[i],sand.y[i]):null;
    const x=exit?exit.x:sand.x[i],y=exit?exit.y:sand.y[i];
@@ -622,20 +633,29 @@ export class AtelierScene {
   p.needsUpdate=true;lift.needsUpdate=true;this.peelGeo.computeVertexNormals();
  }
  paperChanged(){this.paperTexture.needsUpdate=true}
- render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,cleanupPose=null,finished=false}){
+ render(sand,{time,dt,realDt=dt,phase,down,pointer,peeled,pour,brushMotion={dx:0,dy:0,speed:0,load:0},paperPose={x:0,y:0,cup:0},paperHeld=false,showBrush=true,shakeProgress=0,cleanupPose=null,finished=false,holdFlow=null,holdPoint=null}){
   this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTiltGrip.value=this.settings.controlMode==='tilt'?1:0;this.coatUniforms.uTime.value=time*.001;this.workAlpha=finished?0:workOpacity(this.heroProgress,this.entry,this.reducedMotion.matches);this.workUniform.value=this.workAlpha;this.coatUniforms.uActiveAlpha.value=finished?1:this.workAlpha;
   if(this.entry?.stage==='out'){const p=entryProgress(this.entry.age*1.3,this.reducedMotion.matches);this.updateBend(pose.bend*p,pose.pitch*p);this.paperGroup.rotation.x=paperPose.y*p;this.paperGroup.rotation.y=paperPose.x*p;}
-  if(this.workAlpha>.001&&!finished)this.updateGrains(sand);this.current.visible=this.workAlpha>.001&&!finished;this.syncSpills();this.syncTable();this.tablePool.visible=this.workAlpha>.001;
+  const showGrains=this.workAlpha>.001&&!finished;
+  const sameHold=holdFlow&&this.holdDrawFlow===holdFlow&&this.holdDrawRevision===holdFlow.revision;
+  if(showGrains&&!sameHold){
+   const rate=holdFlow?Math.min(1,(HOLD_DRAW_BUDGET[this.settings.profile]||HOLD_DRAW_BUDGET.balanced)/holdFlow.routes.length):1;
+   this.updateGrains(sand,rate);
+   this.holdDrawFlow=holdFlow;this.holdDrawRevision=holdFlow?.revision;
+  }else this.grainUploadBytes=0;
+  this.current.visible=showGrains;this.syncSpills();this.syncTable();this.tablePool.visible=this.workAlpha>.001;
   const showHeap=this.settings.relief&&this.workAlpha>.001&&!finished&&phase!=='shake'&&sand.surfaceCount>0;
-  this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=(sand.granular?.10:.23)*this.workAlpha;if(showHeap)this.updateHeap(sand,dt);
+  this.heap.visible=showHeap&&!sand.granular;this.heapShadow.visible=showHeap;this.heapShadow.material.opacity=(sand.granular?.10:.23)*this.workAlpha;
+  if(showHeap&&(!sameHold||this.heapBend!==this.bend||this.heapPitch!==this.pitch)){this.updateHeap(sand,dt);this.heapBend=this.bend;this.heapPitch=this.pitch;}
   if(this.settings.movingLight){
    this.key.position.x+=((-300+(pointer.x-300)*.4+Math.sin(time*.00023)*50)-this.key.position.x)*.045;
    this.key.position.y+=((340-(pointer.y-400)*.25)-this.key.position.y)*.045;
   }
   this.sparkLight.set(this.key.position.x*.0015,this.key.position.y*.0015,1).normalize();
   if(paperHeld&&phase==='brush')for(let i=0;i<2;i++){const q=bentPoint(i?300:-300,0,5,this.bend,this.pitch),hand=this.hands[i];hand.visible=true;hand.position.copy(this.paperGroup.localToWorld(new T.Vector3(q.x+(i?8:-8),q.y,q.z)));hand.rotation.y=(i?-1:1)*this.bend*.7;}
-  this.brush.visible=showBrush&&phase==='brush'&&pointer.visible&&!finished;this.tweezers.visible=phase==='rolling';this.hint.visible=phase==='peel';
+  this.brush.visible=showBrush&&phase==='brush'&&pointer.visible&&!finished;this.tweezers.visible=phase==='rolling';this.hint.visible=phase==='peel'||!!holdPoint&&showGrains&&!this.galleryActive&&!this.entry;
   if(phase==='peel'){this.hint.position.set(this.peelAnchor.x-300,400-this.peelAnchor.y,12);this.hint.material.opacity=.65+.25*Math.sin(time*.004);}
+  else if(holdPoint){const aim=bentPoint(holdPoint.x-300,400-holdPoint.y,10,this.bend,this.pitch);this.hint.position.set(aim.x,aim.y,aim.z);this.hint.material.opacity=.64;}
   if(phase==='rolling'&&this.peelPiece){
    const progress=this.peelValue||0,q=peelPoint(this.peelPiece,this.peelAnchor.x,this.peelAnchor.y,progress),approach=1-smooth(progress/.17);
    const angle=Math.atan2(-this.peelPiece.axis.y,this.peelPiece.axis.x)-Math.PI/2;
