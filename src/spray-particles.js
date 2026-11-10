@@ -70,10 +70,10 @@ export class SprayParticles {
   this.mesh.geometry.setDrawRange(0,0);
   this.mesh.visible=false;
  }
- emit(shot,source,color,now,duration){
+ emit(shot,source,color,now,duration,ripple=false){
   this.color.set(color);
   const {r,g,b}=this.color,buffer=this.data.array,first=this.cursor;
-  const number=Math.min(72,35+shot.cells.length*2);
+  const number=Math.min(ripple?80:72,(ripple?42:35)+shot.cells.length*2);
   for(let i=0;i<number;i++){
    const target=shot.cells[i%shot.cells.length],seed=Math.random(),at=this.cursor*STRIDE;
    buffer[at]=source.x-300+(Math.random()-.5)*7;
@@ -82,7 +82,7 @@ export class SprayParticles {
    buffer[at+3]=target.x-300+(Math.random()-.5)*4;
    buffer[at+4]=400-target.y+(Math.random()-.5)*4;
    buffer[at+5]=5.4+seed*1.5;
-   buffer[at+6]=now+seed*.026;
+   buffer[at+6]=now+seed*(ripple?.035:.026);
    buffer[at+7]=duration*(.84+seed*.14);
    buffer[at+8]=seed;
    buffer[at+9]=r;buffer[at+10]=g;buffer[at+11]=b;

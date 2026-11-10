@@ -1,3 +1,6 @@
+> v39: [Dalgalı Sim Püskürtücü](https://furkiti.github.io/sim-atolyesi/?v=39&mod=puskurt&giris=direct) · [Renk sırası, yuvalar ve rakipler](docs/v39-spray-queue.md)
+
+
 > v30: %100 bitiş sayacı düzeltildi. Açılış yükleme ekranından sonra son tablonun sergi görünümüne gelir; tamamlanan renk aşamaları saklanır. [Notlar](docs/v30-startup-and-finish.md).
 
 > v29: Devam eden renkte yapışmış simler de sergiye çıkarken saydamlaşır; geri girince aynı ilerleme görünür. [Video incelemesi ve düzeltme](docs/v29-active-coat-fade.md).
@@ -22,7 +25,7 @@
 
 # Sim Atölyesi
 
-**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=38&mod=basili&giris=direct)**
+**[Oyunu aç](https://furkiti.github.io/sim-atolyesi/?v=39&mod=basili&giris=direct)**
 
 GitHub Pages üzerinde, giriş gerektirmeden çalışan 3B sim sanatı prototipi.
 
@@ -101,4 +104,4 @@ Three.js/WebGL; sonlu malzeme, yığın basıncı, gerçek şişe ağzı, rulo m
 
 [v6 hissiyat ve doğrulama notları](docs/v6-feel-lab.md). Ay Bahçesi kaynak çizimi `scripts/build-garden.py` ile yeniden üretilebilir (Pillow ve numpy gerekir); çalışma zamanında Python gerekmez.
 
-[Sim akışlarını kare kare karşılaştır](https://furkiti.github.io/sim-atolyesi/material-lab.html?v=38) · [Rakip oyunlar ve oyuncu araştırması](docs/v38-research.md)
+[Sim akışlarını kare kare karşılaştır](https://furkiti.github.io/sim-atolyesi/material-lab.html?v=39) · [Rakip oyunlar ve oyuncu araştırması](docs/v38-research.md)

@@ -135,3 +135,35 @@ body[data-exhibition] #spray-panel,body[data-transition] #spray-panel{display:no
 @keyframes spray-recoil{from{transform:translateY(-8%) rotate(-4deg)}to{transform:translateY(-5%) rotate(2deg)}}
 @media(max-height:540px){#spray-panel{width:min(70%,438px);gap:5px;bottom:max(9px,env(safe-area-inset-bottom))}.spray-pocket{max-height:48px}.spray-tray-bottle{height:28px}.spray-bottle{max-width:44px}}
 @media(prefers-reduced-motion:reduce){.spray-pocket[data-firing="true"] .spray-bottle{animation:none}}
+#spray-balance{color:#fce0a0;background:#34334c;border-radius:20px;padding:4px 9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+#spray-feedback{flex:1;font-size:11px;font-weight:650}
+#spray-unstick{border:0;border-radius:10px;background:#f8d796;color:#302133;padding:5px 9px;white-space:nowrap;font-size:11px;font-weight:750}
+#spray-panel[data-jammed="true"] .spray-pocket[data-returnable="true"]{box-shadow:inset 0 0 0 1px #e9ac90}
+.spray-badge{position:absolute;right:2px;top:1px;font-size:10px;line-height:1.2;font-weight:800;pointer-events:none}
+.spray-badge:empty{display:none}
+.spray-pocket .spray-badge{background:#27293f;color:#fff0c9;border-radius:12px;padding:3px 5px}
+.spray-pocket[data-locked="true"]{background:#393b54;border:1px dashed #d4b779;box-shadow:none}
+.spray-pocket[data-locked="true"] .spray-badge{top:50%;right:50%;transform:translate(50%,-50%);padding:0;background:none;font-size:25px;color:#f8d796}
+.spray-pocket[data-locked="true"]:disabled{opacity:.48}
+.spray-tray-bottle .spray-badge{top:0;right:0;transform:translateX(15%);background:#353650;color:#efecff;border-radius:9px;padding:2px 4px}
+.spray-tray-bottle .spray-bottle{max-width:56px}
+.spray-tray-bottle:not(:first-child) .spray-bottle{scale:.80}
+.spray-tray-bottle[data-lead="true"] .spray-badge{background:#fbe0a0;color:#27172c}
+.spray-tray-bottle[data-lead="true"]::before{outline:2px solid #fbe0a0;outline-offset:2px}
+#spray-unlock{inset:0;margin:auto;transform:none;width:min(calc(100% - 32px),370px);height:fit-content;max-height:calc(100% - 36px);overflow:auto;border:1px solid #d9baff44;border-radius:24px;padding:19px;color:#fbf4ff;background:#2e304c;box-shadow:0 16px 70px #171627a6}
+#spray-unlock[open]{animation:completion-wash .2s ease-out}
+#spray-unlock::backdrop{background:#1a172bb3}
+#spray-unlock h2{font:600 27px/1.15 Georgia,serif;margin:9px 0}
+#spray-unlock p{font-size:14px;line-height:1.45;color:#ded8f0;margin:6px 0 14px}
+.spray-dialog-head{display:flex;justify-content:space-between;align-items:center;color:#ffe4a7;letter-spacing:.12em;font-size:11px}
+#spray-unlock-close{min-width:38px;height:38px;border:0;background:#ffffff13;color:#fff;border-radius:50%;font-size:22px}
+.spray-dialog-actions{display:grid;gap:8px}
+.spray-dialog-actions button,#spray-ad-claim{min-height:44px;border:0;border-radius:13px;background:#4a4a68;color:#fff7ff;font-weight:750;padding:8px 12px}
+#spray-buy,#spray-ad-claim{background:#f8d796;color:#36263b}
+#spray-unlock button:disabled{opacity:.48}
+.spray-ad-art{display:grid;place-items:center;height:112px;margin:14px 0 10px;border-radius:16px;background:radial-gradient(ellipse,#b19ae2,#555781 72%);font-size:53px;color:#fff1c8}
+.spray-ad-meter{display:flex;gap:10px;align-items:center;margin-bottom:12px;font-size:12px}
+.spray-ad-meter progress{width:100%;min-width:0;accent-color:#f8d796}
+.spray-ad-meter span{min-width:61px}
+#spray-ad-claim{width:100%}
+@media(max-height:540px){.spray-tray-bottle .spray-bottle{max-width:42px}.spray-tray-bottle .spray-badge{font-size:8px}}

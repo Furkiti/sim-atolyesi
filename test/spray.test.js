@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SprayBoard,sprayPosterPixels} from '../src/spray.js';
+import {SprayWallet} from '../src/spray-wallet.js';
 import {CoverageGuide} from '../src/coverage-guide.js';
 import {Sand,W,H} from '../src/sand.js';
 import {levels} from '../src/levels.js';
@@ -56,7 +57,9 @@ test('spray mask ownership paints an overlapping pixel once and restores complet
 
 test('every published artwork can be completed with finite, recoverable bottle queues',()=>{
  for(const level of levels){
-  const board=new SprayBoard(level.stages.map(stage=>readMask(stage.id)));
+  const masks=level.stages.map(stage=>readMask(stage.id));
+  for(const sequence of ['classic','ripple']){
+  const board=new SprayBoard(masks,0,{sequence,capacity:3});
   const ammo=board.trays.flat().reduce((total,bottle)=>total+bottle.remaining,0);
   for(let frame=0;frame<15000&&!board.complete;frame++){
    for(let slot=0;slot<board.slots.length;slot++)board.returnBottle(slot);
@@ -66,7 +69,49 @@ test('every published artwork can be completed with finite, recoverable bottle q
   }
   assert.equal(board.coverage,1,level.id);
   assert.equal(board.shots,ammo,level.id);
+  }
  }
+});
+
+test('ripple opens an overlapping band, recommends live ammo and restores only landed shots',()=>{
+ const masks=[rectangle(20,725,60,70),rectangle(260,725,35,70),rectangle(25,625,50,60),rectangle(420,540,40,60)];
+ const board=new SprayBoard(masks,0,{sequence:'ripple',capacity:3});
+ const first=board.recommendations().find(item=>item.bottle.color===0);
+ const upper=board.trays.findIndex(tray=>tray[0]?.color===2);
+ assert.ok(first?.current>0);assert.ok(upper>=0);
+ const futureIds=new Set(board.trays[upper][0].rounds.map(shot=>shot.id));
+ board.load(upper);board.load(first.column);
+ for(let frame=0;frame<240&&board.exposed===0;frame++)board.step(1/60);
+ assert.equal(board.band,0);assert.equal(board.exposed,1);
+ assert.equal(board.canFire(board.slots[0]),true);
+ for(let frame=0;frame<60&&!board.checkpoint().landed.some(id=>futureIds.has(id));frame++)board.step(1/60);
+ const checkpoint=board.checkpoint(),restored=new SprayBoard(masks,checkpoint,{sequence:'ripple',capacity:3});
+ assert.ok(checkpoint.landed.some(id=>futureIds.has(id)));
+ assert.deepEqual(restored.checkpoint(),checkpoint);
+ assert.equal(restored.coverage,board.coverage);
+ const shotsLeft=restored.trays.flat().reduce((sum,bottle)=>sum+bottle.remaining,0);
+ assert.ok(shotsLeft>0);
+});
+
+test('a full board can release a waiting bottle or unlock capacity without discarding paint',()=>{
+ const masks=[rectangle(40,725,50,60),rectangle(40,625,50,60),rectangle(40,540,50,60),rectangle(40,450,50,60)];
+ const board=new SprayBoard(masks,0,{sequence:'ripple',capacity:3});
+ const ready=board.recommendations()[0].column;
+ for(let column=0;column<4;column++)if(column!==ready)assert.ok(board.load(column)>=0);
+ assert.equal(board.load(ready),-1);assert.equal(board.jammed,true);
+ assert.ok(board.releaseWaiting());assert.equal(board.jammed,false);
+ assert.ok(board.load(ready)>=0);assert.equal(board.full,true);assert.equal(board.jammed,false);
+ board.setCapacity(4);assert.equal(board.full,false);
+});
+
+test('slot purchases persist and rewards and duplicate claims are counted once',()=>{
+ const data=new Map(),storage={getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)};
+ const wallet=new SprayWallet(storage);
+ assert.equal(wallet.unlock('coins',3),true);assert.equal(wallet.coins,40);
+ assert.equal(wallet.unlock('coins',4),false);assert.equal(wallet.unlock('demo',3),false);
+ assert.equal(wallet.unlock('demo',4),true);assert.equal(wallet.unlock('demo',4),false);
+ assert.equal(wallet.grantThrough('gotham',2),20);assert.equal(wallet.grantThrough('gotham',1),0);
+ assert.equal(new SprayWallet(storage).capacity,5);assert.equal(new SprayWallet(storage).coins,60);
 });
 
 test('missing-area guide keeps separate markers and drops painted patches',()=>{

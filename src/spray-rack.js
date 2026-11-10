@@ -9,11 +9,13 @@ const bottleArt=`<span class="spray-bottle" aria-hidden="true">
  </svg><b class="spray-count"></b></span>`;
 
 export class SprayRackView {
- constructor(panel,{load,unload}){
+ constructor(panel,{load,unload,openUnlock}){
   this.panel=panel;this.feedback=panel.querySelector('#spray-feedback');
+  this.balance=panel.querySelector('#spray-balance');this.recover=panel.querySelector('#spray-unstick');
+  this.recover.onclick=openUnlock;
   this.slots=Array.from({length:SPRAY_SLOTS},(_,slot)=>{
    const button=this.button('spray-pocket');
-   button.onclick=()=>unload(slot);
+   button.onclick=()=>button.dataset.locked==='true'?openUnlock():unload(slot);
    return button;
   });
   this.trays=Array.from({length:SPRAY_COLUMNS},(_,column)=>{
@@ -32,6 +34,7 @@ export class SprayRackView {
  button(className){
   const button=document.createElement('button');
   button.type='button';button.className=className;button.innerHTML=bottleArt;
+  button.insertAdjacentHTML('beforeend','<span class="spray-badge" aria-hidden="true"></span>');
   return button;
  }
  showBottle(button,bottle,stages){
@@ -41,29 +44,46 @@ export class SprayRackView {
    button.querySelector('.spray-count').textContent=bottle.remaining;
   }
  }
- render(board,stages,visible){
+ render(board,stages,visible,wallet){
   this.panel.hidden=!visible;
   if(!visible||!board)return;
-  const key=[board.revision,board.paintRevision,board.band].join(':');
+  const key=[board.revision,board.band,board.flights.length,wallet.coins].join(':');
   if(this.board===board&&key===this.key)return;
   this.board=board;this.key=key;
+  const full=board.full,jammed=board.jammed,canUnlock=board.capacity<SPRAY_SLOTS;
+  const ranked=board.recommendations(),lead=ranked[0];
+  this.panel.dataset.jammed=String(jammed);
+  this.recover.hidden=!jammed;this.balance.textContent=`${wallet.coins} ◈`;
+  this.balance.setAttribute('aria-label',`${wallet.coins} atölye jetonu`);
   for(const [slot,button] of this.slots.entries()){
    const bottle=board.slots[slot],firing=bottle&&board.canFire(bottle);
+   const locked=slot>=board.capacity,returnable=!!bottle?.remaining&&!bottle.air&&!firing;
    this.showBottle(button,bottle,stages);
    button.dataset.firing=String(!!firing);
-   button.disabled=!bottle?.remaining||!!bottle.air||!!firing;
-   button.setAttribute('aria-label',bottle?`Yuva ${slot+1}, ${stages[bottle.color].name}, ${bottle.remaining} atış${button.disabled?'':', geri al'}`:`Boş yuva ${slot+1}`);
+   button.dataset.locked=String(locked);button.dataset.returnable=String(returnable);
+   button.querySelector('.spray-badge').textContent=locked?'＋':returnable?'↶':bottle&&!firing?'…':'';
+   button.disabled=locked?slot!==board.capacity:!returnable;
+   button.setAttribute('aria-label',locked?`${slot+1}. yuvayı aç${slot!==board.capacity?', önce bir önceki yuvayı aç':''}`:bottle?`Yuva ${slot+1}, ${stages[bottle.color].name}, ${bottle.remaining} atış${returnable?', bekliyor, geri al':''}`:`Boş yuva ${slot+1}`);
   }
   this.trays.forEach((tray,column)=>{
    for(const [row,button] of [...tray.children].entries()){
     const bottle=board.trays[column][row];
     this.showBottle(button,bottle,stages);
-    button.disabled=row!==0||!bottle||!board.slots.includes(null);
-    button.dataset.ready=String(!!bottle&&board.canFire(bottle));
-    button.setAttribute('aria-label',bottle?`${stages[bottle.color].name}, ${bottle.remaining} atış`:'Boş şişe yeri');
+    const rank=row===0?ranked.findIndex(item=>item.column===column):-1;
+    const option=rank>=0?ranked[rank]:null;
+    button.disabled=row!==0||!bottle;
+    button.dataset.ready=String(!!option);button.dataset.lead=String(rank===0&&!full);
+    const badge=button.querySelector('.spray-badge');badge.textContent=!bottle||row!==0?'':option?rank===0?'Şimdi':'Hazır':'Sonra';
+    button.setAttribute('aria-label',bottle?`${stages[bottle.color].name}, ${bottle.remaining} atış${row===0?option?`, ${rank===0?'önerilen, ':''}${option.ready} atış hazır`:', sonraki sırayı bekler':''}`:'Boş şişe yeri');
    }
   });
-  this.feedback.textContent=board.active?'Simler yüzeye oturuyor':board.flights.length?'Son taneler yerleşiyor':board.slots.some(Boolean)?'Bekleyen şişeye dokunup geri alabilirsin':'Alt sıraya ulaşan bir rengi seç';
+  const message=jammed?'Yuvalar dolu · bir yer aç':full?'Yuvalar dolu · sim akıyor':lead?`Sıradaki · ${stages[lead.bottle.color].name}`:board.active?'Sim akıyor · sıradaki renk açılıyor':board.flights.length?'Son taneler yerleşiyor':board.complete?'Tablo tamamlandı':canUnlock?'Bekleyen şişeyi geri alabilirsin':'Şişe sırasını kontrol et';
+  if(this.feedback.textContent!==message)this.feedback.textContent=message;
+  this.lead=lead?.bottle.color??-1;
+ }
+ indicateFull(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  this.panel.querySelector('#spray-slots').animate([{transform:'translateX(-3px)'},{transform:'translateX(3px)'},{transform:'translateX(0)'}],{duration:150});
  }
  mouth(slot){
   const rect=this.slots[slot].getBoundingClientRect();
@@ -84,4 +104,45 @@ export class SprayRackView {
   ],{duration:235,easing:'cubic-bezier(.18,.75,.27,1)'});
   animation.finished.then(()=>float.remove(),()=>float.remove());
  }
+}
+
+export class SprayUnlockView {
+ constructor(dialog,{unlock,release}){
+  this.dialog=dialog;this.unlock=unlock;this.release=release;
+  const $=id=>dialog.querySelector('#'+id);
+  this.offer=$('spray-offer');this.demo=$('spray-ad');this.coin=$('spray-buy');this.ad=$('spray-watch');
+  this.refund=$('spray-release');this.balance=$('spray-unlock-copy');this.title=$('spray-unlock-title');
+  this.progress=$('spray-ad-progress');this.clock=$('spray-ad-clock');this.claim=$('spray-ad-claim');
+  $('spray-unlock-close').onclick=()=>this.close();
+  dialog.addEventListener('cancel',event=>{event.preventDefault();this.close();});
+  this.coin.onclick=()=>{if(this.unlock('coins',this.capacity))this.close();};
+  this.ad.onclick=()=>this.playDemo();
+  this.claim.onclick=()=>{if(!this.claim.disabled&&this.unlock('demo',this.capacity))this.close();};
+  this.refund.onclick=()=>{if(this.release())this.close();};
+ }
+ get open(){return this.dialog.open;}
+ show(board,wallet){
+  if(this.open)return;
+  this.capacity=board.capacity;
+  this.offer.hidden=false;this.demo.hidden=true;
+  this.coin.hidden=this.ad.hidden=!wallet.price;this.coin.disabled=wallet.coins<wallet.price;
+  this.refund.hidden=!board.jammed;
+  this.title.textContent=board.jammed?'Yuvalar doldu':`${board.capacity+1}. yuvayı aç`;
+  this.balance.textContent=wallet.price?`${wallet.coins} jetonun var. Ek yuva bu cihazda açık kalır.`:'Bekleyen bir şişeyi kuyruğa geri koyup kaldığın yerden devam et.';
+  this.coin.textContent=`${wallet.price} jetonla aç`;
+  this.dialog.showModal();
+ }
+ playDemo(){
+  this.offer.hidden=true;this.demo.hidden=false;this.claim.disabled=true;
+  this.title.textContent='Deneme reklamı';
+  const started=performance.now(),duration=3200;
+  const tick=()=>{
+   const remaining=Math.max(0,duration-(performance.now()-started));
+   this.progress.value=duration-remaining;
+   this.clock.textContent=remaining?`${Math.ceil(remaining/1000)} sn`:'Ödül hazır';
+   if(!remaining){clearInterval(this.timer);this.claim.disabled=false;}
+  };
+  this.timer=setInterval(tick,120);tick();
+ }
+ close(){clearInterval(this.timer);this.dialog.close();}
 }

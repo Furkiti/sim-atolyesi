@@ -5,7 +5,7 @@ export const COVERAGE_GUIDES=['off','pulse','outline'];
 export const PAPER_EFFECT_UNIFORMS=`
  uniform sampler2D uSprayOwner, uSprayTiles;
  uniform vec3 uSprayPalette[16];
- uniform float uSprayEnabled, uSprayFront, uSprayClock, uGuide, uAdhesion, uReduced;
+ uniform float uSprayEnabled, uSprayFront, uSprayClock, uSprayLead, uSprayWave, uSprayBandAge, uGuide, uAdhesion, uReduced;
 `;
 
 export const FACET_GLSL=`
@@ -54,11 +54,16 @@ export const PAPER_EFFECT_FRAGMENT=`
       vec4 tile=texture2D(uSprayTiles,paperUv);
       float byteValue=index<8?tile.r:tile.g;
       float painted=mod(floor(floor(byteValue*255.0+.5)/exp2(mod(float(index),8.0))),2.0);
-      float open=step(uSprayFront,paperUv.y);
+      float open=smoothstep(uSprayFront-.024,uSprayFront+.024,paperUv.y);
       vec3 pigment=linearToOutputTexel(vec4(uSprayPalette[index],1.0)).rgb;
       vec3 ghost=mix(vec3(.92,.87,.74),pigment,.13+open*.32);
       float hatch=step(.82,fract((cell.x+cell.y)*.145))*.055;
       ghost-=vec3(hatch*(.4+open*.6));
+      if(uSprayLead==float(index)&&open>.5){
+       float breath=mix(.6,.55+.45*sin(uSprayClock*4.0),1.0-uReduced);
+       ghost=mix(ghost,mix(pigment,vec3(1.0,.84,.54),.26),.32+breath*.24);
+       ghost+=vec3(.13,.095,.05)*hatch*8.0;
+      }
       vec3 grains=pigment*(.66+.54*rnd)+vec3(.21)*step(.975,rnd);
       if(uRadiant<1.5)grains+=vec3(1.0,.94,.75)*uSparkle*field.g*(.06+.46*classicFlicker(rnd,uTime));
       float stamp=floor(tile.b*255.0+.5)+floor(tile.a*255.0+.5)*256.0;
@@ -68,6 +73,10 @@ export const PAPER_EFFECT_FRAGMENT=`
       float vfx=uAdhesion>1.5?.10+.07*rnd:uAdhesion>.5?.07+halo*.39:.12+.50*step(.73,rnd);
       grains+=vec3(1.0,.91,.66)*impact*vfx*uSparkle;
       if(uRadiant>1.5)grains+=vec3(1.0,.95,.80)*uSparkle*facetGlint(vMapUv,field)*1.3;
+      if(uSprayBandAge<.5){
+       float crest=1.0-smoothstep(.0,.09,abs(paperUv.y-(uSprayWave+uSprayBandAge*.13)));
+       grains+=vec3(1.0,.90,.60)*crest*(1.0-uSprayBandAge*2.0)*(.05+field.g*.8)*uSparkle*(1.0-uReduced*.65);
+      }
       vec3 sprayed=mix(ghost,grains,painted);
       sprayed=mix(sprayed,linearToOutputTexel(artLine).rgb,artLine.a*.91);
       gl_FragColor.rgb=mix(gl_FragColor.rgb,sprayed,uActiveAlpha);

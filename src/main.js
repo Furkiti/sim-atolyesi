@@ -1,5 +1,6 @@
 import {SprayBoard,sprayPosterPixels} from './spray.js';
-import {SprayRackView} from './spray-rack.js';
+import {SprayRackView,SprayUnlockView} from './spray-rack.js';
+import {SprayWallet} from './spray-wallet.js';
 import {AMMO,CartridgeRack,HOLD_EXPERIMENTS,cartridgeChoices,rhythmCharge} from './workshop.js';
 import {AtelierSession} from './session.js';
 import {GalleryMusic,audioScene} from './gallery-audio.js';
@@ -52,8 +53,12 @@ if(ribbonQuery==='orta'||ribbonQuery==='ust')settings={...settings,holdPointPlac
 const materialQuery=new URLSearchParams(location.search).get('malzeme');
 if(Object.hasOwn(HOLD_MATERIALS,materialQuery))settings={...settings,holdMaterial:materialQuery};
 let cascade=null,holdLatched=false,holdSupplyPending=false;
-let spray=null,sprayClock=0,spraySavedBand=0,sprayMuzzles=[],sprayFinishTime=0;
-const sprayRack=new SprayRackView($('#spray-panel'),{load:loadSprayBottle,unload:unloadSprayBottle});
+let spray=null,sprayClock=0,spraySavedBand=0,spraySavedPaint=0,spraySaveClock=0,sprayMuzzles=[],sprayFinishTime=0;
+const spraySequence=new URLSearchParams(location.search).get('sira')==='klasik'?'classic':'ripple';
+const sprayWallet=new SprayWallet(gallery.storage);
+const sprayRack=new SprayRackView($('#spray-panel'),{load:loadSprayBottle,unload:unloadSprayBottle,openUnlock:openSprayUnlock});
+const sprayUnlock=new SprayUnlockView($('#spray-unlock'),{unlock:unlockSpraySlot,release:releaseSpraySlot});
+window.addEventListener('pagehide',()=>{if(spray)saveSprayBand(spray.checkpoint());});
 window.addEventListener('resize',()=>{sprayMuzzles=[];});
 let rack=new CartridgeRack(),rackKey='',holdAim=300,holdCharge=1,tiltGrip=0;
 const holdPoint={x:W/2,y:H/2};
@@ -264,7 +269,7 @@ async function galleryPictures(){
  const entries=await Promise.all(levels.map(async entry=>{
   const record=gallery.entries.find(item=>item.id===entry.id),locked=!progression.canPlay(entry.id),completed=progression.isComplete(entry.id)&&!locked,key=entry.id+':'+(record?.completedAt||'preview')+':'+locked+':'+completed;
   for(const cached of previewCache.keys())if(cached.startsWith(entry.id+':')&&cached!==key)previewCache.delete(cached);
-  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=38`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
+  if(!previewCache.has(key))previewCache.set(key,loadGalleryImage((!locked&&record?.image)||`assets/${entry.preview}.png?v=39`).then(image=>({id:entry.id,name:entry.name,locked,completed,image:galleryPicture(image,!completed,locked),sharp:galleryPicture(image)})).catch(error=>{previewCache.delete(key);throw error}));
   return previewCache.get(key);
  }));galleryArt=entries;view.setGalleryEntries(entries,levels.indexOf(level));return entries;
 }
@@ -281,6 +286,7 @@ function galleryLabels(){
 }
 function selectArtwork(index){rail.select(index);session.focus(levels[rail.target].id);galleryLabels();if(progression.canPlay(levels[rail.target].id))loader.load(levels[rail.target]).catch(console.warn);}
 function showExhibition({silent=false}={}){
+ if(spray&&!booting&&!exhibition&&!transitioning)saveSprayBand(spray.checkpoint());
  if(!view||transitioning)return;releaseAll();pointer.visible=false;exhibition=true;sound(0);if(soundOn&&!silent)audio();rail.focus=rail.target=levels.indexOf(level);view.galleryActive=true;view.galleryFocus=rail.focus;document.body.dataset.exhibition='true';$('#complete').hidden=false;galleryLabels();galleryPictures().catch(console.warn);
 }
 function closeExhibition(){
@@ -300,7 +306,7 @@ async function openLevel(id,replace=false){
    lobby=false;view.hideLobby();level=target;stages=level.stages;installBundle(bundle);view.colors=stages.map(stage=>stage.color);exhibition=false;view.galleryCurrent=levels.indexOf(level);rail.focus=rail.target=levels.indexOf(level);
    reset();levelLabels();document.body.dataset.transition='arriving';delete document.body.dataset.exhibition;
    // Same renderer, same document. Only the local level bundle is replaced.
-   const url=new URL(location.href);url.search='';url.searchParams.set('v','38');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');if(settings.controlMode==='spray')url.searchParams.set('mod','puskurt');history[replace?'replaceState':'pushState']({level:level.id},'',url);
+   const url=new URL(location.href);url.search='';url.searchParams.set('v','39');url.searchParams.set('bolum',level.id);if(settings.controlMode==='hold')url.searchParams.set('mod','basili');if(settings.controlMode==='tilt')url.searchParams.set('mod','egim');if(settings.controlMode==='spray'){url.searchParams.set('mod','puskurt');if(spraySequence==='classic')url.searchParams.set('sira','klasik');}history[replace?'replaceState':'pushState']({level:level.id},'',url);
    view.setGalleryEntries(galleryArt,levels.indexOf(level));
   },()=>{transitioning=false;delete document.body.dataset.transition;updateUI();});
  }catch(error){transitioning=false;delete document.body.dataset.transition;$('#share-status').textContent='Eser yüklenemedi. Yeniden deneyebilirsin.';console.error(error);}
@@ -382,14 +388,15 @@ function ready(){return sand&&colorStatus().ready}
 function saveSprayBand(band){
  try{
   const key='sim-atolyesi-spray-v1:'+level.id;
-  if(band)localStorage.setItem(key,String(band));else localStorage.removeItem(key);
+  if(band)localStorage.setItem(key,JSON.stringify(band));else localStorage.removeItem(key);
  }catch{}
 }
 function activateSpray(){
  let restored=0;
- try{restored=Number(localStorage.getItem('sim-atolyesi-spray-v1:'+level.id))||0;}catch{}
- spray=new SprayBoard(stages.map(stage=>masks[stage.id]),restored);
- spraySavedBand=spray.band;sprayClock=0;sprayFinishTime=0;sprayMuzzles=[];
+ try{restored=JSON.parse(localStorage.getItem('sim-atolyesi-spray-v1:'+level.id)||'0');}catch{}
+ sprayWallet.refresh();
+ spray=new SprayBoard(stages.map(stage=>masks[stage.id]),restored,{sequence:spraySequence,capacity:sprayWallet.capacity});
+ spraySavedBand=spray.band;spraySavedPaint=spray.paintRevision;sprayClock=spraySaveClock=sprayFinishTime=0;sprayMuzzles=[];
  flow.phase='spray';autoKick=0;view.setSpray(spray);
 }
 function updateSprayUI(){
@@ -400,21 +407,49 @@ function updateSprayUI(){
  $('#stage-label').title='Aşağıdan yukarı · aktif sıra';
  $('#coverage').textContent=percent+'%';$('#color-dot').style.background='#f4c674';
  for(const id of ['quick-actions','tilt-toolbar','hold-control','next','hold-assist','cartridge-rack'])$('#'+id).hidden=true;
- sprayRack.render(spray,stages,visible);
+ sprayRack.render(spray,stages,visible,sprayWallet);
+ if(visible)spray.lead=sprayRack.lead;
+}
+function openSprayUnlock(){
+ if(!spray||dialog.open||exhibition||transitioning||spray.complete)return;
+ sprayWallet.refresh();
+ if(spray.capacity!==sprayWallet.capacity){spray.setCapacity(sprayWallet.capacity);updateSprayUI();}
+ if(sprayWallet.price||spray.jammed)sprayUnlock.show(spray,sprayWallet);
+}
+function unlockSpraySlot(method,capacity){
+ if(!spray||!sprayUnlock.open)return false;
+ const unlocked=sprayWallet.unlock(method,capacity);
+ if(!unlocked&&spray.capacity===sprayWallet.capacity)return false;
+ spray.setCapacity(sprayWallet.capacity);updateSprayUI();return true;
+}
+function releaseSpraySlot(){
+ if(!spray?.releaseWaiting())return false;
+ updateSprayUI();return true;
 }
 function loadSprayBottle(column){
- if(!spray||dialog.open||exhibition||transitioning||spray.complete)return;
+ if(!spray||dialog.open||sprayUnlock.open||exhibition||transitioning||spray.complete)return;
  const bottle=spray.trays[column][0],slot=spray.load(column);
- if(slot<0)return;
+ if(slot<0){if(spray.jammed)openSprayUnlock();else if(spray.full)sprayRack.indicateFull();return;}
  if(soundOn)audio();
  sprayRack.animateDock(column,slot,stages[bottle.color].color,bottle.remaining);
  sprayMuzzles[slot]=view.mapPointer(sprayRack.mouth(slot));
  updateSprayUI();
 }
 function unloadSprayBottle(slot){
- if(spray?.returnBottle(slot))updateSprayUI();
+ if(!sprayUnlock.open&&spray?.returnBottle(slot))updateSprayUI();
 }
 let sprayNoise,lastHiss=-Infinity,lastTick=-Infinity;
+function sprayChime(){
+ if(!soundOn||audioCtx?.state!=='running')return;
+ const now=audioCtx.currentTime;
+ for(const [index,note] of [659,880,1175].entries()){
+  const at=now+index*.042,voice=audioCtx.createOscillator(),gain=audioCtx.createGain();
+  voice.type='sine';voice.frequency.value=note;
+  gain.gain.setValueAtTime(.0001,at);gain.gain.exponentialRampToValueAtTime(.028,at+.009);
+  gain.gain.exponentialRampToValueAtTime(.0001,at+.16);
+  voice.connect(gain).connect(audioCtx.destination);voice.start(at);voice.stop(at+.17);
+ }
+}
 function spraySound(impact){
  if(!soundOn||audioCtx?.state!=='running')return;
  const now=audioCtx.currentTime;
@@ -443,8 +478,9 @@ function spraySound(impact){
 const sprayEvents={
  fire(shot,slot){
   const source=sprayMuzzles[slot]??(sprayMuzzles[slot]=view.mapPointer(sprayRack.mouth(slot)));
-  const middle=shot.cells[Math.floor(shot.cells.length*.5)],duration=.22+Math.min(.16,Math.hypot(middle.x-source.x,middle.y-source.y)*.00025);
-  view.sprayParticles.emit(shot,source,stages[shot.color].color,spray.time,duration);
+  const middle=shot.cells[Math.floor(shot.cells.length*.5)],ripple=spraySequence==='ripple';
+  const duration=(ripple?.145:.22)+Math.min(.16,Math.hypot(middle.x-source.x,middle.y-source.y)*.00025);
+  view.sprayParticles.emit(shot,source,stages[shot.color].color,spray.time,duration,ripple);
   spraySound(false);
   return duration;
  },
@@ -452,8 +488,13 @@ const sprayEvents={
 };
 function advanceSpray(dt){
  spray.step(dt,sprayEvents);
- if(spray.band!==spraySavedBand&&!spray.complete){
-  spraySavedBand=spray.band;saveSprayBand(spraySavedBand);
+ spraySaveClock+=dt;
+ if(spray.band!==spraySavedBand){
+  spraySavedBand=spray.band;sprayWallet.grantThrough(level.id,spray.band);
+  if(spraySequence==='ripple')sprayChime();
+ }
+ if(spraySaveClock>=.35&&spraySavedPaint!==spray.paintRevision){
+  spraySaveClock=0;spraySavedPaint=spray.paintRevision;saveSprayBand(spray.checkpoint());
  }
  if((sprayClock+=dt)>.08){sprayClock=0;updateSprayUI();}
  if(!spray.complete)return;
@@ -661,14 +702,14 @@ canvas.addEventListener('pointerleave',e=>{if(gate.active===null)pointer.visible
 function updateStats(){
  const s=sand.stats(),m=view.metrics();
  $('#gallery-caption').style.top=(view.heroFrame.y+view.heroFrame.height+16)+'px';
- Object.assign(canvas.dataset,{sprayBand:spray?.band??0,sprayShots:spray?.shots??0,sprayCoverage:spray?.coverage.toFixed(5)??'0',version:'38',holdMaterial:cascade?.material??settings.holdMaterial,holdExperiment:settings.holdExperiment,holdAim:holdAim.toFixed(1),holdPointX:holdPoint.x.toFixed(1),holdPointY:holdPoint.y.toFixed(1),holdPointPlacement:settings.holdPointPlacement,holdCharge:holdCharge.toFixed(3),cartridgeSlot:rack.active,cartridgeAmmo:rack.active>=0&&pour?Math.ceil(AMMO*Math.max(0,1-pour.emitted/pour.dose)):0,booting:Number(booting),lobby:Number(lobby),activeCoatAlpha:(view.coatUniforms.uActiveAlpha.value).toFixed(3),workAlpha:(view.workAlpha??1).toFixed(3),finishAction:cleanup?.action||'',posterShine:settings.posterShine,phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
+ Object.assign(canvas.dataset,{sprayBand:spray?.band??0,sprayShots:spray?.shots??0,sprayCoverage:spray?.coverage.toFixed(5)??'0',version:'39',holdMaterial:cascade?.material??settings.holdMaterial,holdExperiment:settings.holdExperiment,holdAim:holdAim.toFixed(1),holdPointX:holdPoint.x.toFixed(1),holdPointY:holdPoint.y.toFixed(1),holdPointPlacement:settings.holdPointPlacement,holdCharge:holdCharge.toFixed(3),cartridgeSlot:rack.active,cartridgeAmmo:rack.active>=0&&pour?Math.ceil(AMMO*Math.max(0,1-pour.emitted/pour.dose)):0,booting:Number(booting),lobby:Number(lobby),activeCoatAlpha:(view.coatUniforms.uActiveAlpha.value).toFixed(3),workAlpha:(view.workAlpha??1).toFixed(3),finishAction:cleanup?.action||'',posterShine:settings.posterShine,phaseTime:flow.elapsed.toFixed(2),spillDrawCount:view.spill.count,antialias:Number(m.antialias),depthNear:view.camera.near,session:sessionId,adheredLayers:cascade?.adheredLayers||0,pendingLayers:cascade?.pendingLayerCount||0,tableLanded:view.tableLanded||0,tableCleared:view.tableCleared||0,tableActive:view.tableActive||0,tableUploadBytes:view.tableUploadBytes||0,entryMode:settings.entryMode,recovery:settings.recovery,recovered:view.recovery?.deposited||0,reservoir:view.recovery?.stored||0,transferMass:view.recovery?.inTransit||0,recoveryJar:view.recovery?.jar||0,spillUploadBytes:view.spillUploadBytes||0,entryStage:view.entry?.stage||'',entryProgress:view.entry?.age.toFixed(3)||'0',entryFrameAlpha:(view.entryFrameAlpha??1).toFixed(3),finishing:Number(!!cascade?.finishing),unlockedCount:Math.min(levels.length,progression.frontier+1),galleryLocked:Number(!progression.canPlay(levels[rail.target].id)),cleanupElapsed:cleanup?.elapsed.toFixed(2)||'0',lastCleanupHeld,lastCleanupReleased,cleanupStage:cleanup?.stage||'',cleanupHeld:cleanup?.heldCount||0,cleanupReleased:cleanup?.releasedCount||0,extraFinish:Number(settings.extraFinish),residueBudget:cascade?.residue.budget||0,collector:settings.recovery==='table'?'desk':'funnel',transition:document.body.dataset.transition||'',galleryFocus:rail.focus.toFixed(3),gallerySelected:levels[rail.target]?.id||'',galleryPanels:view.galleryNeighbors.length,grainUploadBytes:view.grainUploadBytes||0,gameSpeed:settings.gameSpeed,gameTime:gameTime.toFixed(3),galleryPrevious:levels[levels.indexOf(level)-1]?.id||'',galleryNext:following.id,galleryCount:gallery.entries.length,heroProgress:view.heroProgress.toFixed(3),celebrationStars:view.celebration.visible?view.celebrationStars.length:0,holdDensity:settings.holdDensity,holdGrainSize:settings.holdGrainSize,holdRows:settings.holdRows,holdPlacement:settings.holdPlacement,activeBands:cascade?.bands.length||0,activeRows:cascade?.rows||0,particleCapacity:sand.capacity,retained:cascade?.retainedCount||0,peelSpeed:settings.gameSpeed,holding:Number(down||holdLatched),holdTime:cascade?.elapsed.toFixed(3)||'0',holdFront:cascade?.front.toFixed(1)||'0',controlMode:settings.controlMode,tiltStatus:deviceTilt.status,tiltX:tiltFrame.x.toFixed(3),tiltY:tiltFrame.y.toFixed(3),contactAdhesion:settings.controlMode==='tilt'&&tiltFrame.active&&!dialog.open&&flow.phase==='brush'?1:0,supply:settings.supply,heapDepth:settings.heapDepth,paperMotion:settings.paperMotion,paperX:paperPose.x.toFixed(3),paperY:paperPose.y.toFixed(3),paperCup:paperPose.cup.toFixed(3),supplySpots:pour?.spots.length||0,pourDuration:flow.pourDuration,level:level.id,feel:settings.feel,brushShape:settings.brushShape,brushRadius:brushRadius(settings).toFixed(1),mobility:settings.mobility,response:settings.response,jarShape:settings.jarShape,pourStyle:settings.pourStyle,surface:settings.surface,phase:flow.phase,layout:settings.layout,activePointer:gate.active??'',emitted:s.emitted,air:s.air,free:s.free,pressed:s.pressedFree,fresh:s.freshFree,moundHeight:s.maxMoundHeight.toFixed(2),bound:s.bound,lost:s.lost,coverage:s.coverage.toFixed(5),height:s.maxHeight.toFixed(2),stage:index,peelPart:activePart+1,peelParts:partLayers.length,peelProgress:peel.toFixed(3),collected:view.collectedCount,detached:view.spill.count,triangles:m.triangles,draws:m.draws,shakes:shakeRuns,advances:nextRuns,cameraZ:view.camera.position.z.toFixed(2),fps:Math.round(fps),flowSerial:flow.serial,shaking:flow.phase==='shake'?1:0});
  $('#stat-recovery-label').textContent=settings.recovery==='table'?'Masaya inen / sönen':'Toplanan / kavanoz';$('#hud-fps').textContent=Math.round(fps)+' FPS';$('#hud-detail').textContent=frameMs.toFixed(1)+' ms';
  for(const [id,value] of Object.entries({'stat-table-upload':((view.tableUploadBytes||0)/1024).toFixed(1),'stat-recovery':(settings.recovery==='table'?(view.tableLanded||0):(view.recovery?.deposited||0)).toLocaleString('tr')+' / '+(settings.recovery==='table'?(view.tableCleared||0):view.collectedCount).toLocaleString('tr'),'stat-fps':Math.round(fps),'stat-frame':frameMs.toFixed(1),'stat-sim':simMs.toFixed(1),'stat-render':renderMs.toFixed(1),'stat-particles':(s.air+s.free+view.spill.count+(view.tableActive||0)+(view.boxGroup.visible?view.collected.count:0)).toLocaleString('tr'),'stat-draws':m.draws,'stat-triangles':m.triangles.toLocaleString('tr'),'stat-transfer':((m.visible?view.grainUploadBytes||0:0)/1024).toFixed(0),'stat-memory':performance.memory?(performance.memory.usedJSHeapSize/1048576).toFixed(1):'—'}))$('#'+id).textContent=value;
  $('#buffer-size').textContent=`${m.width} × ${m.height} piksel · oyun sıfırlanmaz`;
 }
 function advanceGame(dt,reuseSurface=false){
  if(spray&&flow.phase==='spray'){
-  if(!dialog.open)advanceSpray(dt);
+  if(!dialog.open&&!sprayUnlock.open)advanceSpray(dt);
   return;
  }
  if(autoKick>0&&!dialog.open){autoKick-=dt;if(autoKick<=0)beginRoll()}

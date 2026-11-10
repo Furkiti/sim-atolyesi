@@ -59,7 +59,7 @@ export class AtelierScene {
   this.sparkLight=new T.Vector3(-.35,.45,1);
   this.workUniform={value:1};this.workAlpha=1;this.coatUniforms={uTiltGrip:{value:settings.controlMode==='tilt'?1:0},uActiveAlpha:{value:1},uRadiant:{value:POSTER_SHINES.indexOf(settings.posterShine)},uPaperLight:{value:this.sparkLight},uSparkleField:{value:this.sparkleField},uContact:{value:this.contactTexture},uTime:{value:0},uSparkle:{value:settings.sparkles?1:0},uCoat:{value:null},uCelebrate:{value:0},uActiveMask:{value:null},uActiveGlitter:{value:null},uLineArt:{value:null}};
   Object.assign(this.coatUniforms,{uGuide:{value:0},uAdhesion:{value:0},uReduced:{value:Number(this.reducedMotion.matches)},
-   uSprayEnabled:{value:0},uSprayFront:{value:1},uSprayClock:{value:0},uSprayOwner:{value:null},uSprayTiles:{value:null},
+   uSprayEnabled:{value:0},uSprayFront:{value:1},uSprayClock:{value:0},uSprayLead:{value:-1},uSprayWave:{value:1},uSprayBandAge:{value:1},uSprayOwner:{value:null},uSprayTiles:{value:null},
    uSprayPalette:{value:Array.from({length:16},()=>new T.Color())}});
   this.paper.material.onBeforeCompile=shader=>{
    Object.assign(shader.uniforms,this.coatUniforms);
@@ -564,12 +564,16 @@ export class AtelierScene {
    uniforms.uSprayPalette.value.forEach((color,i)=>color.set(this.colors[i]??'#000000'));
   }
   uniforms.uSprayEnabled.value=Number(!!board);
+  if(board)uniforms.uSprayFront.value=board.front/H;
   this.sprayPaintRevision=-1;this.sprayParticles.clear();
  }
- syncSpray(board,show){
+ syncSpray(board,show,dt){
   if(!board){this.sprayParticles.mesh.visible=false;return;}
   const uniforms=this.coatUniforms;
-  uniforms.uSprayClock.value=board.time;uniforms.uSprayFront.value=board.front/H;
+  uniforms.uSprayClock.value=board.time;
+  uniforms.uSprayFront.value+=(board.front/H-uniforms.uSprayFront.value)*(1-Math.exp(-dt*14));
+  uniforms.uSprayLead.value=board.lead??-1;uniforms.uSprayWave.value=board.lastBandFront/H;
+  uniforms.uSprayBandAge.value=board.sequence==='ripple'?Math.min(1,board.time-board.lastBandAt):1;
   if(this.sprayPaintRevision!==board.paintRevision){
    this.sprayPaintRevision=board.paintRevision;uniforms.uSprayTiles.value.needsUpdate=true;
   }
@@ -706,7 +710,7 @@ export class AtelierScene {
   this.time=time;const pose=phase==='shake'?(cleanupPose||drainPose(shakeProgress)):{bend:paperPose.cup,pitch:paperPose.pitch||0};this.setCardPose(paperPose,phase,pose);this.updateCompletion(finished,realDt,time);this.updateCollector(finished||this.galleryActive||this.entry?'complete':phase,finished||this.galleryActive||this.entry?realDt:0);this.coatUniforms.uTiltGrip.value=this.settings.controlMode==='tilt'?1:0;this.coatUniforms.uTime.value=time*.001;this.workAlpha=finished?0:workOpacity(this.heroProgress,this.entry,this.reducedMotion.matches);this.workUniform.value=this.workAlpha;this.coatUniforms.uActiveAlpha.value=finished?1:this.workAlpha;
   if(this.entry?.stage==='out'){const p=entryProgress(this.entry.age*1.3,this.reducedMotion.matches);this.updateBend(pose.bend*p,pose.pitch*p);this.paperGroup.rotation.x=paperPose.y*p;this.paperGroup.rotation.y=paperPose.x*p;}
   const working=this.workAlpha>.001&&!finished&&!this.galleryActive&&!this.entry;
-  this.syncSpray(spray,working);
+  this.syncSpray(spray,working,realDt);
   this.showCoverageGuide(sand,working&&phase==='brush');
   const showGrains=this.workAlpha>.001&&!finished&&!spray;
   const sameHold=holdFlow&&this.holdDrawFlow===holdFlow&&this.holdDrawRevision===holdFlow.revision;
